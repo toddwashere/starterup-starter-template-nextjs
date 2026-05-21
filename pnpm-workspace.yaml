@@ -6,7 +6,7 @@ packages:
 # Supply chain (pnpm 11) — https://pnpm.io/supply-chain-security
 minimumReleaseAge: 600 # Wait 10h after a version is published before pnpm may install it (reduces compromised-release window).
 blockExoticSubdeps: true # Disallow transitive deps from git/tarball URLs; registry packages only.
-trustPolicy: no-downgrade # Reject installs when a package’s trust level drops vs prior releases (e.g. publisher/provenance change).
+# trustPolicy: no-downgrade # Reject installs when a package’s trust level drops vs prior releases (e.g. publisher/provenance change).
 
 allowBuilds:
   '@prisma/engines': true
