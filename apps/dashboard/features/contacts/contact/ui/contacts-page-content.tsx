@@ -6,6 +6,7 @@ import NiceModal from "@ebay/nice-modal-react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Badge } from "@workspace/ui/components/badge";
+import { StageView, TagView } from "@workspace/ui/components/entity-label-views";
 import {
   Select,
   SelectContent,
@@ -66,8 +67,8 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState<ListQuery>(EMPTY_QUERY);
   const [searchInput, setSearchInput] = useState("");
-  const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
-  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
+  const [stages, setStages] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([]);
   const [segments, setSegments] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -226,7 +227,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
           <SelectItem value="__all__">All stages</SelectItem>
           {stages.map((stage) => (
             <SelectItem key={stage.id} value={stage.id}>
-              {stage.name}
+              <StageView name={stage.name} color={stage.color} size="sm" />
             </SelectItem>
           ))}
         </SelectContent>
@@ -247,7 +248,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
           <SelectItem value="__all__">All tags</SelectItem>
           {tags.map((tag) => (
             <SelectItem key={tag.id} value={tag.id}>
-              {tag.name}
+              <TagView name={tag.name} color={tag.color} size="sm" />
             </SelectItem>
           ))}
         </SelectContent>
@@ -328,12 +329,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
                     </TableCell>
                     <TableCell>
                       {c.stage ? (
-                        <Badge
-                          style={{ backgroundColor: c.stage.color ?? undefined }}
-                          className="text-white"
-                        >
-                          {c.stage.name}
-                        </Badge>
+                        <StageView name={c.stage.name} color={c.stage.color} />
                       ) : (
                         "—"
                       )}
@@ -344,9 +340,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
                           <span className="text-muted-foreground">—</span>
                         ) : (
                           c.tags.map((a) => (
-                            <Badge key={a.tagId} variant="secondary">
-                              {a.tag.name}
-                            </Badge>
+                            <TagView key={a.tagId} name={a.tag.name} color={a.tag.color} />
                           ))
                         )}
                       </div>

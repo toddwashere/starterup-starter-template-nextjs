@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { Badge } from "@workspace/ui/components/badge";
+import { TaskStatusView } from "@workspace/ui/components/entity-label-views";
 import { Button } from "@workspace/ui/components/button";
 import {
   Select,
@@ -106,7 +107,12 @@ export function ContactsTasksPageContent({ orgSlug: _orgSlug }: { orgSlug: strin
               <SelectItem value="__all__">All statuses</SelectItem>
               {statuses.map((status) => (
                 <SelectItem key={status.id} value={status.id}>
-                  {status.name}
+                  <TaskStatusView
+                    name={status.name}
+                    color={status.color}
+                    isTerminal={status.isTerminal}
+                    size="sm"
+                  />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -149,12 +155,11 @@ export function ContactsTasksPageContent({ orgSlug: _orgSlug }: { orgSlug: strin
                   </TableCell>
                   <TableCell>
                     {task.status ? (
-                      <Badge
-                        style={{ backgroundColor: task.status.color ?? undefined }}
-                        className="text-white"
-                      >
-                        {task.status.name}
-                      </Badge>
+                      <TaskStatusView
+                        name={task.status.name}
+                        color={task.status.color}
+                        isTerminal={task.status.isTerminal}
+                      />
                     ) : (
                       "—"
                     )}

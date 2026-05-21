@@ -1,5 +1,6 @@
 "use client";
 
+import { StageView } from "@workspace/ui/components/entity-label-views";
 import { Label } from "@workspace/ui/components/label";
 import {
   Select,
@@ -12,6 +13,7 @@ import {
 type ContactStage = {
   id: string;
   name: string;
+  color?: string | null;
 };
 
 export function ContactStageField({
@@ -44,7 +46,7 @@ export function ContactStageField({
           <SelectItem value="__none__">No stage</SelectItem>
           {stages.map((stage) => (
             <SelectItem key={stage.id} value={stage.id}>
-              {stage.name}
+              <StageView name={stage.name} color={stage.color} size="sm" />
             </SelectItem>
           ))}
         </SelectContent>

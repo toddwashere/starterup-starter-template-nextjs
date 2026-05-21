@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Badge } from "@workspace/ui/components/badge";
+import { TaskStatusView } from "@workspace/ui/components/entity-label-views";
+import { ContactSettingsEntityChip } from "../../common/ui/contact-settings-entity-chip";
 import {
   createContactTaskStatusAction,
   deleteContactTaskStatusAction,
@@ -73,24 +74,23 @@ export function ContactTaskStatusesSettingsSection({
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Task Statuses</h2>
       <div className="flex flex-wrap gap-2">
-        {statuses.map((s) => (
-          <div key={s.id} className="flex items-center gap-1">
-            <Badge style={{ backgroundColor: s.color ?? undefined }} className="text-white">
-              {s.name}
-              {s.isTerminal ? " ✓" : ""}
-            </Badge>
-            {!s.isDefault && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 text-muted-foreground"
-                disabled={mutating}
-                onClick={() => void handleDeleteStatus(s.id)}
-              >
-                ×
-              </Button>
-            )}
-          </div>
+        {statuses.map((status) => (
+          <ContactSettingsEntityChip
+            key={status.id}
+            removable={!status.isDefault}
+            removeLabel={`Remove status ${status.name}`}
+            onRemove={
+              status.isDefault
+                ? undefined
+                : () => void handleDeleteStatus(status.id)
+            }
+          >
+            <TaskStatusView
+              name={status.name}
+              color={status.color}
+              isTerminal={status.isTerminal}
+            />
+          </ContactSettingsEntityChip>
         ))}
       </div>
       <div className="flex gap-2">

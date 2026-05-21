@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import NiceModal from "@ebay/nice-modal-react";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
+import { StageView, TaskStatusView } from "@workspace/ui/components/entity-label-views";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { Separator } from "@workspace/ui/components/separator";
@@ -272,12 +273,7 @@ export function ContactDetailPageContent({
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline">{contact.kind}</Badge>
         {contact.stage && (
-          <Badge
-            style={{ backgroundColor: contact.stage.color ?? undefined }}
-            className="text-white"
-          >
-            {contact.stage.name}
-          </Badge>
+          <StageView name={contact.stage.name} color={contact.stage.color} />
         )}
       </div>
 
@@ -364,9 +360,15 @@ export function ContactDetailPageContent({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {task.status?.name ?? "No status"}
-                    </Badge>
+                    {task.status ? (
+                      <TaskStatusView
+                        name={task.status.name}
+                        color={task.status.color}
+                        isTerminal={task.status.isTerminal}
+                      />
+                    ) : (
+                      <Badge variant="outline">No status</Badge>
+                    )}
                     <span className="font-medium">{task.title}</span>
                   </div>
                   {task.description && (

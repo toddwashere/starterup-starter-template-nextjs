@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Badge } from "@workspace/ui/components/badge";
+import { TagView } from "@workspace/ui/components/entity-label-views";
+import { ContactSettingsEntityChip } from "../../common/ui/contact-settings-entity-chip";
 import {
   createContactTagAction,
   deleteContactTagAction,
@@ -67,19 +68,14 @@ export function ContactTagsSettingsSection({
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Tags</h2>
       <div className="flex flex-wrap gap-2">
-        {tags.map((t) => (
-          <div key={t.id} className="flex items-center gap-1">
-            <Badge variant="secondary">{t.name}</Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 text-muted-foreground"
-              disabled={mutating}
-              onClick={() => void handleDeleteTag(t.id)}
-            >
-              ×
-            </Button>
-          </div>
+        {tags.map((tag) => (
+          <ContactSettingsEntityChip
+            key={tag.id}
+            removeLabel={`Remove tag ${tag.name}`}
+            onRemove={() => void handleDeleteTag(tag.id)}
+          >
+            <TagView name={tag.name} color={tag.color} />
+          </ContactSettingsEntityChip>
         ))}
       </div>
       <div className="flex gap-2">

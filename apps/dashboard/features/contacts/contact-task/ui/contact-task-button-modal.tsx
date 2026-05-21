@@ -22,10 +22,16 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
+import { TaskStatusView } from "@workspace/ui/components/entity-label-views";
 import { resolveAndHideModal } from "@/common/ui/nice-modal-helpers";
 import { createContactTaskAction, updateContactTaskAction } from "../data/contact-task-actions";
 
-type TaskStatus = { id: string; name: string };
+type TaskStatus = {
+  id: string;
+  name: string;
+  color?: string | null;
+  isTerminal?: boolean;
+};
 type EditableTask = {
   id: string;
   title: string;
@@ -186,7 +192,12 @@ export const ContactTaskButtonModal = NiceModal.create(
                     <SelectItem value="none">No status</SelectItem>
                     {statuses.map((status) => (
                       <SelectItem key={status.id} value={status.id}>
-                        {status.name}
+                        <TaskStatusView
+                          name={status.name}
+                          color={status.color}
+                          isTerminal={status.isTerminal}
+                          size="sm"
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>

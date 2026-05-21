@@ -18,6 +18,10 @@ export const orgNavConfig: NavConfig = {
       title: "Contacts",
       href: "/contacts",
       icon: IconForContacts,
+      items: [
+        { title: "All contacts", href: "/contacts" },
+        { title: "Tasks", href: "/contacts/tasks" },
+      ],
     },
     {
       title: "AI Assistant",
@@ -32,6 +36,7 @@ export const orgNavConfig: NavConfig = {
         { title: "General", href: "/settings/general" },
         { title: "Members", href: "/settings/members" },
         { title: "Billing", href: "/settings/billing" },
+        { title: "Contacts", href: "/contacts/settings" },
         { title: "API Keys", href: "/settings/api-keys" },
         { title: "MCP", href: "/settings/mcp" },
       ],

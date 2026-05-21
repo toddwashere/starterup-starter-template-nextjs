@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Badge } from "@workspace/ui/components/badge";
+import { StageView } from "@workspace/ui/components/entity-label-views";
+import { ContactSettingsEntityChip } from "../../common/ui/contact-settings-entity-chip";
 import {
   createContactStageAction,
   deleteContactStageAction,
@@ -72,23 +73,19 @@ export function ContactStagesSettingsSection({
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Contact Stages</h2>
       <div className="flex flex-wrap gap-2">
-        {stages.map((s) => (
-          <div key={s.id} className="flex items-center gap-1">
-            <Badge style={{ backgroundColor: s.color ?? undefined }} className="text-white">
-              {s.name}
-            </Badge>
-            {!s.isDefault && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 text-muted-foreground"
-                disabled={mutating}
-                onClick={() => void handleDeleteStage(s.id)}
-              >
-                ×
-              </Button>
-            )}
-          </div>
+        {stages.map((stage) => (
+          <ContactSettingsEntityChip
+            key={stage.id}
+            removable={!stage.isDefault}
+            removeLabel={`Remove stage ${stage.name}`}
+            onRemove={
+              stage.isDefault
+                ? undefined
+                : () => void handleDeleteStage(stage.id)
+            }
+          >
+            <StageView name={stage.name} color={stage.color} />
+          </ContactSettingsEntityChip>
         ))}
       </div>
       <div className="flex gap-2">
