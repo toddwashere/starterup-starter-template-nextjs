@@ -277,8 +277,7 @@ export function ContactDetailPageContent({
         }
       />
 
-      <PageBody disableScroll className="flex min-h-0 justify-center overflow-y-auto">
-      <div className="flex min-h-0 w-full max-w-[1600px] flex-col lg:flex-row">
+      <PageBody disableScroll className="flex min-h-0 flex-col lg:flex-row">
         {/* Left sidebar */}
         <aside className="w-full lg:w-72 lg:shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r bg-muted/30 p-6 space-y-5">
           {/* Avatar + name + kind */}
@@ -381,7 +380,8 @@ export function ContactDetailPageContent({
         </aside>
 
         {/* Right content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 min-w-0">
+          <div className="max-w-3xl space-y-4">
 
           {/* Tasks */}
           <div className="space-y-3">
@@ -525,8 +525,8 @@ export function ContactDetailPageContent({
               </div>
             )}
           </div>
+          </div>
         </main>
-      </div>
       </PageBody>
     </Page>
   );
