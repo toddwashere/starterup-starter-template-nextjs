@@ -29,6 +29,7 @@ import {
   Search,
   Settings,
   Shield,
+  Trash2,
   Underline,
   Unlink,
   UserMinus,
@@ -275,3 +276,10 @@ export const IconForWebsite = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForWebsite.displayName = "IconForWebsite";
+
+export const IconForDelete = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Trash2 ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForDelete.displayName = "IconForDelete";
