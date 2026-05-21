@@ -17,6 +17,8 @@ When adding a new app to the monorepo, creating a new directory or package.json 
 
 When adding or using icons in app code (apps/*), read `.ai/skills/add-icon/SKILL.md` before making changes. Never import directly from lucide-react in app code.
 
+When displaying dates or timestamps in any UI component (apps/* or packages/ui), use `formatDate()` from `@workspace/common`. Read `.ai/conventions/format-date.md` before writing date display code.
+
 When creating a new project-level AI skill (SKILL.md), read `.ai/skills/create-skill/SKILL.md` before making changes.
 
 When adding a modal, dialog, confirm dialog, alert dialog, drawer, or any overlay triggered by a user action, read `.ai/skills/add-modal-or-confirm-dialog/SKILL.md` before making changes.
