@@ -169,8 +169,8 @@ describe("TagsField", () => {
       />
     )
 
-    expect(screen.getByText("VIP").closest("[data-tag-color]")).toHaveAttribute(
-      "data-tag-color",
+    expect(screen.getByText("VIP").closest("[data-label-color]")).toHaveAttribute(
+      "data-label-color",
       "#6366f1"
     )
   })

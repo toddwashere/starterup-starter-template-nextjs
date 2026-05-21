@@ -1,37 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
+import { type VariantProps } from "class-variance-authority"
 import { XIcon } from "lucide-react"
 
+import { ColoredLabelView, coloredLabelVariants } from "#components/colored-label-view"
 import { Button } from "#components/button"
 import { cn } from "#lib/utils"
 import type { TagValue } from "#hooks/use-tags-field"
 
-const tagChipVariants = cva(
-  "inline-flex max-w-full items-center gap-0.5 whitespace-nowrap rounded-md border pl-2 text-sm transition-colors",
-  {
-    variants: {
-      variant: {
-        default: "border-transparent bg-secondary text-secondary-foreground",
-        outline: "border-border bg-background text-foreground",
-      },
-      size: {
-        sm: "h-6 text-xs",
-        md: "h-7 text-sm",
-        lg: "h-8 text-base",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "md",
-    },
-  }
-)
+const tagChipVariants = coloredLabelVariants
 
-type TagChipProps<T extends TagValue = TagValue> = VariantProps<
-  typeof tagChipVariants
-> & {
+type TagChipProps<T extends TagValue = TagValue> = VariantProps<typeof tagChipVariants> & {
   tag: T
   displayLabel?: string
   onRemove?: () => void
@@ -45,40 +25,48 @@ function TagChipInner<T extends TagValue>(
     displayLabel = tag.label,
     onRemove,
     onClick,
-    variant,
     size,
     className,
   }: TagChipProps<T>,
   ref: React.ForwardedRef<HTMLSpanElement>
 ) {
-  const hasColor = Boolean(tag.color)
+  const label = onClick ? (
+    <button
+      type="button"
+      className="max-w-[200px] truncate bg-transparent p-0 text-left"
+      onClick={onClick}
+    >
+      {displayLabel}
+    </button>
+  ) : undefined
 
   return (
-    <span
-      ref={ref}
-      data-tag-color={tag.color}
-      className={cn(
-        tagChipVariants({ variant: hasColor ? "outline" : variant, size }),
-        hasColor && "border-transparent text-white",
-        !onRemove && "pr-2",
-        className
-      )}
-      style={
-        hasColor
-          ? { backgroundColor: tag.color, borderColor: tag.color }
-          : undefined
-      }
-    >
+    <span ref={ref} className={cn("inline-flex items-center gap-0.5", className)}>
       {onClick ? (
-        <button
-          type="button"
-          className="max-w-[200px] truncate bg-transparent p-0 text-left"
-          onClick={onClick}
+        <span
+          data-tag-color={tag.color}
+          className={cn(
+            coloredLabelVariants({
+              size,
+              tone: tag.color ? "colored" : "muted",
+            }),
+            tag.color && "border-transparent text-white"
+          )}
+          style={
+            tag.color
+              ? { backgroundColor: tag.color, borderColor: tag.color }
+              : undefined
+          }
         >
-          {displayLabel}
-        </button>
+          {label}
+        </span>
       ) : (
-        <span className="max-w-[200px] truncate">{displayLabel}</span>
+        <ColoredLabelView
+          label={displayLabel}
+          color={tag.color}
+          size={size}
+          data-entity-type="tag"
+        />
       )}
       {onRemove ? (
         <Button
@@ -91,8 +79,8 @@ function TagChipInner<T extends TagValue>(
             onRemove()
           }}
           className={cn(
-            "h-full shrink-0 px-1.5 hover:bg-transparent",
-            hasColor && "text-white/90 hover:text-white"
+            "size-7 shrink-0 hover:bg-transparent",
+            tag.color && "text-white/90 hover:text-white"
           )}
         >
           <XIcon className="size-3.5" />

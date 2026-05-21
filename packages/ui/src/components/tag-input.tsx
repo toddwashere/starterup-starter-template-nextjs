@@ -44,12 +44,6 @@ type TagInputProps = OmittedInputProps &
     direction?: "row" | "column"
     onInputChange?: (value: string) => void
     onTagClick?: (tag: TagType) => void
-    shape?: string
-    borderStyle?: string
-    textCase?: string
-    interaction?: string
-    animation?: string
-    textStyle?: string
     inputFieldPosition?: "bottom" | "top" | "inline"
     clearAll?: boolean
     onClearAll?: () => void
@@ -86,14 +80,6 @@ const TagInput = React.forwardRef<HTMLInputElement, TagInputProps>(
       onClearAll,
       onTagClick: _onTagClick,
       inputProps,
-      variant: _variant,
-      size: _size,
-      shape: _shape,
-      borderStyle: _borderStyle,
-      textCase: _textCase,
-      interaction: _interaction,
-      animation: _animation,
-      textStyle: _textStyle,
       className,
       disabled,
       readOnly,
