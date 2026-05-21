@@ -27,6 +27,7 @@ import {
   IconForContacts,
   IconForMore,
   IconForDelete,
+  IconForEdit,
 } from "@workspace/ui/components/icon-for";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
 import {
@@ -279,11 +280,21 @@ export function ContactDetailPageContent({
         <aside className="w-full lg:w-72 lg:shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r bg-muted/30 p-6 space-y-5">
           {/* Avatar + name + kind */}
           <div className="flex flex-col items-center gap-2 text-center">
-            <Avatar className="size-20 text-2xl">
-              <AvatarFallback className="bg-foreground text-background text-2xl font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              <Avatar className="size-20 text-2xl">
+                <AvatarFallback className="bg-foreground text-background text-2xl font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="absolute -top-1 -right-1 h-6 w-6 rounded-full p-0 shadow-sm"
+                onClick={() => void handleEditContact()}
+              >
+                <IconForEdit className="size-3" />
+              </Button>
+            </div>
             <div>
               <h1 className="text-xl font-bold leading-tight">{contact.displayName}</h1>
               <div className="mt-1 flex flex-wrap justify-center gap-1">
@@ -369,8 +380,8 @@ export function ContactDetailPageContent({
         {/* Right content */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
 
-          {/* Tasks card */}
-          <div className="rounded-lg border bg-card p-4 space-y-3">
+          {/* Tasks */}
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold flex-1">Tasks</h2>
               <Button size="sm" onClick={() => void handleAddTask()}>Add Task</Button>
@@ -435,8 +446,8 @@ export function ContactDetailPageContent({
             )}
           </div>
 
-          {/* Notes & Activity card */}
-          <div className="rounded-lg border bg-card p-4 space-y-4">
+          {/* Notes & Activity */}
+          <div className="space-y-4">
             <h2 className="font-semibold">Notes &amp; Activity</h2>
 
             <div className="space-y-2">

@@ -23,6 +23,7 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
+  Pencil,
   Phone,
   Sun,
   Plus,
@@ -283,3 +284,10 @@ export const IconForDelete = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForDelete.displayName = "IconForDelete";
+
+export const IconForEdit = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Pencil ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForEdit.displayName = "IconForEdit";
