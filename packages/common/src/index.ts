@@ -11,3 +11,4 @@ export type {
   BillingIdPrefix,
   McpIdPrefix,
 } from "./create-id";
+export { formatDate } from "./format-date";

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./create-id": "./src/create-id.ts",
+    "./format-date": "./src/format-date.ts",
     "./env/public-mcp": "./src/env/public-mcp.ts",
     "./mcp/http-client": "./src/mcp/http-client.ts"
   },
