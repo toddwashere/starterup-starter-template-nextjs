@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import NiceModal from "@ebay/nice-modal-react";
+import { formatDate } from "@workspace/common";
 import { Button } from "@workspace/ui/components/button";
 import { Badge } from "@workspace/ui/components/badge";
 import { StageView, TaskStatusView } from "@workspace/ui/components/entity-label-views";
@@ -11,6 +12,12 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { Separator } from "@workspace/ui/components/separator";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import {
+  IconForEmail,
+  IconForPhone,
+  IconForWebsite,
+  IconForContacts,
+} from "@workspace/ui/components/icon-for";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
 import {
   Breadcrumb,
@@ -56,6 +63,20 @@ type TaskStatus = Extract<
   { success: true }
 >["data"][number];
 
+function ContactAvatar({ name }: { name: string }) {
+  const initials = name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase();
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-semibold select-none">
+      {initials}
+    </div>
+  );
+}
+
 export function ContactDetailPageContent({
   orgSlug,
   contactId,
@@ -86,7 +107,6 @@ export function ContactDetailPageContent({
 
   const loadContact = useCallback(() => {
     let isCurrent = true;
-    // Reset state so old data doesn't show while new fetch is in-flight
     setContact(null);
     setInteractions([]);
     setTasks([]);
@@ -100,7 +120,7 @@ export function ContactDetailPageContent({
         listContactTasksAction(contactId),
         listContactTaskStatusesAction(),
       ]);
-      if (!isCurrent) return; // discard stale response
+      if (!isCurrent) return;
       if (cResult.success) setContact(cResult.data);
       if (iResult.success) setInteractions(iResult.data);
       if (tResult.success) setTasks(tResult.data);
@@ -195,14 +215,8 @@ export function ContactDetailPageContent({
           actions={<Skeleton className="h-9 w-28" />}
         />
         <PageBody disableScroll className="max-w-3xl space-y-6 p-6">
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-6 w-16" />
-            <Skeleton className="h-6 w-20" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-4 w-40" />
-          </div>
+          <Skeleton className="h-20 w-full rounded-lg" />
+          <Skeleton className="h-16 w-full" />
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-48 w-full" />
         </PageBody>
@@ -243,11 +257,15 @@ export function ContactDetailPageContent({
   if (!contact) return null;
 
   const openTasks = tasks.filter((t) => !t.completedAt);
+  const hasContactInfo =
+    !!contact.primaryEmail ||
+    !!contact.primaryPhone ||
+    !!contact.website ||
+    !!contact.parent;
 
   return (
     <Page className="flex min-h-0 flex-1 flex-col">
       <PageHeaderInOrg
-        title={contact.displayName}
         breadcrumb={
           <Breadcrumb>
             <BreadcrumbList>
@@ -270,192 +288,230 @@ export function ContactDetailPageContent({
         }
       />
       <PageBody disableScroll className="max-w-3xl space-y-6 p-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline">{contact.kind}</Badge>
-        {contact.stage && (
-          <StageView name={contact.stage.name} color={contact.stage.color} />
-        )}
-      </div>
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Tags</h2>
-        <ContactTagsEditor
-          contactId={contact.id}
-          assignments={contact.tags}
-          onUpdated={loadContact}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="text-muted-foreground">Email: </span>
-          {contact.primaryEmail ?? "No email"}
+        {/* Hero header */}
+        <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
+          <ContactAvatar name={contact.displayName} />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold leading-tight truncate">
+              {contact.displayName}
+            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{contact.kind}</Badge>
+              {contact.stage && (
+                <StageView name={contact.stage.name} color={contact.stage.color} />
+              )}
+            </div>
+          </div>
         </div>
-        {contact.primaryPhone && (
-          <div>
-            <span className="text-muted-foreground">Phone: </span>
-            {contact.primaryPhone}
-          </div>
-        )}
-        {contact.website && (
-          <div>
-            <span className="text-muted-foreground">Website: </span>
-            {contact.website}
-          </div>
-        )}
-        {contact.parent && (
-          <div>
-            <span className="text-muted-foreground">Parent: </span>
-            <button
-              className="underline hover:no-underline"
-              onClick={() =>
-                router.push(`/${orgSlug}/contacts/${contact.parent!.id}`)
-              }
-            >
-              {contact.parent.displayName}
-            </button>
-          </div>
-        )}
-      </div>
 
-      {contact.children.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground mb-1">
-            Related ({contact.children.length})
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {contact.children.map((child: { id: string; displayName: string; kind: string }) => (
-              <Badge
-                key={child.id}
-                variant="outline"
-                className="cursor-pointer"
+        {/* Tags */}
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">Tags</h2>
+          <ContactTagsEditor
+            contactId={contact.id}
+            assignments={contact.tags}
+            onUpdated={loadContact}
+          />
+        </div>
+
+        {/* Contact info */}
+        <div className="space-y-2">
+          {contact.primaryEmail ? (
+            <div className="flex items-center gap-2 text-sm">
+              <IconForEmail className="text-muted-foreground shrink-0" />
+              <a
+                href={`mailto:${contact.primaryEmail}`}
+                className="hover:underline"
+              >
+                {contact.primaryEmail}
+              </a>
+            </div>
+          ) : null}
+          {contact.primaryPhone && (
+            <div className="flex items-center gap-2 text-sm">
+              <IconForPhone className="text-muted-foreground shrink-0" />
+              <a href={`tel:${contact.primaryPhone}`} className="hover:underline">
+                {contact.primaryPhone}
+              </a>
+            </div>
+          )}
+          {contact.website && (
+            <div className="flex items-center gap-2 text-sm">
+              <IconForWebsite className="text-muted-foreground shrink-0" />
+              <a
+                href={contact.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                {contact.website}
+              </a>
+            </div>
+          )}
+          {contact.parent && (
+            <div className="flex items-center gap-2 text-sm">
+              <IconForContacts className="text-muted-foreground shrink-0" />
+              <button
+                className="hover:underline"
                 onClick={() =>
-                  router.push(`/${orgSlug}/contacts/${child.id}`)
+                  router.push(`/${orgSlug}/contacts/${contact.parent!.id}`)
                 }
               >
-                {child.displayName}
-              </Badge>
+                {contact.parent.displayName}
+              </button>
+            </div>
+          )}
+          {!hasContactInfo && (
+            <p className="text-sm text-muted-foreground">No contact info.</p>
+          )}
+        </div>
+
+        {/* Related contacts */}
+        {contact.children.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground mb-1">
+              Related ({contact.children.length})
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {contact.children.map(
+                (child: { id: string; displayName: string; kind: string }) => (
+                  <Badge
+                    key={child.id}
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() =>
+                      router.push(`/${orgSlug}/contacts/${child.id}`)
+                    }
+                  >
+                    {child.displayName}
+                  </Badge>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Open Tasks */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Open Tasks ({openTasks.length})</h2>
+            <Button size="sm" onClick={() => void handleAddTask()}>
+              Add Task
+            </Button>
+          </div>
+          {openTasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No open tasks.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {openTasks.map((task) => (
+                <li
+                  key={task.id}
+                  className="flex items-center gap-3 rounded-md border p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {task.status ? (
+                        <TaskStatusView
+                          name={task.status.name}
+                          color={task.status.color}
+                          isTerminal={task.status.isTerminal}
+                        />
+                      ) : (
+                        <Badge variant="outline">No status</Badge>
+                      )}
+                      <span className="font-medium">{task.title}</span>
+                    </div>
+                    {task.description && (
+                      <p className="mt-1 text-muted-foreground">
+                        {task.description}
+                      </p>
+                    )}
+                    {task.dueAt && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Due {formatDate(task.dueAt)}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleEditTask(task)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => void handleArchiveTask(task.id)}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Notes & Activity */}
+        <div>
+          <h2 className="font-semibold mb-3">Notes &amp; Activity</h2>
+          <div className="space-y-2 mb-4">
+            <Textarea
+              placeholder="Add a note…"
+              value={noteBody}
+              onChange={(e) => setNoteBody(e.target.value)}
+              rows={3}
+            />
+            {noteError && (
+              <p className="text-sm text-destructive">{noteError}</p>
+            )}
+            <Button
+              size="sm"
+              onClick={handleAddNote}
+              disabled={!noteBody.trim() || isPending || isSubmitting}
+            >
+              {isSubmitting ? "Saving…" : "Add Note"}
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {interactions.map((i) => (
+              <div key={i.id} className="text-sm border rounded-md p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline">{i.type}</Badge>
+                  <span className="text-muted-foreground text-xs">
+                    {formatDate(i.happenedAt, { relative: true })}
+                  </span>
+                </div>
+                <p>{i.body}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleEditNote(i)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => void handleArchiveNote(i.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
             ))}
+            {interactions.length === 0 && (
+              <p className="text-sm text-muted-foreground">No activity yet.</p>
+            )}
           </div>
         </div>
-      )}
-
-      <Separator />
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-semibold">Open Tasks ({openTasks.length})</h2>
-          <Button size="sm" onClick={() => void handleAddTask()}>
-            Add Task
-          </Button>
-        </div>
-        {openTasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No open tasks.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {openTasks.map((task) => (
-              <li
-                key={task.id}
-                className="flex items-center gap-2 rounded-md border p-2"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {task.status ? (
-                      <TaskStatusView
-                        name={task.status.name}
-                        color={task.status.color}
-                        isTerminal={task.status.isTerminal}
-                      />
-                    ) : (
-                      <Badge variant="outline">No status</Badge>
-                    )}
-                    <span className="font-medium">{task.title}</span>
-                  </div>
-                  {task.description && (
-                    <p className="mt-1 text-muted-foreground">{task.description}</p>
-                  )}
-                  {task.dueAt && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Due {new Date(task.dueAt).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleEditTask(task)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleArchiveTask(task.id)}
-                >
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <Separator />
-
-      <div>
-        <h2 className="font-semibold mb-2">Notes &amp; Activity</h2>
-        <div className="space-y-2 mb-4">
-          <Textarea
-            placeholder="Add a note…"
-            value={noteBody}
-            onChange={(e) => setNoteBody(e.target.value)}
-            rows={3}
-          />
-          {noteError && (
-            <p className="text-sm text-destructive">{noteError}</p>
-          )}
-          <Button
-            size="sm"
-            onClick={handleAddNote}
-            disabled={!noteBody.trim() || isPending || isSubmitting}
-          >
-            {isSubmitting ? "Saving…" : "Add Note"}
-          </Button>
-        </div>
-
-        <div className="space-y-3">
-          {interactions.map((i) => (
-            <div key={i.id} className="text-sm border rounded p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="outline">{i.type}</Badge>
-                <span className="text-muted-foreground text-xs">
-                  {new Date(i.happenedAt).toLocaleString()}
-                </span>
-              </div>
-              <p>{i.body}</p>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleEditNote(i)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleArchiveNote(i.id)}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-          ))}
-          {interactions.length === 0 && (
-            <p className="text-sm text-muted-foreground">No activity yet.</p>
-          )}
-        </div>
-      </div>
       </PageBody>
     </Page>
   );
