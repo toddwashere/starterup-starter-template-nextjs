@@ -20,8 +20,7 @@ describe("formatDate", () => {
     const result = formatDate(new Date("2026-05-18T22:49:00"), {
       includeTime: true,
     });
-    expect(result).toContain("May 18, 2026");
-    expect(result).toMatch(/10:49\s?PM/);
+    expect(result).toBe("May 18, 2026, 10:49 PM");
   });
 
   it("returns 'just now' for less than 1 minute ago", () => {

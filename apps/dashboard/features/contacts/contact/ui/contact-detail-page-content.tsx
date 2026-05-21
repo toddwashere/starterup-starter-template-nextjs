@@ -65,13 +65,18 @@ type TaskStatus = Extract<
 
 function ContactAvatar({ name }: { name: string }) {
   const initials = name
-    .split(" ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0] ?? "")
     .join("")
     .toUpperCase();
   return (
-    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-semibold select-none">
+    <div
+      aria-label={`${name} avatar`}
+      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-semibold select-none"
+    >
       {initials}
     </div>
   );
