@@ -98,6 +98,7 @@ export function ContactDetailPageContent({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskStatuses, setTaskStatuses] = useState<TaskStatus[]>([]);
   const [taskSearch, setTaskSearch] = useState("");
+  const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -150,6 +151,7 @@ export function ContactDetailPageContent({
       if (!result.success) { setNoteError(result.error); return; }
       setNoteBody("");
       setNoteError(null);
+      setShowNoteForm(false);
       await refreshInteractions();
     } finally {
       setIsSubmitting(false);
@@ -280,8 +282,8 @@ export function ContactDetailPageContent({
         <aside className="w-full lg:w-72 lg:shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r bg-muted/30 p-6 space-y-5">
           {/* Avatar + name + kind */}
           <div className="flex flex-col items-center gap-2 text-center">
-            <div className="relative">
-              <Avatar className="size-20 text-2xl">
+            <div className="relative inline-flex">
+              <Avatar className="size-20">
                 <AvatarFallback className="bg-foreground text-background text-2xl font-semibold">
                   {initials}
                 </AvatarFallback>
@@ -448,24 +450,32 @@ export function ContactDetailPageContent({
 
           {/* Notes & Activity */}
           <div className="space-y-4">
-            <h2 className="font-semibold">Notes &amp; Activity</h2>
-
-            <div className="space-y-2">
-              <Textarea
-                placeholder="Add Note..."
-                value={noteBody}
-                onChange={(e) => setNoteBody(e.target.value)}
-                rows={3}
-              />
-              {noteError && <p className="text-sm text-destructive">{noteError}</p>}
-              <Button
-                size="sm"
-                onClick={handleAddNote}
-                disabled={!noteBody.trim() || isPending || isSubmitting}
-              >
-                {isSubmitting ? "Saving…" : "Add Note"}
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Notes &amp; Activity</h2>
+              <Button size="sm" variant={showNoteForm ? "outline" : "default"} onClick={() => { setShowNoteForm((v) => !v); setNoteBody(""); setNoteError(null); }}>
+                {showNoteForm ? "Cancel" : "Add Note"}
               </Button>
             </div>
+
+            {showNoteForm && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Add Note..."
+                  value={noteBody}
+                  onChange={(e) => setNoteBody(e.target.value)}
+                  rows={3}
+                  autoFocus
+                />
+                {noteError && <p className="text-sm text-destructive">{noteError}</p>}
+                <Button
+                  size="sm"
+                  onClick={handleAddNote}
+                  disabled={!noteBody.trim() || isPending || isSubmitting}
+                >
+                  {isSubmitting ? "Saving…" : "Save Note"}
+                </Button>
+              </div>
+            )}
 
             {interactions.length === 0 ? (
               <p className="text-sm text-muted-foreground">No activity yet.</p>
