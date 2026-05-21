@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   CreditCard,
+  Globe,
   Italic,
   KeyRound,
   LayoutDashboard,
@@ -22,6 +23,7 @@ import {
   Monitor,
   Moon,
   MoreHorizontal,
+  Phone,
   Sun,
   Plus,
   Search,
@@ -259,3 +261,17 @@ export const IconForContacts = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForContacts.displayName = "IconForContacts";
+
+export const IconForPhone = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Phone ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForPhone.displayName = "IconForPhone";
+
+export const IconForWebsite = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Globe ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForWebsite.displayName = "IconForWebsite";
