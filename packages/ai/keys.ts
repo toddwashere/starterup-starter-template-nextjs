@@ -6,6 +6,11 @@ const optionalString = z
   .optional()
   .transform((v) => (v === "" ? undefined : v));
 
+// Treat an empty-string env value as unset for numeric fields. Without this,
+// `z.coerce.number()` turns "" into 0 — so a blank `AI_AGENT_MAX_STEPS=` would
+// make the agent run 0 steps, and a blank `AI_TEMPERATURE=` would pin it to 0.
+const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
+
 const schema = z.object({
   // Provider selection — empty string is treated as unset (same as optionalString)
   AI_PROVIDER: z.preprocess(
@@ -17,11 +22,11 @@ const schema = z.object({
   AI_MODEL: optionalString,
 
   // Generation parameters
-  AI_MAX_OUTPUT_TOKENS: z.coerce.number().optional(),
-  AI_TEMPERATURE: z.coerce.number().optional(),
+  AI_MAX_OUTPUT_TOKENS: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
+  AI_TEMPERATURE: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
 
   // Agent settings
-  AI_AGENT_MAX_STEPS: z.coerce.number().default(5),
+  AI_AGENT_MAX_STEPS: z.preprocess(emptyToUndefined, z.coerce.number().default(5)),
 
   // OpenRouter
   OPENROUTER_API_KEY: optionalString,
