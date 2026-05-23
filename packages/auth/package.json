@@ -24,6 +24,7 @@
     "@workspace/common": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
+    "@workspace/worker-queue": "workspace:*",
     "better-auth": "^1.6.10"
   },
   "peerDependencies": {
