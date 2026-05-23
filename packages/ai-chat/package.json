@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/ai-chat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas/ai-chat-schemas": "./src/schemas/ai-chat-schemas.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@workspace/common": "workspace:*",
+    "@workspace/database": "workspace:*",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@workspace/tooling": "workspace:*",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
