@@ -29,7 +29,21 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import { Page, PageBody } from "@workspace/ui/components/page";
+import { PageToolbar, ResponsivePageToolbarFilters } from "@workspace/ui/components/page-toolbar";
+import {
+  DataList,
+  DataListCard,
+  DataListCardHeader,
+  DataListCardMeta,
+  ResponsiveDataView,
+} from "@workspace/ui/components/responsive-data-view";
+import {
+  ResponsivePageAction,
+  ResponsivePageActions,
+} from "@workspace/ui/components/responsive-page-actions";
+import { TagListCompact } from "@workspace/ui/components/tag-list-compact";
 import { IconForAdd, IconForMore } from "@workspace/ui/components/icon-for";
+import { responsiveLayout } from "@workspace/ui/lib/responsive-layout";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
 import type { ContactListFilters } from "@workspace/contacts/schemas/contact-schemas";
 import { listContactsAction, archiveContactAction } from "../data/contact-actions";
@@ -59,6 +73,39 @@ function hasActiveFilters(query: ListQuery) {
       query.stageId ||
       query.tagIds?.length ||
       query.segmentId,
+  );
+}
+
+function activeFilterCount(query: ListQuery) {
+  let count = 0;
+  if (query.segmentId) count += 1;
+  if (query.stageId) count += 1;
+  if (query.tagIds?.length) count += 1;
+  return count;
+}
+
+function ContactRowActions({
+  onArchive,
+  onView,
+}: {
+  onArchive: () => void;
+  onView: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
+          <IconForMore />
+          <span className="sr-only">Actions</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onView}>View</DropdownMenuItem>
+        <DropdownMenuItem className="text-destructive" onClick={onArchive}>
+          Archive
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -180,14 +227,8 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
     }
   }
 
-  const filterToolbar = (
-    <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-      <Input
-        placeholder="Search contacts…"
-        value={searchInput}
-        onChange={handleSearchChange}
-        className="h-9 min-w-[12rem] flex-1"
-      />
+  const filterFields = (
+    <>
       <Select
         value={query.segmentId ?? "__all__"}
         onValueChange={(value) =>
@@ -253,17 +294,40 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
           ))}
         </SelectContent>
       </Select>
-      {hasActiveFilters(query) && (
-        <>
-          <Button variant="ghost" size="sm" className="h-9" onClick={handleClearFilters}>
-            Clear filters
-          </Button>
-          <Button variant="outline" size="sm" className="h-9" onClick={() => void handleSaveSegment()}>
-            Save segment
-          </Button>
-        </>
-      )}
-    </div>
+    </>
+  );
+
+  const filterActions =
+    hasActiveFilters(query) ? (
+      <>
+        <Button variant="ghost" size="sm" className="h-9" onClick={handleClearFilters}>
+          Clear filters
+        </Button>
+        <Button variant="outline" size="sm" className="h-9" onClick={() => void handleSaveSegment()}>
+          Save segment
+        </Button>
+      </>
+    ) : null;
+
+  const filterToolbar = (
+    <PageToolbar>
+      <Input
+        placeholder="Search contacts…"
+        value={searchInput}
+        onChange={handleSearchChange}
+        className="h-9 min-w-0 flex-1 md:max-w-[400px] md:flex-none"
+      />
+      <ResponsivePageToolbarFilters
+        activeCount={activeFilterCount(query)}
+        drawerTitle="Filter contacts"
+        drawerFooter={filterActions}
+      >
+        {filterFields}
+      </ResponsivePageToolbarFilters>
+      {filterActions ? (
+        <div className="hidden items-center gap-2 md:flex">{filterActions}</div>
+      ) : null}
+    </PageToolbar>
   );
 
   return (
@@ -272,30 +336,88 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
         title="Contacts"
         description="Manage people and companies in this organization."
         actions={
-          <>
-            <CsvImportDialog onImported={() => load(query)} />
-            <Button variant="outline" onClick={() => void handleExport()}>
-              Export CSV
-            </Button>
-            <Button onClick={() => void handleAddContact()}>
-              <IconForAdd className="mr-2" />
-              New Contact
-            </Button>
-          </>
+          <ResponsivePageActions
+            primary={
+              <Button onClick={() => void handleAddContact()}>
+                <IconForAdd className="md:mr-2" />
+                <span className="hidden md:inline">New Contact</span>
+                <span className="sr-only md:hidden">New Contact</span>
+              </Button>
+            }
+            secondary={
+              <>
+                <ResponsivePageAction>
+                  <CsvImportDialog onImported={() => load(query)} />
+                </ResponsivePageAction>
+                <ResponsivePageAction>
+                  <Button variant="outline" onClick={() => void handleExport()}>
+                    Export CSV
+                  </Button>
+                </ResponsivePageAction>
+              </>
+            }
+          />
         }
-        toolbarInline
         toolbar={filterToolbar}
       />
-      <PageBody className="space-y-4 p-6">
+      <PageBody className={`space-y-4 ${responsiveLayout.pageBodyPadding}`}>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="rounded-md border">
+        <ResponsiveDataView
+          mobile={
+            isPending ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+            ) : contacts.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No contacts match these filters.
+              </p>
+            ) : (
+              <DataList>
+                {contacts.map((c) => (
+                  <DataListCard
+                    key={c.id}
+                    onActivate={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
+                  >
+                    <DataListCardHeader
+                      actions={
+                        <ContactRowActions
+                          onView={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
+                          onArchive={() => void handleArchive(c.id)}
+                        />
+                      }
+                    >
+                      {c.displayName}
+                    </DataListCardHeader>
+                    {c.primaryEmail ? (
+                      <DataListCardMeta>{c.primaryEmail}</DataListCardMeta>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{c.kind}</Badge>
+                      {c.stage ? (
+                        <StageView name={c.stage.name} color={c.stage.color} size="sm" />
+                      ) : null}
+                    </div>
+                    <TagListCompact
+                      tags={c.tags.map((a) => ({
+                        id: a.tagId,
+                        name: a.tag.name,
+                        color: a.tag.color,
+                      }))}
+                      size="sm"
+                    />
+                  </DataListCard>
+                ))}
+              </DataList>
+            )
+          }
+          desktop={
+            <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Kind</TableHead>
+                <TableHead className={responsiveLayout.hideBelowMdTableCell}>Kind</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Stage</TableHead>
+                <TableHead className={responsiveLayout.hideBelowLgTableCell}>Stage</TableHead>
                 <TableHead>Tags</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
@@ -320,60 +442,45 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
                     className="cursor-pointer"
                     onClick={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
                   >
-                    <TableCell className="font-medium">{c.displayName}</TableCell>
-                    <TableCell>
+                    <TableCell className="max-w-[12rem] truncate font-medium">
+                      {c.displayName}
+                    </TableCell>
+                    <TableCell className={responsiveLayout.hideBelowMdTableCell}>
                       <Badge variant="outline">{c.kind}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="max-w-[240px] truncate text-muted-foreground">
                       {c.primaryEmail ?? "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className={responsiveLayout.hideBelowLgTableCell}>
                       {c.stage ? (
                         <StageView name={c.stage.name} color={c.stage.color} />
                       ) : (
                         "—"
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {c.tags.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          c.tags.map((a) => (
-                            <TagView key={a.tagId} name={a.tag.name} color={a.tag.color} />
-                          ))
-                        )}
-                      </div>
+                    <TableCell className="whitespace-normal">
+                      <TagListCompact
+                        tags={c.tags.map((a) => ({
+                          id: a.tagId,
+                          name: a.tag.name,
+                          color: a.tag.color,
+                        }))}
+                      />
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <IconForMore />
-                            <span className="sr-only">Actions</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
-                          >
-                            View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => void handleArchive(c.id)}
-                          >
-                            Archive
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <ContactRowActions
+                        onView={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
+                        onArchive={() => void handleArchive(c.id)}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </div>
+            </div>
+          }
+        />
       </PageBody>
     </Page>
   );

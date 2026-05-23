@@ -18,6 +18,7 @@ import {
   KeyRound,
   LayoutDashboard,
   Link2,
+  ListFilter,
   LogOut,
   Mail,
   Monitor,
@@ -109,6 +110,13 @@ export const IconForExpand = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForExpand.displayName = "IconForExpand";
+
+export const IconForFilter = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <ListFilter ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForFilter.displayName = "IconForFilter";
 
 export const IconForAdd = forwardRef<SVGSVGElement, LucideProps>(
   (props, ref) => (

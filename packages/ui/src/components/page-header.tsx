@@ -9,6 +9,7 @@ import {
   PageTitle,
 } from "#components/page"
 import { Skeleton } from "#components/skeleton"
+import { useIsMobile } from "#hooks/use-mobile"
 import { cn } from "#lib/utils"
 
 export type PageHeaderProps = {
@@ -22,7 +23,10 @@ export type PageHeaderProps = {
   trailing?: React.ReactNode
   actions?: React.ReactNode
   toolbar?: React.ReactNode
-  /** When true, `toolbar` renders on the primary row instead of a second bar. */
+  /**
+   * When true, `toolbar` renders on the primary row on md+ viewports.
+   * On smaller screens it moves to a full-width secondary bar automatically.
+   */
   toolbarInline?: boolean
   className?: string
   /** When true, title renders as a skeleton (ignored when `breadcrumb` is set). */
@@ -41,9 +45,11 @@ export function PageHeader({
   className,
   isLoading = false,
 }: PageHeaderProps) {
+  const isMobile = useIsMobile()
   const showTrailingOrActions = Boolean(trailing ?? actions)
   const useBreadcrumbLine = Boolean(breadcrumb)
-  const showInlineToolbar = Boolean(toolbar && toolbarInline)
+  const showInlineToolbar = Boolean(toolbar && toolbarInline && !isMobile)
+  const showStackedToolbar = Boolean(toolbar && toolbarInline && isMobile)
   const showBelowToolbar = Boolean(toolbar && !toolbarInline)
   const showCenterColumn =
     useBreadcrumbLine ||
@@ -66,33 +72,33 @@ export function PageHeader({
             </div>
           ) : null}
           {showCenterColumn ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {useBreadcrumbLine ? (
-              <div
-                className={cn(
-                  "min-w-0 shrink-0 [&_[data-slot=breadcrumb-list]]:flex-nowrap",
-                  "[&_[data-slot=breadcrumb-page]]:font-semibold"
-                )}
-                title={description}
-              >
-                {breadcrumb}
-              </div>
-            ) : isLoading ? (
-              <Skeleton className="h-5 w-48 max-w-full shrink-0" />
-            ) : title != null && title !== "" ? (
-              <PageTitle className="shrink-0 truncate" title={description}>
-                {title}
-              </PageTitle>
-            ) : null}
-            {useBreadcrumbLine && !isLoading && title ? (
-              <span className="sr-only">
-                <PageTitle title={description}>{title}</PageTitle>
-              </span>
-            ) : null}
-            {showInlineToolbar ? (
-              <div className="min-w-0 flex-1">{toolbar}</div>
-            ) : null}
-          </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {useBreadcrumbLine ? (
+                <div
+                  className={cn(
+                    "min-w-0 shrink-0 [&_[data-slot=breadcrumb-list]]:flex-nowrap",
+                    "[&_[data-slot=breadcrumb-page]]:font-semibold"
+                  )}
+                  title={description}
+                >
+                  {breadcrumb}
+                </div>
+              ) : isLoading ? (
+                <Skeleton className="h-5 w-48 max-w-full shrink-0" />
+              ) : title != null && title !== "" ? (
+                <PageTitle className="shrink-0 truncate" title={description}>
+                  {title}
+                </PageTitle>
+              ) : null}
+              {useBreadcrumbLine && !isLoading && title ? (
+                <span className="sr-only">
+                  <PageTitle title={description}>{title}</PageTitle>
+                </span>
+              ) : null}
+              {showInlineToolbar ? (
+                <div className="min-w-0 flex-1">{toolbar}</div>
+              ) : null}
+            </div>
           ) : null}
           {showTrailingOrActions ? (
             <div className="flex shrink-0 items-center gap-2">
@@ -101,8 +107,10 @@ export function PageHeader({
             </div>
           ) : null}
         </div>
-        {showBelowToolbar ? (
-          <PageSecondaryBar>{toolbar}</PageSecondaryBar>
+        {showStackedToolbar || showBelowToolbar ? (
+          <PageSecondaryBar className="h-auto min-h-12 items-stretch py-3">
+            {toolbar}
+          </PageSecondaryBar>
         ) : null}
       </div>
     </PageHeaderSection>
