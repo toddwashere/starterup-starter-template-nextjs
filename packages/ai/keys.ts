@@ -1,33 +1,15 @@
 import { z } from "zod";
 
-// Transform empty strings to undefined so `AI_PROVIDER=""` is treated as unset.
+// Transform empty strings to undefined so a blank `OPENAI_API_KEY=` is unset.
 const optionalString = z
   .string()
   .optional()
   .transform((v) => (v === "" ? undefined : v));
 
-// Treat an empty-string env value as unset for numeric fields. Without this,
-// `z.coerce.number()` turns "" into 0 — so a blank `AI_AGENT_MAX_STEPS=` would
-// make the agent run 0 steps, and a blank `AI_TEMPERATURE=` would pin it to 0.
-const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
-
+// Secrets only. Model selection and generation params (model id, maxSteps,
+// temperature, maxOutputTokens) live in code — see
+// packages/ai/src/ai-models-available.ts (AI_CALL_PRESETS) — not in env.
 const schema = z.object({
-  // Provider selection — empty string is treated as unset (same as optionalString)
-  AI_PROVIDER: z.preprocess(
-    (v) => (v === "" ? undefined : v),
-    z
-      .enum(["openrouter", "openai", "anthropic", "ollama", "openai-compatible"])
-      .optional(),
-  ),
-  AI_MODEL: optionalString,
-
-  // Generation parameters
-  AI_MAX_OUTPUT_TOKENS: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
-  AI_TEMPERATURE: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
-
-  // Agent settings
-  AI_AGENT_MAX_STEPS: z.preprocess(emptyToUndefined, z.coerce.number().default(5)),
-
   // OpenRouter
   OPENROUTER_API_KEY: optionalString,
   OPENROUTER_HTTP_REFERER: optionalString,
@@ -55,11 +37,6 @@ const schema = z.object({
 
 export function keys() {
   return schema.parse({
-    AI_PROVIDER: process.env.AI_PROVIDER,
-    AI_MODEL: process.env.AI_MODEL,
-    AI_MAX_OUTPUT_TOKENS: process.env.AI_MAX_OUTPUT_TOKENS,
-    AI_TEMPERATURE: process.env.AI_TEMPERATURE,
-    AI_AGENT_MAX_STEPS: process.env.AI_AGENT_MAX_STEPS,
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_HTTP_REFERER: process.env.OPENROUTER_HTTP_REFERER,
     OPENROUTER_APP_NAME: process.env.OPENROUTER_APP_NAME,
