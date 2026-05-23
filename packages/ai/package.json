@@ -21,9 +21,11 @@
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@workspace/common": "workspace:*",
     "ai": "^6.0.191",
+    "mustache": "^4.2.0",
     "zod": "^3"
   },
   "devDependencies": {
+    "@types/mustache": "^4.2.6",
     "@types/node": "^22",
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",
