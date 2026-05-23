@@ -1,19 +1,42 @@
 # Critical Tests in Plans
 
-When creating implementation plans or spec documents (in docs/superpowers/), always include a "Critical Tests" section that identifies the highest-value unit tests for the feature.
+When creating or updating implementation plans (`docs/superpowers/plans/`) or design specs (`docs/superpowers/specs/`), **always** include a `## Critical Tests` section.
 
-Focus on:
+## Requirement
+
+- **Heading:** exactly `## Critical Tests` (plans and specs).
+- **Placement:** after overview / file structure / design sections, **before** the task breakdown (plans) or before closing verification-only sections (specs).
+- **Content:** named, colocated unit test files and the behaviors they must prove — not a vague “add tests later.”
+
+Start from the templates:
+
+- Plans: [`docs/superpowers/plans/_template.md`](../../docs/superpowers/plans/_template.md)
+- Specs: [`docs/superpowers/specs/_template.md`](../../docs/superpowers/specs/_template.md)
+
+A plan or spec without `## Critical Tests` is incomplete.
+
+## What to include
+
+Focus on tests that give the most confidence if they pass:
+
 - Boundary conditions and edge cases
 - Integration points between components
 - Failure modes and error paths
 - State transitions
 
-These are the tests that, if they pass, give the most confidence the feature works correctly. Avoid listing trivial happy-path assertions.
+Favor **unit** tests that run quickly. Avoid listing trivial happy-path assertions or low-value “renders without crashing” checks.
 
-Favor unit tests that can run quickly over other types of tests. 
+List test file paths colocated beside implementation (for example `contact-actions.test.ts` next to `contact-actions.ts`). Never plan or add `__tests__` folders — see [`colocated-tests.md`](./colocated-tests.md).
 
-Avoid adding low value tests.
+## Example entry format
 
-List test file paths colocated beside implementation (for example `src/guards.test.ts`). Never plan or add `__tests__` folders — see [`colocated-tests.md`](./colocated-tests.md).
+```markdown
+## Critical Tests
 
-This section should appear in both spec documents and implementation plans, before the task breakdown.
+- `packages/contacts/src/services/contact-tag-service.test.ts`: sync replaces tags atomically; rejects duplicate names; scopes by orgId.
+- `apps/dashboard/features/contacts/contact/data/contact-actions.test.ts`: create/update enforce org membership; invalid input returns field errors.
+```
+
+## During implementation
+
+Implement the listed tests (or update the plan if scope changes). Do not ship the feature with zero coverage of the critical behaviors identified in the plan.

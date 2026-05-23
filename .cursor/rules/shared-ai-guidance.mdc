@@ -25,7 +25,7 @@ When adding a modal, dialog, confirm dialog, alert dialog, drawer, or any overla
 
 When adding or editing LLM instruction files (rules, skills, conventions), read `.ai/conventions/ai-guidance-files.md` before making changes.
 
-When creating implementation plans or spec documents, read `.ai/conventions/critical-tests-in-plans.md` before making changes.
+When creating or updating implementation plans (`docs/superpowers/plans/`) or design specs (`docs/superpowers/specs/`), read `.ai/conventions/critical-tests-in-plans.md` first. Copy from `docs/superpowers/plans/_template.md` or `docs/superpowers/specs/_template.md` when starting a new doc. Every plan and spec **must** include a `## Critical Tests` section (high-value unit tests, colocated paths) before task breakdown — a doc without it is incomplete.
 
 When adding or moving unit tests, read `.ai/conventions/colocated-tests.md` before making changes.
 

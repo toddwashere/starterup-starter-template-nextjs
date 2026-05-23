@@ -18,7 +18,7 @@ Entry points for agents: [../AGENTS.md](../AGENTS.md) and [`.cursor/rules/shared
 ## Conventions
 
 - [`conventions/ai-guidance-files.md`](./conventions/ai-guidance-files.md) - Three-tier pattern for AI guidance files (.ai/ canonical, .cursor/ and .claude/ as references).
-- [`conventions/critical-tests-in-plans.md`](./conventions/critical-tests-in-plans.md) - Require a "Critical Tests" section in all plans and specs.
+- [`conventions/critical-tests-in-plans.md`](./conventions/critical-tests-in-plans.md) - Require `## Critical Tests` in all plans and specs (templates: [`docs/superpowers/plans/_template.md`](../docs/superpowers/plans/_template.md), [`docs/superpowers/specs/_template.md`](../docs/superpowers/specs/_template.md)).
 - [`conventions/colocated-tests.md`](./conventions/colocated-tests.md) - Place unit tests beside implementation files; never use `__tests__` folders.
 - [`conventions/plan-archival.md`](./conventions/plan-archival.md) - Move completed plans and specs to `done/` subdirectories.
 - [`conventions/format-date.md`](./conventions/format-date.md) - Always use `formatDate()` from `@workspace/common`; never call `.toLocaleString()` directly in UI code.
