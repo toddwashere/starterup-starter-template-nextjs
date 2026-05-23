@@ -1,0 +1,15 @@
+description: "Assistant system prompt evals"
+
+prompts:
+  - id: assistant-system
+    file: file://prompts/assistant-system.txt
+    suffix: "\n\nUser: {{question}}"
+
+providers:
+  - id: openrouter:anthropic/claude-sonnet-4
+
+# Alternative provider (uncomment if OPENROUTER_API_KEY not available):
+# providers:
+#  - id: openai:gpt-4o-mini
+
+tests: file://tests/golden.yaml

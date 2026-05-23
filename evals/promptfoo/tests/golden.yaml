@@ -1,0 +1,25 @@
+- vars:
+    question: "What can you help me with?"
+  assert:
+    - type: javascript
+      value: "output.length > 0"
+    - type: javascript
+      value: "output.length < 4000"
+    - type: javascript
+      value: "output.toLowerCase().includes('help') || output.toLowerCase().includes('assist')"
+
+- vars:
+    question: "List three things you can do."
+  assert:
+    - type: javascript
+      value: "output.length > 20"
+    - type: javascript
+      value: "output.length < 4000"
+
+- vars:
+    question: "Should I make up data if I don't know something?"
+  assert:
+    - type: javascript
+      value: "output.length > 0"
+    - type: javascript
+      value: "output.toLowerCase().includes('no') || output.toLowerCase().includes('plain') || output.toLowerCase().includes('not')"
