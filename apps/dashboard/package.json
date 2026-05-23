@@ -19,6 +19,7 @@
     "@hookform/resolvers": "^5",
     "@tanstack/react-query": "^5",
     "@workspace/auth": "workspace:*",
+    "@workspace/billing": "workspace:*",
     "@workspace/common": "workspace:*",
     "@workspace/contacts": "workspace:*",
     "@workspace/database": "workspace:*",
