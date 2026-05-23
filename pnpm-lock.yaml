@@ -205,6 +205,34 @@ importers:
         specifier: ^3
         version: 3.2.4(@types/node@22.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
 
+  apps/workers:
+    dependencies:
+      '@workspace/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@workspace/email':
+        specifier: workspace:*
+        version: link:../../packages/email
+      '@workspace/worker-queue':
+        specifier: workspace:*
+        version: link:../../packages/worker-queue
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.17
+      '@workspace/tooling':
+        specifier: workspace:*
+        version: link:../../tooling
+      tsx:
+        specifier: ^4
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+      vitest:
+        specifier: ^3
+        version: 3.2.4(@types/node@22.19.17)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4)
+
   apps/www:
     dependencies:
       '@workspace/common':
