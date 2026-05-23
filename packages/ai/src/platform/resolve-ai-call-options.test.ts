@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_CALL_PRESETS } from "./ai-models-available";
+import { AI_CALL_PRESETS } from "./models/ai-models-available";
 import { resolveAiCallOptions } from "./resolve-ai-call-options";
 
 describe("resolveAiCallOptions()", () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProviderModelValue } from "./ai-models-available";
+import type { ProviderModelValue } from "./models/ai-models-available";
 import { getModel } from "./get-model";
 
 afterEach(() => {

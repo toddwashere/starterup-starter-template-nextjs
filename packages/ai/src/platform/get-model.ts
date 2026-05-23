@@ -2,13 +2,13 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
-import { keys } from "../keys";
+import { keys } from "../../keys";
 import {
   AI_CALL_PRESETS,
   parseProviderModelValue,
   type AiCallPresetName,
   type ProviderModelValue,
-} from "./ai-models-available";
+} from "./models/ai-models-available";
 
 export type GetModelInput =
   | { providerModel: ProviderModelValue }

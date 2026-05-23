@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { keys } from "../keys";
+import { keys } from "../../keys";
 import {
   getAvailableAiModels,
   getDefaultAvailableProviderModel,

@@ -3,7 +3,7 @@ import {
   type AiCallPreset,
   type AiCallPresetName,
   type ProviderModelValue,
-} from "./ai-models-available";
+} from "./models/ai-models-available";
 
 /**
  * Either a named preset (optionally with overrides) or an explicit full call

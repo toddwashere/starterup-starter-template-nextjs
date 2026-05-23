@@ -1,10 +1,10 @@
-import type { keys } from "../keys";
+import type { keys } from "../../keys";
 import {
   isKnownCatalogModel,
   parseProviderModelValue,
   PROVIDER_LABELS,
   type AiProviderId,
-} from "./ai-models-available";
+} from "./models/ai-models-available";
 import { isProviderConfigured } from "./provider-configured";
 
 /**

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { keys } from "../keys";
+import { keys } from "../../keys";
 import { resolveProviderModel } from "./resolve-provider-model";
 
 function configureEnv(overrides: Record<string, string> = {}): ReturnType<typeof keys> {

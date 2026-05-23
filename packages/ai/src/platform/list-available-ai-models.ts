@@ -1,11 +1,11 @@
-import type { keys } from "../keys";
+import type { keys } from "../../keys";
 import {
   AI_CALL_PRESETS,
   getAiProviderModelOptions,
   parseProviderModelValue,
   type AiCallPresetName,
   type ProviderModelValue,
-} from "./ai-models-available";
+} from "./models/ai-models-available";
 import { isProviderConfigured } from "./provider-configured";
 
 export { isProviderConfigured };

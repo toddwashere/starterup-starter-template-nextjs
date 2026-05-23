@@ -1,5 +1,5 @@
-import type { keys } from "../keys";
-import type { AiProviderId } from "./ai-models-available";
+import type { keys } from "../../keys";
+import type { AiProviderId } from "./models/ai-models-available";
 
 /**
  * Whether a provider has the credentials/config it needs to be usable.

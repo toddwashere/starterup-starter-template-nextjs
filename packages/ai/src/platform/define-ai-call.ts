@@ -5,7 +5,7 @@ import type { z } from "zod";
 import type {
   AiCallPreset,
   AiCallPresetName,
-} from "../ai-models-available";
+} from "./models/ai-models-available";
 
 export type AiCallMode = "stream" | "generate" | "agent";
 
