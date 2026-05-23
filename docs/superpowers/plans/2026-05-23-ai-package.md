@@ -4,6 +4,8 @@
 
 **Goal:** Ship `@workspace/ai` (Vercel AI SDK + multi-provider env), `@workspace/ai-chat` (thread/message repos), dashboard streaming AI Assistant with capped MCP tools and DB history, optional Langfuse telemetry, workers example handler, and promptfoo eval scaffold.
 
+> **Follow-up:** Model catalog, env-key filtering, and chat model selector — see [`2026-05-23-ai-models-catalog-and-selector.md`](./2026-05-23-ai-models-catalog-and-selector.md).
+
 **Architecture:** `packages/ai` exposes `getModel()`, `runAgent()`, prompts, and telemetry—no Prisma or MCP. `packages/ai-chat` owns Prisma repos for `ai.prisma`. Dashboard wires MCP session tools into `runAgent` via `/api/ai/chat`. Workers call `generateText` only. See [`docs/superpowers/specs/2026-05-23-ai-package-design.md`](../specs/2026-05-23-ai-package-design.md).
 
 **Tech Stack:** Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@openrouter/ai-sdk-provider`), Zod, Vitest, Prisma, optional Langfuse OTEL, promptfoo (dev/CI).

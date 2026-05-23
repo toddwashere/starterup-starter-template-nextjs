@@ -27,6 +27,10 @@ Add centralized LLM infrastructure for the monorepo: a new `@workspace/ai` packa
 | **User feedback** | Thumbs up/down + optional comment on assistant messages in v1 |
 | **Thread list UI** | Single active thread per org context in v1; multi-thread sidebar later |
 | **Providers in v1** | All adapters documented below |
+| **Model routing** | Central catalog in `ai-models-available.ts` — not `AI_PROVIDER` / `AI_MODEL` env |
+| **Availability** | Runtime filter: only providers with configured API keys |
+| **Chat UI** | `AiProviderModelSelect` — user picks from available models per request |
+| **Implementation plan** | [`2026-05-23-ai-models-catalog-and-selector.md`](../plans/2026-05-23-ai-models-catalog-and-selector.md) |
 
 ---
 
@@ -100,35 +104,74 @@ Add centralized LLM infrastructure for the monorepo: a new `@workspace/ai` packa
 
 ---
 
+## Model catalog (`ai-models-available.ts`)
+
+**Not env-based routing.** All supported models are defined in `packages/ai/src/ai-models-available.ts` for use by chat, workers, evals, and future features.
+
+### Catalog shape
+
+- Per-provider arrays: `OPENROUTER_MODELS`, `OPENAI_MODELS`, `ANTHROPIC_MODELS`, `OLLAMA_MODELS`, `OPENAI_COMPAT_MODELS`
+- `AI_MODELS_BY_PROVIDER` — full allowlist
+- Encoding: `provider:modelId` (e.g. `openrouter:anthropic/claude-sonnet-4`, `anthropic:claude-sonnet-4-20250514`)
+- Helpers: `parseProviderModelValue`, `toProviderModelValue`, `isKnownCatalogModel`, `getAiProviderModelOptions`
+
+### Presets (code defaults)
+
+```typescript
+export const AI_MODEL_PRESETS = {
+  assistant: "openrouter:anthropic/claude-sonnet-4",
+  worker: "openai:gpt-4o-mini",
+  local: "ollama:llama3.2",
+} as const;
+```
+
+Call sites:
+
+- Chat: user selection from UI, validated on server; fallback `getDefaultAvailableProviderModel()`
+- Workers: `getModel({ preset: "worker" })`
+
+### Runtime availability (env keys only)
+
+`getAvailableAiModels(keys())` returns dropdown options **filtered** by configured credentials:
+
+| Provider | Available when |
+|----------|----------------|
+| `openrouter` | `OPENROUTER_API_KEY` set |
+| `openai` | `OPENAI_API_KEY` set |
+| `anthropic` | `ANTHROPIC_API_KEY` set |
+| `ollama` | `OLLAMA_BASE_URL` set or default localhost |
+| `openai-compatible` | `AI_OPENAI_COMPAT_BASE_URL` set |
+
+Server **must** call `resolveProviderModel(config, value)` before `getModel()` — rejects unknown catalog entries and providers without keys (do not trust client-only filtering).
+
+### UI
+
+- `AiProviderModelSelect` in `apps/dashboard/features/ai-chat/ui/`
+- Options from `listAvailableAiModelsAction()` (server)
+- Chat transport sends `providerModel` on each `/api/ai/chat` POST
+
+---
+
 ## Environment variables
 
-All AI-related vars are **optional** until something calls `@workspace/ai`. Missing config when AI is invoked → clear error (e.g. `AI is not configured: set AI_PROVIDER and provider API keys`).
+Secrets and global knobs only — **no** `AI_PROVIDER` or `AI_MODEL`.
 
 ```bash
 # ── LLM (@workspace/ai) ─────────────────────────────────────────────────────
+# Models: packages/ai/src/ai-models-available.ts
 
-AI_PROVIDER=openrouter          # openrouter | openai | anthropic | ollama | openai-compatible
-AI_MODEL=anthropic/claude-sonnet-4
+AI_AGENT_MAX_STEPS=5
 # AI_MAX_OUTPUT_TOKENS=4096
 # AI_TEMPERATURE=0.7
-AI_AGENT_MAX_STEPS=5            # max tool+model iterations in runAgent
 
-# OpenRouter
+# Provider API keys (set any subset — UI lists only configured providers)
 # OPENROUTER_API_KEY=
 # OPENROUTER_HTTP_REFERER=http://localhost:4000
 # OPENROUTER_APP_NAME=starter-dev
-
-# OpenAI direct
 # OPENAI_API_KEY=
 # OPENAI_BASE_URL=https://api.openai.com/v1
-
-# Anthropic direct
 # ANTHROPIC_API_KEY=
-
-# Ollama (OpenAI-compatible)
 # OLLAMA_BASE_URL=http://localhost:11434/v1
-
-# Generic OpenAI-compatible (LM Studio, vLLM, Together, etc.)
 # AI_OPENAI_COMPAT_BASE_URL=
 # AI_OPENAI_COMPAT_API_KEY=
 
@@ -138,17 +181,15 @@ AI_AGENT_MAX_STEPS=5            # max tool+model iterations in runAgent
 # LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-**Provider resolution (`getModel()`):**
+**Provider SDK mapping (`getModel({ providerModel })`):**
 
-| `AI_PROVIDER` | SDK | Required env |
-|---------------|-----|----------------|
+| Provider | SDK | Required env |
+|----------|-----|----------------|
 | `openrouter` | `@openrouter/ai-sdk-provider` | `OPENROUTER_API_KEY` |
 | `openai` | `@ai-sdk/openai` | `OPENAI_API_KEY` |
 | `anthropic` | `@ai-sdk/anthropic` | `ANTHROPIC_API_KEY` |
 | `ollama` | `@ai-sdk/openai` + `baseURL` | `OLLAMA_BASE_URL` (default localhost) |
 | `openai-compatible` | `@ai-sdk/openai` + `baseURL` | `AI_OPENAI_COMPAT_BASE_URL` |
-
-Default `AI_MODEL` per provider may be set in code when unset (document in README).
 
 ---
 
@@ -260,21 +301,26 @@ packages/ai/
 ├── keys.ts
 ├── src/
 │   ├── index.ts
-│   ├── get-model.ts              # provider factory
+│   ├── ai-models-available.ts    # full catalog + presets + parse/to (client-safe)
+│   ├── list-available-ai-models.ts  # filter by env keys (server)
+│   ├── resolve-provider-model.ts    # allowlist + key check
+│   ├── get-model.ts              # getModel({ providerModel } | { preset })
 │   ├── get-model.test.ts
-│   ├── generation-defaults.ts    # temperature, max tokens from keys
-│   ├── telemetry.ts              # build experimental_telemetry when Langfuse configured
-│   ├── run-agent.ts              # capped tool loop wrapping streamText/generateText
+│   ├── generation-defaults.ts
+│   ├── telemetry.ts
+│   ├── run-agent.ts
 │   ├── run-agent.test.ts
 │   └── prompts/
-│       └── assistant-system.ts   # versioned system prompt (git-reviewed)
+│       └── assistant-system.ts
 ```
 
 ### Public API (v1)
 
 ```typescript
-// getModel(): LanguageModel — throws if provider misconfigured
-export function getModel(): LanguageModel;
+// Resolves from catalog + env keys — throws if invalid or unconfigured
+export function getModel(
+  options: { providerModel: ProviderModelValue } | { preset: AiModelPreset },
+): LanguageModel;
 
 export function getGenerationDefaults(): {
   maxOutputTokens?: number;
@@ -346,7 +392,8 @@ export async function runAgent(input: {
 
 ### UI (`features/ai-chat`)
 
-- Replace demo `callMcpToolAction("account-info")` loop with `useChat` (or equivalent) pointed at `/api/ai/chat`.
+- `useChat` with `/api/ai/chat`; body includes `providerModel` from `AiProviderModelSelect`.
+- `listAvailableAiModelsAction()` on mount — populate selector; empty state when no keys.
 - Keep `ChatMessage` / `ToolResult` types; align with DB-backed messages on load.
 - **Feedback:** thumbs on assistant messages → server action → `setMessageFeedback`.
 
@@ -410,6 +457,9 @@ evals/promptfoo/
   "exports": {
     ".": "./src/index.ts",
     "./keys": "./keys.ts",
+    "./ai-models-available": "./src/ai-models-available.ts",
+    "./list-available-ai-models": "./src/list-available-ai-models.ts",
+    "./resolve-provider-model": "./src/resolve-provider-model.ts",
     "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
   }
 }
@@ -429,7 +479,9 @@ evals/promptfoo/
 
 ## Critical Tests
 
-- `packages/ai/src/get-model.test.ts`: each `AI_PROVIDER` resolves when keys present; missing required key throws readable error; `ollama` uses default base URL.
+- `packages/ai/src/get-model.test.ts`: `getModel({ providerModel })` and `getModel({ preset })`; missing key throws readable error.
+- `packages/ai/src/list-available-ai-models.test.ts`: filters catalog by stubbed env keys.
+- `packages/ai/src/resolve-provider-model.test.ts`: rejects unknown model id and unconfigured provider.
 - `packages/ai/src/run-agent.test.ts`: stops at `maxSteps`; `executeTool` invoked with correct name/args; tool errors propagated; telemetry helper no-ops when Langfuse unset.
 - `packages/ai-chat/src/data-models/ai-thread-repo.test.ts`: `getOrCreateActiveThread` scopes by user+org; cannot read other org’s thread.
 - `packages/ai-chat/src/data-models/ai-message-repo.test.ts`: append messages ordering; `setMessageFeedback` rejects non-assistant / wrong user.
