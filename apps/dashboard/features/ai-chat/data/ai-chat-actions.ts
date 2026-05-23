@@ -47,6 +47,42 @@ export async function listMcpToolsAction() {
 }
 
 // ---------------------------------------------------------------------------
+// Model selector
+// ---------------------------------------------------------------------------
+
+/**
+ * List the AI models available to the current user, filtered to providers whose
+ * credentials are configured in env, plus a sensible default selection.
+ *
+ * Server-only: `keys()` and the availability filter are imported dynamically so
+ * this server module never bundles them into client code. The catalog itself is
+ * code (see `@workspace/ai/ai-models-available`); env only gates availability.
+ */
+export async function listAvailableAiModelsAction() {
+  await requireUser();
+
+  const { keys } = await import("@workspace/ai/keys");
+  const { getAvailableAiModels, getDefaultAvailableProviderModel } =
+    await import("@workspace/ai/list-available-ai-models");
+
+  const config = keys();
+  const models = getAvailableAiModels(config);
+  const defaultValue = getDefaultAvailableProviderModel(config);
+
+  if (models.length === 0) {
+    return {
+      success: false as const,
+      error: "No AI providers configured. Add API keys to .env and restart.",
+    };
+  }
+
+  return {
+    success: true as const,
+    data: { models, defaultValue },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Chat persistence actions
 // ---------------------------------------------------------------------------
 
