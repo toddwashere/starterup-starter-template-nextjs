@@ -7,6 +7,9 @@ prompts:
     file: file://prompts/assistant-system.txt
     suffix: "\n\nUser: {{question}}"
 
+# Provider ids use the same `provider:modelId` encoding as the app catalog
+# (packages/ai/src/ai-models-available.ts). These mirror the AI_CALL_PRESETS
+# models: assistant → openrouter:anthropic/claude-sonnet-4, worker → openai:gpt-4o-mini.
 providers:
   - id: openrouter:anthropic/claude-sonnet-4
 
