@@ -328,7 +328,9 @@ packages/ai/
 │   ├── resolve-provider-model.ts    # allowlist + key check
 │   ├── get-model.ts              # getModel({ providerModel } | { preset })
 │   ├── get-model.test.ts
-│   ├── generation-defaults.ts
+│   ├── resolve-ai-call-options.ts
+│   ├── log-ai-call.ts
+│   ├── get-generation-params.ts
 │   ├── telemetry.ts
 │   ├── run-agent.ts
 │   ├── run-agent.test.ts
@@ -339,21 +341,30 @@ packages/ai/
 ### Public API (v1)
 
 ```typescript
-// Resolves from catalog + env keys — throws if invalid or unconfigured
-export function getModel(
-  options: { providerModel: ProviderModelValue } | { preset: AiModelPreset },
-): LanguageModel;
+export function resolveAiCallOptions(
+  options: { preset: AiCallPresetName; overrides?: Partial<AiCallPreset> } | AiCallPreset,
+): ResolvedAiCall;
 
-export function getGenerationDefaults(): {
+export function getModel(resolved: ResolvedAiCall): LanguageModel;
+
+export function getGenerationParams(resolved: ResolvedAiCall): {
   maxOutputTokens?: number;
   temperature?: number;
 };
 
-export function buildTelemetryOptions(ctx: {
+export function logAiCall(event: {
   functionId: string;
+  providerModel: string;
   userId?: string;
   orgId?: string;
-  sessionId?: string; // thread id
+}): void;
+
+export function buildTelemetryOptions(ctx: {
+  functionId: string;
+  providerModel: string;
+  userId?: string;
+  orgId?: string;
+  sessionId?: string;
   langfuseTraceId?: string;
 }): { experimental_telemetry: ... };
 
