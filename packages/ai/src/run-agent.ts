@@ -5,9 +5,13 @@ import type {
   Tool,
   ToolSet,
 } from "ai";
-import { keys } from "../keys";
-import { getGenerationDefaults } from "./generation-defaults";
+import { getGenerationParams } from "./get-generation-params";
 import { getModel } from "./get-model";
+import { logAiCall } from "./log-ai-call";
+import {
+  resolveAiCallOptions,
+  type AiCallOptions,
+} from "./resolve-ai-call-options";
 import { buildTelemetryOptions } from "./telemetry";
 
 export type AgentTool = Tool;
@@ -22,6 +26,9 @@ export interface RunAgentInput {
   system: string;
   tools: ToolSet;
   executeTool?: ExecuteToolFn;
+  /** Model + generation params. Defaults to the "assistant" preset. */
+  call?: AiCallOptions;
+  /** Override the resolved preset's step cap. */
   maxSteps?: number;
   telemetry?: {
     functionId?: string;
@@ -68,29 +75,40 @@ export function wireToolExecution(
 /**
  * Run a multi-step AI agent with a configurable step cap.
  *
- * - Picks up model and generation defaults from environment variables.
+ * - Resolves model + generation params from `call` (default: "assistant" preset).
  * - When `executeTool` is provided, wires it into every tool in the ToolSet.
- * - Sends telemetry metadata when Langfuse keys are configured; no-ops otherwise.
+ * - Logs the canonical `providerModel` via `logAiCall` once per run.
+ * - Sends telemetry metadata (including `providerModel`) when Langfuse keys are
+ *   configured; no-ops otherwise.
  * - `traceMetadata.langfuseTraceId` is undefined in v1 — full OTEL trace-id
  *   capture is a documented follow-up.
  */
 export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
-  const k = keys();
+  const resolved = resolveAiCallOptions(input.call ?? { preset: "assistant" });
+  const functionId = input.telemetry?.functionId ?? "run-agent";
+
+  logAiCall({
+    functionId,
+    providerModel: resolved.providerModel,
+    userId: input.telemetry?.userId,
+    orgId: input.telemetry?.orgId,
+  });
 
   const tools = input.executeTool
     ? wireToolExecution(input.tools, input.executeTool)
     : input.tools;
 
   const result = await generateText({
-    model: getModel(),
+    model: getModel({ providerModel: resolved.providerModel }),
     system: input.system,
     messages: input.messages,
     tools,
-    stopWhen: stepCountIs(input.maxSteps ?? k.AI_AGENT_MAX_STEPS),
+    stopWhen: stepCountIs(input.maxSteps ?? resolved.maxSteps),
     onStepFinish: input.onStepFinish,
-    ...getGenerationDefaults(),
+    ...getGenerationParams(resolved),
     ...buildTelemetryOptions({
-      functionId: input.telemetry?.functionId ?? "run-agent",
+      functionId,
+      providerModel: resolved.providerModel,
       userId: input.telemetry?.userId,
       orgId: input.telemetry?.orgId,
       sessionId: input.telemetry?.sessionId,

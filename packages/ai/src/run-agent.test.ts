@@ -16,19 +16,27 @@ vi.mock("ai", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock getModel so no real provider is constructed.
+// Mock getModel so no real provider is constructed, and mock logAiCall so we
+// can assert run-agent records the canonical model string.
 // ---------------------------------------------------------------------------
 vi.mock("./get-model", () => ({
   getModel: vi.fn(() => ({})),
 }));
+vi.mock("./log-ai-call", () => ({
+  logAiCall: vi.fn(),
+}));
 
 import { generateText, stepCountIs } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
+import { getModel } from "./get-model";
+import { logAiCall } from "./log-ai-call";
 import { runAgent, wireToolExecution } from "./run-agent";
 
 // Typed helpers for mocked functions
 const mockedGenerateText = generateText as ReturnType<typeof vi.fn>;
 const mockedStepCountIs = stepCountIs as ReturnType<typeof vi.fn>;
+const mockedGetModel = getModel as ReturnType<typeof vi.fn>;
+const mockedLogAiCall = logAiCall as ReturnType<typeof vi.fn>;
 
 /** Return the first argument of the most-recent generateText call. */
 function lastGenerateTextCall(): Record<string, unknown> {
@@ -121,9 +129,7 @@ describe("wireToolExecution()", () => {
 // ---------------------------------------------------------------------------
 
 describe("runAgent()", () => {
-  const baseMessages: ModelMessage[] = [
-    { role: "user", content: "Hello" },
-  ];
+  const baseMessages: ModelMessage[] = [{ role: "user", content: "Hello" }];
   const baseTools: ToolSet = {
     noop: {
       description: "noop",
@@ -135,11 +141,9 @@ describe("runAgent()", () => {
     // Ensure no Langfuse keys so telemetry is disabled (deterministic)
     vi.stubEnv("LANGFUSE_PUBLIC_KEY", "");
     vi.stubEnv("LANGFUSE_SECRET_KEY", "");
-    // Do NOT stub AI_AGENT_MAX_STEPS so the schema default of 5 applies.
-    // (An empty string would coerce to 0 via z.coerce.number.)
   });
 
-  it("calls stepCountIs with AI_AGENT_MAX_STEPS default (5) when maxSteps not provided", async () => {
+  it("defaults to the assistant preset's maxSteps (5) when no call or maxSteps given", async () => {
     await runAgent({
       messages: baseMessages,
       system: "You are a helper.",
@@ -151,7 +155,18 @@ describe("runAgent()", () => {
     expect(call.stopWhen).toEqual({ __stepCount: 5 });
   });
 
-  it("calls stepCountIs with explicit maxSteps when provided", async () => {
+  it("uses the selected preset's maxSteps", async () => {
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+      call: { preset: "worker" },
+    });
+
+    expect(mockedStepCountIs).toHaveBeenCalledWith(1);
+  });
+
+  it("calls stepCountIs with explicit maxSteps override when provided", async () => {
     await runAgent({
       messages: baseMessages,
       system: "You are a helper.",
@@ -162,6 +177,62 @@ describe("runAgent()", () => {
     expect(mockedStepCountIs).toHaveBeenCalledWith(2);
     const call = lastGenerateTextCall();
     expect(call.stopWhen).toEqual({ __stepCount: 2 });
+  });
+
+  it("builds the model from the resolved providerModel (assistant default)", async () => {
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+    });
+
+    expect(mockedGetModel).toHaveBeenCalledWith({
+      providerModel: "openrouter:anthropic/claude-sonnet-4",
+    });
+  });
+
+  it("applies a providerModel override from call.overrides", async () => {
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+      call: {
+        preset: "assistant",
+        overrides: { providerModel: "anthropic:claude-sonnet-4-20250514" },
+      },
+    });
+
+    expect(mockedGetModel).toHaveBeenCalledWith({
+      providerModel: "anthropic:claude-sonnet-4-20250514",
+    });
+  });
+
+  it("spreads generation params from the resolved preset", async () => {
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+    });
+
+    const call = lastGenerateTextCall();
+    expect(call.temperature).toBe(0.7);
+    expect(call.maxOutputTokens).toBe(4096);
+  });
+
+  it("logs the canonical providerModel via logAiCall", async () => {
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+      telemetry: { functionId: "ai.test" },
+    });
+
+    expect(mockedLogAiCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionId: "ai.test",
+        providerModel: "openrouter:anthropic/claude-sonnet-4",
+      }),
+    );
   });
 
   it("forwards tools to generateText", async () => {
@@ -201,6 +272,25 @@ describe("runAgent()", () => {
     expect(telemetry.isEnabled).toBe(false);
   });
 
+  it("includes providerModel in telemetry metadata when Langfuse is enabled", async () => {
+    vi.stubEnv("LANGFUSE_PUBLIC_KEY", "pk-lf-test");
+    vi.stubEnv("LANGFUSE_SECRET_KEY", "sk-lf-test");
+
+    await runAgent({
+      messages: baseMessages,
+      system: "sys",
+      tools: baseTools,
+    });
+
+    const call = lastGenerateTextCall();
+    const telemetry = call.experimental_telemetry as {
+      metadata?: { providerModel?: string };
+    };
+    expect(telemetry.metadata?.providerModel).toBe(
+      "openrouter:anthropic/claude-sonnet-4",
+    );
+  });
+
   it("wires executeTool into tools when provided", async () => {
     const executeTool = vi.fn().mockResolvedValue("wired-result");
 
@@ -212,7 +302,6 @@ describe("runAgent()", () => {
     });
 
     const call = lastGenerateTextCall();
-    // The wired tool should have an execute fn
     const tools = call.tools as Record<string, { execute?: unknown }>;
     const noopTool = tools.noop;
     expect(typeof noopTool?.execute).toBe("function");
@@ -238,17 +327,5 @@ describe("runAgent()", () => {
     });
 
     expect(result.traceMetadata).toBeUndefined();
-  });
-
-  it("uses AI_AGENT_MAX_STEPS from env when set", async () => {
-    vi.stubEnv("AI_AGENT_MAX_STEPS", "7");
-
-    await runAgent({
-      messages: baseMessages,
-      system: "sys",
-      tools: baseTools,
-    });
-
-    expect(mockedStepCountIs).toHaveBeenCalledWith(7);
   });
 });

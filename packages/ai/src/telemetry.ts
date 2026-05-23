@@ -2,6 +2,8 @@ import { keys } from "../keys";
 
 export interface TelemetryContext {
   functionId: string;
+  /** Canonical model string, e.g. "openrouter:anthropic/claude-sonnet-4". */
+  providerModel?: string;
   userId?: string;
   orgId?: string;
   sessionId?: string;
@@ -36,6 +38,10 @@ export function buildTelemetryOptions(ctx: TelemetryContext): TelemetryOptions {
   }
 
   const metadata: Record<string, string> = {};
+
+  if (ctx.providerModel !== undefined) {
+    metadata.providerModel = ctx.providerModel;
+  }
 
   if (ctx.userId !== undefined) {
     metadata.userId = ctx.userId;

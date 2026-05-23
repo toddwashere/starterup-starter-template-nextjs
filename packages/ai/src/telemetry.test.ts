@@ -88,6 +88,25 @@ describe("buildTelemetryOptions()", () => {
       expect(Object.keys(metadata ?? {})).not.toContain("sessionId");
     });
 
+    it("includes providerModel when provided", () => {
+      const result = buildTelemetryOptions({
+        functionId: "x",
+        providerModel: "openrouter:anthropic/claude-sonnet-4",
+      });
+
+      expect(result.experimental_telemetry.metadata?.providerModel).toBe(
+        "openrouter:anthropic/claude-sonnet-4",
+      );
+    });
+
+    it("omits providerModel when not provided", () => {
+      const result = buildTelemetryOptions({ functionId: "x" });
+
+      expect(
+        Object.keys(result.experimental_telemetry.metadata ?? {}),
+      ).not.toContain("providerModel");
+    });
+
     it("includes langfuseTraceId when provided", () => {
       const result = buildTelemetryOptions({
         functionId: "x",

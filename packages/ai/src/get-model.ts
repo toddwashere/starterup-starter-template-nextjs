@@ -3,48 +3,46 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import { keys } from "../keys";
+import {
+  AI_CALL_PRESETS,
+  parseProviderModelValue,
+  type AiCallPresetName,
+  type ProviderModelValue,
+} from "./ai-models-available";
+
+export type GetModelInput =
+  | { providerModel: ProviderModelValue }
+  | { preset: AiCallPresetName };
 
 /**
- * Per-provider default model IDs used when AI_MODEL is not set.
- * Override any of these via the AI_MODEL environment variable.
- */
-function getDefaultModelForProvider(
-  provider: "openrouter" | "openai" | "anthropic" | "ollama" | "openai-compatible",
-): string {
-  switch (provider) {
-    case "openrouter":
-      return "anthropic/claude-sonnet-4"; // Good balance of capability and cost via OpenRouter
-    case "openai":
-      return "gpt-4o-mini"; // Fast, cheap, capable OpenAI default
-    case "anthropic":
-      return "claude-sonnet-4-20250514"; // Latest Claude Sonnet via direct Anthropic API
-    case "ollama":
-      return "llama3"; // Most common local Ollama model
-    case "openai-compatible":
-      return "local-model"; // Placeholder — the local server defines available models
-  }
-}
-
-/**
- * Construct and return the configured AI LanguageModel.
+ * Construct the AI LanguageModel for a `provider:modelId` selection or a preset.
  *
- * Reads configuration fresh from environment variables on every call
- * (via keys()) so that vi.stubEnv() works correctly in tests.
+ * Reads configuration fresh from environment variables on every call (via
+ * `keys()`) so `vi.stubEnv()` works in tests. Throws a readable error if the
+ * value is malformed or the chosen provider's credentials are missing. Does NOT
+ * make network calls — only constructs provider/model objects.
  *
- * Throws if the provider is not configured or required API keys are missing.
- * Does NOT make network calls — only constructs provider/model objects.
+ * Catalog membership and credential policy are validated authoritatively by
+ * `resolveProviderModel` (called by the chat route before this). Presets always
+ * reference catalog models, so `getModel` only needs the per-provider key
+ * checks below.
  */
-export function getModel(): LanguageModel {
+export function getModel(input: GetModelInput): LanguageModel {
   const config = keys();
 
-  if (!config.AI_PROVIDER) {
+  const providerModel: ProviderModelValue =
+    "preset" in input
+      ? AI_CALL_PRESETS[input.preset].providerModel
+      : input.providerModel;
+
+  const parsed = parseProviderModelValue(providerModel);
+  if (!parsed) {
     throw new Error(
-      "AI is not configured: set AI_PROVIDER and provider API keys",
+      `Invalid providerModel "${providerModel}". Expected the form "provider:modelId".`,
     );
   }
 
-  const provider = config.AI_PROVIDER;
-  const model = config.AI_MODEL ?? getDefaultModelForProvider(provider);
+  const { provider, modelId } = parsed;
 
   switch (provider) {
     case "openrouter": {
@@ -65,7 +63,7 @@ export function getModel(): LanguageModel {
           ? { appName: config.OPENROUTER_APP_NAME }
           : {}),
       });
-      return openrouterProvider(model);
+      return openrouterProvider(modelId);
     }
 
     case "openai": {
@@ -80,7 +78,7 @@ export function getModel(): LanguageModel {
         apiKey: config.OPENAI_API_KEY,
         ...(config.OPENAI_BASE_URL ? { baseURL: config.OPENAI_BASE_URL } : {}),
       });
-      return openaiProvider.chat(model);
+      return openaiProvider.chat(modelId);
     }
 
     case "anthropic": {
@@ -92,7 +90,7 @@ export function getModel(): LanguageModel {
       const anthropicProvider = createAnthropic({
         apiKey: config.ANTHROPIC_API_KEY,
       });
-      return anthropicProvider(model);
+      return anthropicProvider(modelId);
     }
 
     case "ollama": {
@@ -102,7 +100,7 @@ export function getModel(): LanguageModel {
         apiKey: "ollama", // Placeholder; Ollama ignores auth
         baseURL: config.OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
       });
-      return ollamaProvider.chat(model);
+      return ollamaProvider.chat(modelId);
     }
 
     case "openai-compatible": {
@@ -116,7 +114,7 @@ export function getModel(): LanguageModel {
         apiKey: config.AI_OPENAI_COMPAT_API_KEY ?? "",
         baseURL: config.AI_OPENAI_COMPAT_BASE_URL,
       });
-      return compatProvider.chat(model);
+      return compatProvider.chat(modelId);
     }
   }
 }
