@@ -21,6 +21,8 @@ When displaying dates or timestamps in any UI component (apps/* or packages/ui),
 
 When creating a new project-level AI skill (SKILL.md), read `.ai/skills/create-skill/SKILL.md` before making changes.
 
+When the user wants to stress-test a plan, get grilled on their design, mentions "grill me", or invokes `/grill-me-matt`, read `.ai/skills/grill-me-matt/SKILL.md` before proceeding.
+
 When adding a modal, dialog, confirm dialog, alert dialog, drawer, or any overlay triggered by a user action, read `.ai/skills/add-modal-or-confirm-dialog/SKILL.md` before making changes.
 
 When adding or editing LLM instruction files (rules, skills, conventions), read `.ai/conventions/ai-guidance-files.md` before making changes.

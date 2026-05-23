@@ -14,6 +14,7 @@ Entry points for agents: [../AGENTS.md](../AGENTS.md) and [`.cursor/rules/shared
 - [`skills/add-new-app/SKILL.md`](./skills/add-new-app/SKILL.md) - Add a runnable app under `apps/` (ports, Turborepo, package setup).
 - [`skills/add-new-page/SKILL.md`](./skills/add-new-page/SKILL.md) - Sparse routes and feature folders for dashboard and www pages.
 - [`skills/create-skill/SKILL.md`](./skills/create-skill/SKILL.md) - Create project-level skills (canonical `.ai/` + tool wrappers).
+- [`skills/grill-me-matt/SKILL.md`](./skills/grill-me-matt/SKILL.md) - Stress-test a plan or design via relentless one-at-a-time questioning until shared understanding.
 
 ## Conventions
 
