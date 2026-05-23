@@ -26,7 +26,7 @@ export type ContactsIdPrefix =
   | "ctask"
   | "ctstatus";
 
-export type BillingIdPrefix = "sub" | "price" | "prod" | "inv" | "pay";
+export type BillingIdPrefix = "bplan" | "sub" | "price" | "prod" | "inv" | "pay";
 
 export type McpIdPrefix = "mcptcl";
 
