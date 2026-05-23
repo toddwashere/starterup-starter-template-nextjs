@@ -8,8 +8,9 @@ import {
 } from "./events";
 
 describe("events registry", () => {
-  it("contains exactly the three expected event names", () => {
+  it("contains exactly the expected event names", () => {
     expect(Object.keys(events).sort()).toEqual([
+      "ai.example",
       "cleanup.expired-sessions",
       "user.welcome-email",
       "webhook.deliver",
