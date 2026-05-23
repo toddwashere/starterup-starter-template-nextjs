@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./keys": "./keys.ts",
+    "./ai-models-available": "./src/ai-models-available.ts",
     "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
   },
   "scripts": {
