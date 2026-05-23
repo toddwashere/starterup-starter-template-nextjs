@@ -1,5 +1,6 @@
 import type { HandlerRegistry } from "../registry";
 
+import { handleAiExample } from "./ai-example";
 import { handleCleanupExpiredSessions } from "./cleanup-expired-sessions";
 import { handleUserWelcomeEmail } from "./user-welcome-email";
 import { handleWebhookDeliver } from "./webhook-deliver";
@@ -16,4 +17,5 @@ export const handlers: HandlerRegistry = {
   "user.welcome-email": handleUserWelcomeEmail,
   "cleanup.expired-sessions": handleCleanupExpiredSessions,
   "webhook.deliver": handleWebhookDeliver,
+  "ai.example": handleAiExample,
 };

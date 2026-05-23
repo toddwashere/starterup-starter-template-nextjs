@@ -13,9 +13,11 @@
     "clean": "rm -rf dist .turbo node_modules"
   },
   "dependencies": {
+    "@workspace/ai": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
+    "ai": "^6.0.191",
     "tsx": "^4"
   },
   "devDependencies": {

@@ -32,6 +32,7 @@ function makeRegistry(
     "user.welcome-email": vi.fn(async () => {}),
     "cleanup.expired-sessions": vi.fn(async () => {}),
     "webhook.deliver": vi.fn(async () => {}),
+    "ai.example": vi.fn(async () => {}),
     ...overrides,
   };
 }

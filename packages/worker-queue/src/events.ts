@@ -10,6 +10,7 @@ export const events = {
   "user.welcome-email": z.object({ userId: z.string() }),
   "cleanup.expired-sessions": z.object({}),
   "webhook.deliver": z.object({ deliveryId: z.string() }),
+  "ai.example": z.object({ text: z.string() }),
 } as const;
 
 /** Union of the literal event-name strings in the registry. */

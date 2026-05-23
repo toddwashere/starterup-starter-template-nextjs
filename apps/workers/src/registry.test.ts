@@ -12,6 +12,7 @@ describe("getHandler", () => {
       "user.welcome-email": welcome,
       "cleanup.expired-sessions": cleanup,
       "webhook.deliver": webhook,
+      "ai.example": vi.fn(async () => {}),
     };
 
     const handler = getHandler(registry, "user.welcome-email");
@@ -47,6 +48,7 @@ describe("getHandler", () => {
     const eventNames = Object.keys(events) as EventName[];
     expect(eventNames.sort()).toEqual(
       [
+        "ai.example",
         "cleanup.expired-sessions",
         "user.welcome-email",
         "webhook.deliver",
