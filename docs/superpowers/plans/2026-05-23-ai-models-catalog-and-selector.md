@@ -21,7 +21,8 @@
 | **Env routing** | Remove `AI_PROVIDER` / `AI_MODEL`; keys + optional globals only |
 | **Availability** | `getAvailableAiModels(keys())` filters catalog by configured keys |
 | **Server validation** | `resolveProviderModel(value)` allowlists against full catalog |
-| **Presets** | `AI_MODEL_PRESETS.assistant`, `.worker` → catalog values |
+| **Presets** | `AI_CALL_PRESETS` — `providerModel` + `maxSteps` + `temperature` + `maxOutputTokens` (no generation env vars) |
+| **Logging** | Every AI call logs `providerModel` string (console + telemetry metadata + chat message metadata) |
 | **Ollama** | Include when `OLLAMA_BASE_URL` set (default localhost URL counts as configured) |
 | **UI** | `AiProviderModelSelect` in `features/ai-chat/ui/`; options from server action |
 | **Chat transport** | Pass `providerModel` on each POST to `/api/ai/chat` |
@@ -38,7 +39,9 @@
 | `packages/ai/src/resolve-provider-model.ts` | Allowlist parse + resolve to `{ provider, modelId }` |
 | `packages/ai/src/get-model.ts` | **Modify** — `getModel({ providerModel?, preset? })` |
 | `packages/ai/keys.ts` | **Modify** — remove `AI_PROVIDER`, `AI_MODEL` |
-| `packages/ai/src/run-agent.ts` | **Modify** — pass model options through |
+| `packages/ai/src/run-agent.ts` | **Modify** — `resolveAiCallOptions`, pass generation params |
+| `packages/ai/src/log-ai-call.ts` | Structured log line with `providerModel` |
+| `packages/ai/src/generation-defaults.ts` | **Remove** or replace with `getGenerationParams(resolved)` |
 | `apps/dashboard/features/ai-chat/data/ai-chat-actions.ts` | `listAvailableAiModelsAction`, extend load thread |
 | `apps/dashboard/features/ai-chat/ui/ai-provider-model-select.tsx` | Grouped select component |
 | `apps/dashboard/features/ai-chat/ui/ai-chat-page-content.tsx` | Selector + transport body |
@@ -135,19 +138,40 @@ export function getAiProviderModelOptions(): {
 }[];
 ```
 
-- [ ] **Step 3:** Presets (code defaults, not env):
+- [ ] **Step 3:** `AI_CALL_PRESETS` (code defaults — **not env**):
 
 ```typescript
-export const AI_MODEL_PRESETS = {
-  assistant: "openrouter:anthropic/claude-sonnet-4",
-  worker: "openai:gpt-4o-mini",
-  local: "ollama:llama3.2",
-} as const satisfies Record<string, ProviderModelValue>;
+export interface AiCallPreset {
+  providerModel: ProviderModelValue;
+  maxSteps: number;
+  temperature?: number;
+  maxOutputTokens?: number;
+}
 
-export type AiModelPreset = keyof typeof AI_MODEL_PRESETS;
+export const AI_CALL_PRESETS = {
+  assistant: {
+    providerModel: "openrouter:anthropic/claude-sonnet-4",
+    maxSteps: 5,
+    temperature: 0.7,
+    maxOutputTokens: 4096,
+  },
+  worker: {
+    providerModel: "openai:gpt-4o-mini",
+    maxSteps: 1,
+    temperature: 0,
+    maxOutputTokens: 1024,
+  },
+  local: {
+    providerModel: "ollama:llama3.2",
+    maxSteps: 5,
+    temperature: 0.7,
+  },
+} as const satisfies Record<string, AiCallPreset>;
+
+export type AiCallPresetName = keyof typeof AI_CALL_PRESETS;
 
 export const DEFAULT_PROVIDER_MODEL: ProviderModelValue =
-  AI_MODEL_PRESETS.assistant;
+  AI_CALL_PRESETS.assistant.providerModel;
 ```
 
 - [ ] **Step 4:** Tests for parse/to and `isKnownCatalogModel`.
@@ -213,40 +237,48 @@ export function getDefaultAvailableProviderModel(
   3. `isProviderConfigured(config, provider)` or throw readable error
   4. return `{ provider, modelId }`
 
-- [ ] **Step 2:** Change signature:
+- [ ] **Step 2:** Add `resolveAiCallOptions(config, options)`:
 
 ```typescript
-export type GetModelOptions =
-  | { providerModel: ProviderModelValue }
-  | { preset: AiModelPreset };
+export type AiCallOptions =
+  | { preset: AiCallPresetName; overrides?: Partial<AiCallPreset> }
+  | AiCallPreset; // explicit full config
 
-export function getModel(
-  options: GetModelOptions,
-): LanguageModel {
-  const config = keys();
-  const value =
-    "preset" in options
-      ? AI_MODEL_PRESETS[options.preset]
-      : options.providerModel;
-  const { provider, modelId } = resolveProviderModel(config, value);
-  // existing provider switch using modelId
+export type ResolvedAiCall = AiCallPreset & {
+  providerModel: ProviderModelValue; // canonical log string
+};
+
+export function resolveAiCallOptions(
+  config: ReturnType<typeof keys>,
+  options: AiCallOptions,
+): ResolvedAiCall;
+```
+
+Merge preset + overrides (chat passes `overrides: { providerModel: userSelection }`).
+
+- [ ] **Step 3:** `getModel(resolved: ResolvedAiCall)` or `getModel(options: AiCallOptions)` that resolves internally.
+
+- [ ] **Step 4:** Update `runAgent` — resolve once, spread `getGenerationParams(resolved)`, `stepCountIs(resolved.maxSteps)`.
+
+- [ ] **Step 5:** Create `log-ai-call.ts`:
+
+```typescript
+export function logAiCall(event: {
+  functionId: string;
+  providerModel: string; // e.g. "openrouter:anthropic/claude-sonnet-4"
+  userId?: string;
+  orgId?: string;
+}): void {
+  console.info("[ai]", JSON.stringify(event));
 }
 ```
 
-- [ ] **Step 3:** Remove `getDefaultModelForProvider` tied to env; delete `AI_PROVIDER` / `AI_MODEL` usage.
+Call from `runAgent`, chat route `onFinish`, and worker handler **after** resolve (always log the string used).
 
-- [ ] **Step 4:** Update `runAgent` input:
+- [ ] **Step 6:** Extend `buildTelemetryOptions` to accept `providerModel: string` in metadata when Langfuse enabled.
 
-```typescript
-export type RunAgentInput = {
-  // ...
-} & GetModelOptions;
-```
-
-Pass through to `getModel(options)`.
-
-- [ ] **Step 5:** Rewrite tests; run `pnpm --filter @workspace/ai test`.
-- [ ] **Step 6:** Commit `refactor(ai): getModel from catalog and presets`
+- [ ] **Step 7:** Rewrite tests; assert `resolveAiCallOptions` merges overrides; `logAiCall` test with `vi.spyOn(console, "info")`.
+- [ ] **Step 8:** Commit `refactor(ai): getModel from catalog, presets, and call logging`
 
 ---
 
@@ -256,24 +288,25 @@ Pass through to `getModel(options)`.
 - Modify: `packages/ai/keys.ts`, `packages/ai/src/keys.test.ts`
 - Modify: `.env.example`, `packages/ai/README.md`
 
-- [ ] **Step 1:** Remove `AI_PROVIDER` and `AI_MODEL` from Zod schema and `keys()`.
+- [ ] **Step 1:** Remove from Zod schema and `keys()`: `AI_PROVIDER`, `AI_MODEL`, `AI_AGENT_MAX_STEPS`, `AI_MAX_OUTPUT_TOKENS`, `AI_TEMPERATURE`.
 
-- [ ] **Step 2:** Keep: `AI_AGENT_MAX_STEPS`, `AI_MAX_OUTPUT_TOKENS`, `AI_TEMPERATURE`, all `*_API_KEY` / base URLs, Langfuse.
+- [ ] **Step 2:** Keep in env only: provider `*_API_KEY` / base URLs, Langfuse keys.
 
-- [ ] **Step 3:** Update `.env.example`:
+- [ ] **Step 3:** Delete `getGenerationDefaults()` env reads; add `getGenerationParams(resolved: ResolvedAiCall)` returning `{ maxOutputTokens?, temperature? }` and `resolved.maxSteps` for `stepCountIs`.
+
+- [ ] **Step 4:** Update `.env.example`:
 
 ```bash
-# Model routing: packages/ai/src/ai-models-available.ts (not env).
+# Models + generation defaults: packages/ai/src/ai-models-available.ts (AI_CALL_PRESETS).
 # Set API keys for providers you want; only configured providers appear in the UI.
-AI_AGENT_MAX_STEPS=5
 # OPENROUTER_API_KEY=
 # OPENAI_API_KEY=
 # ANTHROPIC_API_KEY=
 # OLLAMA_BASE_URL=http://localhost:11434/v1
 ```
 
-- [ ] **Step 4:** README: link to catalog file, presets table, selector behavior.
-- [ ] **Step 5:** Commit `chore(ai): remove AI_PROVIDER and AI_MODEL from env`
+- [ ] **Step 5:** README: presets table (model, maxSteps, temperature, maxOutputTokens).
+- [ ] **Step 6:** Commit `chore(ai): move generation defaults to AI_CALL_PRESETS`
 
 ---
 
@@ -410,7 +443,13 @@ try {
 ```
 
 - [ ] **Step 3:** Remove 503 branch that references `AI_PROVIDER`.
-- [ ] **Step 4:** Optional: store `providerModel` in `appendAssistantMessage` metadata for analytics.
+- [ ] **Step 4:** Persist `providerModel` on assistant message metadata (required):
+
+```typescript
+metadata: { providerModel: resolved.providerModel, langfuseTraceId?: string }
+```
+
+Call `logAiCall({ functionId: "ai.chat", providerModel: resolved.providerModel, userId, orgId })` before `streamText`.
 - [ ] **Step 5:** Commit `feat(dashboard): validate providerModel on chat route`
 
 ---
@@ -444,7 +483,8 @@ try {
 
 ## Optional follow-up (out of scope)
 
-- `AiThread.preferredProviderModel` column — persist last selection per thread
+- `AiThread.preferredProviderModel` column — persist last model selection per thread on reload
+- Dedicated `AiCallLog` Prisma table (v1 uses console + message metadata only)
 - Filter presets when preset provider unavailable (fallback chain)
 - `GET /api/ai/models` public route vs server action only
 

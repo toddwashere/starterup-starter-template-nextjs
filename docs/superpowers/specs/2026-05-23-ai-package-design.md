@@ -17,7 +17,7 @@ Add centralized LLM infrastructure for the monorepo: a new `@workspace/ai` packa
 | **Vercel hosting** | Not required; calls go from app servers to configured providers |
 | **Package shape** | **Approach 2** — `@workspace/ai` owns model factory, agent runner, prompts, telemetry; callers inject tool execution |
 | **Consumers** | Dashboard chat + `apps/workers` |
-| **Chat tools** | **C** — MCP tools via capped agent loop (`AI_AGENT_MAX_STEPS`, default `5`) |
+| **Chat tools** | **C** — MCP tools via capped agent loop (`AI_CALL_PRESETS.assistant.maxSteps`, default `5`) |
 | **Chat persistence** | **B** — `AiThread` / `AiMessage` in Postgres |
 | **Thread repos** | `packages/ai-chat` (repos only); dashboard feature owns actions, UI, MCP adapter |
 | **Prisma schema file** | `packages/database/prisma/ai.prisma` (not `mcp.prisma`) |
@@ -115,20 +115,46 @@ Add centralized LLM infrastructure for the monorepo: a new `@workspace/ai` packa
 - Encoding: `provider:modelId` (e.g. `openrouter:anthropic/claude-sonnet-4`, `anthropic:claude-sonnet-4-20250514`)
 - Helpers: `parseProviderModelValue`, `toProviderModelValue`, `isKnownCatalogModel`, `getAiProviderModelOptions`
 
-### Presets (code defaults)
+### Presets (`AI_CALL_PRESETS` — code defaults, not env)
 
 ```typescript
-export const AI_MODEL_PRESETS = {
-  assistant: "openrouter:anthropic/claude-sonnet-4",
-  worker: "openai:gpt-4o-mini",
-  local: "ollama:llama3.2",
+export const AI_CALL_PRESETS = {
+  assistant: {
+    providerModel: "openrouter:anthropic/claude-sonnet-4",
+    maxSteps: 5,
+    temperature: 0.7,
+    maxOutputTokens: 4096,
+  },
+  worker: {
+    providerModel: "openai:gpt-4o-mini",
+    maxSteps: 1,
+    temperature: 0,
+    maxOutputTokens: 1024,
+  },
+  local: {
+    providerModel: "ollama:llama3.2",
+    maxSteps: 5,
+    temperature: 0.7,
+  },
 } as const;
 ```
 
-Call sites:
+Call sites use `resolveAiCallOptions({ preset: "assistant", overrides?: { providerModel } })`:
 
-- Chat: user selection from UI, validated on server; fallback `getDefaultAvailableProviderModel()`
-- Workers: `getModel({ preset: "worker" })`
+- **Chat:** user `providerModel` from UI overrides preset model; generation params from preset unless overridden
+- **Workers:** `preset: "worker"` only
+
+**No** `AI_AGENT_MAX_STEPS`, `AI_TEMPERATURE`, or `AI_MAX_OUTPUT_TOKENS` in env.
+
+### AI call logging
+
+Every LLM invocation records the **canonical model string** (`providerModel`, e.g. `openrouter:anthropic/claude-sonnet-4`):
+
+1. **`logAiCall()`** in `@workspace/ai` — structured `console.info` with `functionId`, `providerModel`, optional `userId` / `orgId`
+2. **Langfuse** — `providerModel` in `experimental_telemetry.metadata` when tracing enabled
+3. **Chat persistence** — `AiMessage.metadata.providerModel` on assistant turns
+
+Workers and `runAgent` call `logAiCall` after `resolveAiCallOptions`.
 
 ### Runtime availability (env keys only)
 
@@ -154,15 +180,11 @@ Server **must** call `resolveProviderModel(config, value)` before `getModel()` �
 
 ## Environment variables
 
-Secrets and global knobs only — **no** `AI_PROVIDER` or `AI_MODEL`.
+Secrets only — **no** model routing or generation params in env (`AI_PROVIDER`, `AI_MODEL`, `AI_AGENT_MAX_STEPS`, `AI_TEMPERATURE`, `AI_MAX_OUTPUT_TOKENS` removed).
 
 ```bash
 # ── LLM (@workspace/ai) ─────────────────────────────────────────────────────
-# Models: packages/ai/src/ai-models-available.ts
-
-AI_AGENT_MAX_STEPS=5
-# AI_MAX_OUTPUT_TOKENS=4096
-# AI_TEMPERATURE=0.7
+# Catalog + AI_CALL_PRESETS: packages/ai/src/ai-models-available.ts
 
 # Provider API keys (set any subset — UI lists only configured providers)
 # OPENROUTER_API_KEY=
@@ -343,7 +365,7 @@ export async function runAgent(input: {
   system: string;
   tools: Record<string, AgentTool>;
   executeTool: ExecuteToolFn;
-  maxSteps?: number; // default from keys AI_AGENT_MAX_STEPS
+  maxSteps?: number; // default from resolved preset unless overridden
   onStepFinish?: (step) => void;
 }): Promise<{
   text: string;
