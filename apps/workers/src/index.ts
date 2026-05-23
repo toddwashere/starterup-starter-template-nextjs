@@ -6,4 +6,4 @@ startHealthServer(port);
 
 console.log(`[workers] started`);
 
-// TODO(Task 8): start the consumer poll loop here
+// TODO(Task 9): construct the registry + pgmq adapter and start the consumer
