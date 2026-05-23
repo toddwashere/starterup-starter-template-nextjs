@@ -7,8 +7,10 @@ import {
   createContactWithValidation,
   updateContactWithValidation,
   archiveContact,
+  countContactsForOrg,
 } from "@workspace/contacts";
 import type { ContactListFilters, CreateContactInput, UpdateContactInput } from "@workspace/contacts";
+import { requireOrgEntitlement, BillingEntitlementError } from "@workspace/billing";
 import type { ActionResult } from "@/common/data/action-result";
 
 export async function listContactsAction(
@@ -46,9 +48,17 @@ export async function createContactAction(
     const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
       contact: ["create"],
     });
+    const currentCount = await countContactsForOrg(activeOrganizationId);
+    await requireOrgEntitlement(activeOrganizationId, "contacts", currentCount + 1);
     const contact = await createContactWithValidation(activeOrganizationId, data);
     return { success: true, data: { id: contact.id } };
   } catch (err) {
+    if (err instanceof BillingEntitlementError) {
+      return {
+        success: false,
+        error: "You've reached your plan's contact limit. Upgrade your plan to add more contacts.",
+      };
+    }
     return { success: false, error: err instanceof Error ? err.message : "Failed to create contact" };
   }
 }

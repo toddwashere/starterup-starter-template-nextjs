@@ -103,3 +103,9 @@ export async function unarchiveContact(contactId: string, organizationId: string
     data: { archivedAt: null },
   });
 }
+
+export async function countContactsForOrg(organizationId: string): Promise<number> {
+  return prisma.contact.count({
+    where: { organizationId, archivedAt: null },
+  });
+}

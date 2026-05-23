@@ -7,6 +7,7 @@ vi.mock("@workspace/database", () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -19,6 +20,7 @@ import {
   updateContact,
   archiveContact,
   unarchiveContact,
+  countContactsForOrg,
 } from "./contact-repo";
 
 const mockContact = {
@@ -156,5 +158,16 @@ describe("unarchiveContact", () => {
         data: { archivedAt: null },
       }),
     );
+  });
+});
+
+describe("countContactsForOrg", () => {
+  it("counts active (non-archived) contacts for the given org", async () => {
+    vi.mocked(prisma.contact.count).mockResolvedValue(7 as never);
+    const result = await countContactsForOrg("org_1");
+    expect(prisma.contact.count).toHaveBeenCalledWith({
+      where: { organizationId: "org_1", archivedAt: null },
+    });
+    expect(result).toBe(7);
   });
 });
