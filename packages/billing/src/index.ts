@@ -1,2 +1,4 @@
-// @workspace/billing — public exports are added by later tasks.
-export {};
+export { getOrgLimits } from "./entitlements/get-org-limits";
+export { requireOrgEntitlement } from "./entitlements/require-org-entitlement";
+export { BillingEntitlementError } from "./errors";
+export type { OrgLimits } from "./entitlements/types";
