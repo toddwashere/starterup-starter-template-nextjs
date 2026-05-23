@@ -60,6 +60,55 @@ Organization-scoped subscriptions are powered by the [`@better-auth/stripe`](htt
 
 Org owners/admins manage billing under **Settings → Billing**; members get a read-only view.
 
+## AI Assistant (@workspace/ai)
+
+Centralized LLM infrastructure on the Vercel AI SDK. The dashboard AI Assistant streams multi-turn chat with capped MCP tool execution; workers and other backends call `generateText()` directly.
+
+**Provider Matrix:**
+
+| Provider | SDK Package | Required Env |
+|----------|-----------|------------|
+| openrouter | @openrouter/ai-sdk-provider | `OPENROUTER_API_KEY` |
+| openai | @ai-sdk/openai | `OPENAI_API_KEY` |
+| anthropic | @ai-sdk/anthropic | `ANTHROPIC_API_KEY` |
+| ollama | @ai-sdk/openai + baseURL | none (defaults to `http://localhost:11434/v1`) |
+| openai-compatible | @ai-sdk/openai + baseURL | `AI_OPENAI_COMPAT_BASE_URL` |
+
+**Local Dev with Ollama:**
+
+```bash
+# Terminal 1: start Ollama
+ollama serve
+
+# Terminal 2: pull a model
+ollama pull llama3
+
+# Terminal 3: set .env
+AI_PROVIDER=ollama
+AI_MODEL=llama3
+
+# Models run locally; no API keys required
+```
+
+**OpenRouter (Cloud):**
+
+1. Get API key from [OpenRouter dashboard](https://openrouter.ai/keys)
+2. Set `.env`:
+   ```bash
+   AI_PROVIDER=openrouter
+   OPENROUTER_API_KEY=sk_or_xxxxxxxx
+   AI_MODEL=anthropic/claude-sonnet-4
+   ```
+3. (Optional) Set `OPENROUTER_HTTP_REFERER` and `OPENROUTER_APP_NAME` for tracking
+
+**Optional: Langfuse Observability**
+
+Set both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to enable trace collection. The app runs without it. Use Langfuse Cloud (hobby tier free) or self-hosted OSS. Traces integrate with the Vercel AI SDK; full OTEL trace-id capture onto messages is a v1 follow-up.
+
+**Optional: Evals**
+
+Run `pnpm eval:ai` to evaluate the assistant system prompt with [promptfoo](https://promptfoo.dev). Requires a provider API key and generated test cases.
+
 ## AI-Assisted Development
 
 Includes skills, hooks, and instruction files for agentic development with Claude Code, Cursor, and other AI tools via the Superpowers framework.
