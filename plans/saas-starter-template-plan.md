@@ -115,11 +115,13 @@ Events are the universal abstraction for all background work. Cron schedules, ap
 
 **Queue: pgmq (Postgres Message Queue)**
 
-pgmq is a Postgres extension providing durable message queues with exactly-once delivery, FIFO support, message archival, and zero additional infrastructure (runs inside the existing PostgreSQL database). It is a first-party Supabase integration, works through connection poolers, and is visible in the Supabase dashboard.
+pgmq is a Postgres extension providing durable message queues with at-least-once delivery, FIFO support, message archival, and zero additional infrastructure (runs inside the existing PostgreSQL database). Handlers must be idempotent. It is a first-party Supabase integration, works through connection poolers, and is visible in the Supabase dashboard. **Design spec:** [`docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md`](../docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md).
 
 **Scheduling: pg_cron**
 
-pg_cron triggers scheduled events by publishing messages into pgmq on a timer. Cron schedules are declared as SQL migrations, making them version-controlled and declarative. pg_cron does not execute job logic directly — it only publishes events into the queue.
+pg_cron triggers scheduled events by publishing messages into pgmq on a timer. Cron schedules are declared as **SQL migrations only** (single source of truth — no duplicate TypeScript scheduler). pg_cron does not execute job logic directly — it only publishes events into the queue.
+
+**Local development:** Docker Compose uses a Postgres 16 image with `pgmq` and `pg_cron` (`docker/postgres`). **Production:** Supabase is the reference deploy path; any Postgres with both extensions is supported (BYO). **Workers:** `apps/workers` ships as a host-agnostic Docker image (no Fly/Railway/k8s manifests in the template).
 
 **Architecture Layers**
 
@@ -139,7 +141,7 @@ pg_cron triggers scheduled events by publishing messages into pgmq on a timer. C
 │                         ▼                                 │
 │  ┌──────────────────────────────────────────────────┐    │
 │  │              pgmq queue (in Postgres)              │    │
-│  │  exactly-once · visibility timeout · archival      │    │
+│  │  at-least-once · visibility timeout · archival     │    │
 │  └──────────────────────┬───────────────────────────┘    │
 │                         │                                 │
 │                         ▼                                 │
@@ -155,15 +157,16 @@ pg_cron triggers scheduled events by publishing messages into pgmq on a timer. C
 
 - `events.ts` — Zod-validated event type registry (e.g. `user.welcome-email`, `cleanup.expired-sessions`, `webhook.deliver`)
 - `client.ts` — `enqueue()` function used by app code to fire-and-forget background work
-- `types.ts` — `QueueAdapter` interface (`publish`, `publishBatch`, `subscribe`)
+- `types.ts` — `QueueAdapter` interface (`publish` for producers; consumer receive/ack/nack in workers)
 - `adapters/pgmq.ts` — Default adapter using pgmq SQL functions, includes retry/backoff/dead-letter logic
-- Alternative adapters (BullMQ, pg-boss, SQS) can be swapped without changing handler code
+- `adapters/sync.ts` — Test/dev adapter (enqueue runs inline or logs; no extensions required)
+- Alternative adapters (BullMQ, SQS) can be swapped via `WORKER_QUEUE_ADAPTER` without changing handler code
 
 **`apps/workers`** — Single deployable process that consumes and processes events:
 
 - `handlers/` — TypeScript handler functions (one per event type)
 - `registry.ts` — Maps event names to handler functions
-- `schedules.ts` — Cron schedule definitions mapping cron expressions to event names
+- `Dockerfile` — Host-agnostic container image for any orchestrator
 - Consumer loop that polls pgmq, validates payloads, and dispatches to handlers
 - Runs as a long-lived Node.js process (no serverless timeout constraints)
 - Isolates background processing resources from user-facing request latency

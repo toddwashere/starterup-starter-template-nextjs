@@ -18,7 +18,7 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 - **Authentication & Authorization** — Multi-provider auth, RBAC with organization roles (`owner`/`admin`/`member`), system admin, session management
 - **Multi-Tenancy** — Organization-scoped data isolation, member invitations, per-org settings
 - **Billing & Subscriptions** — Stripe integration with multiple tiers, usage-based billing, dunning, billing portal
-- **Background Processing** — pgmq durable queue with exactly-once delivery, pg_cron scheduled jobs, dedicated worker process
+- **Background Processing** — pgmq durable queue (at-least-once, idempotent handlers), pg_cron scheduled jobs, dedicated worker process ([design spec](docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md))
 - **Public API** — RESTful API with key auth, rate limiting, OpenAPI docs, SDK generation
 - **Webhooks** — Outbound delivery with signature verification, retry/backoff, event filtering
 - **Notifications** — Email (React Email), in-app notifications, user preferences, unsubscribe
