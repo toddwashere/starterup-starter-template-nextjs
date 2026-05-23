@@ -1,9 +1,5 @@
-import {
-  streamText,
-  stepCountIs,
-  convertToModelMessages,
-} from "ai";
-import type { UIMessage } from "ai";
+import { streamText, stepCountIs } from "ai";
+import type { UIMessage, ModelMessage } from "ai";
 import { requireUser } from "@workspace/auth/guards";
 import { getModel, getGenerationDefaults, buildTelemetryOptions } from "@workspace/ai";
 import { ASSISTANT_SYSTEM_PROMPT } from "@workspace/ai/prompts/assistant-system";
@@ -12,6 +8,7 @@ import {
   getOrCreateActiveThread,
   appendUserMessage,
   appendAssistantMessage,
+  listMessagesForThread,
 } from "@workspace/ai-chat";
 import { listMcpToolsAction } from "@/features/ai-chat/data/ai-chat-actions";
 import {
@@ -93,7 +90,24 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  // 6. Build tools from MCP
+  // 6. Build the model context from persisted DB history (not the client's
+  // message array). The client could otherwise fabricate prior assistant turns
+  // in the context window; sourcing from the DB keeps context server-authoritative
+  // and consistent with what loadChatThreadAction renders on reload.
+  const history = await listMessagesForThread({
+    threadId: thread.id,
+    organizationId: activeOrganizationId,
+    userId,
+  });
+  const modelMessages: ModelMessage[] = history.flatMap((m): ModelMessage[] =>
+    m.role === "user"
+      ? [{ role: "user", content: m.content }]
+      : m.role === "assistant"
+        ? [{ role: "assistant", content: m.content }]
+        : [],
+  );
+
+  // 7. Build tools from MCP
   const cookie = req.headers.get("cookie") ?? "";
   const mcpTools = await listMcpToolsAction();
   const tools = buildToolsFromMcpList(
@@ -101,9 +115,7 @@ export async function POST(req: Request): Promise<Response> {
     (name, args) => executeMcpTool(cookie, name, args),
   );
 
-  // 7. Stream response
-  // convertToModelMessages is async in AI SDK v6 — await before passing to streamText
-  const modelMessages = await convertToModelMessages(messages);
+  // 8. Stream response
   const result = streamText({
     model,
     system: ASSISTANT_SYSTEM_PROMPT,
@@ -154,6 +166,6 @@ export async function POST(req: Request): Promise<Response> {
     },
   });
 
-  // 8. Return UI message stream
+  // 9. Return UI message stream
   return result.toUIMessageStreamResponse();
 }

@@ -1,5 +1,7 @@
 description: "Assistant system prompt evals"
 
+# NOTE: prompts/assistant-system.txt must be kept in sync with the
+# ASSISTANT_SYSTEM_PROMPT value in packages/ai/src/prompts/assistant-system.ts.
 prompts:
   - id: assistant-system
     file: file://prompts/assistant-system.txt
