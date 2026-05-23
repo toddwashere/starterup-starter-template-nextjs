@@ -31,6 +31,8 @@ import {
   Search,
   Settings,
   Shield,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Underline,
   Unlink,
@@ -299,3 +301,17 @@ export const IconForEdit = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForEdit.displayName = "IconForEdit";
+
+export const IconForThumbsUp = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <ThumbsUp ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForThumbsUp.displayName = "IconForThumbsUp";
+
+export const IconForThumbsDown = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <ThumbsDown ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForThumbsDown.displayName = "IconForThumbsDown";

@@ -21,6 +21,7 @@ model User {
   oauthAccessTokens  OauthAccessToken[]
   oauthRefreshTokens OauthRefreshToken[]
   oauthConsents      OauthConsent[]
+  aiThreads          AiThread[]
 }
 
 model Session {
@@ -96,6 +97,7 @@ model Organization {
 
   members     Member[]
   invitations Invitation[]
+  aiThreads   AiThread[]
 }
 
 model Member {

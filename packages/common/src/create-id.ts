@@ -30,11 +30,14 @@ export type BillingIdPrefix = "bplan" | "sub" | "price" | "prod" | "inv" | "pay"
 
 export type McpIdPrefix = "mcptcl";
 
+export type AiIdPrefix = "aith" | "aimsg";
+
 export type IdPrefix =
   | AuthIdPrefix
   | ContactsIdPrefix
   | BillingIdPrefix
   | McpIdPrefix
+  | AiIdPrefix
   | "tmp";
 
 const temporaryIdPrefix = "tmp" satisfies IdPrefix;

@@ -10,5 +10,6 @@ export type {
   ContactsIdPrefix,
   BillingIdPrefix,
   McpIdPrefix,
+  AiIdPrefix,
 } from "./create-id";
 export { formatDate } from "./format-date";

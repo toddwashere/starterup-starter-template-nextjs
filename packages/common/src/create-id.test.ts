@@ -22,6 +22,11 @@ describe("createId", () => {
     expect(createIdOfLength(8)).toMatch(/^[a-z0-9]{8}$/);
   });
 
+  it("accepts ai prefixes", () => {
+    expect(createId("aith")).toMatch(/^aith_/);
+    expect(createId("aimsg")).toMatch(/^aimsg_/);
+  });
+
   it("detects temporary IDs only when they use the temporary prefix", () => {
     const temporaryId = createIdTemporary();
     expect(temporaryId).toMatch(/^tmp_[a-z0-9]{16}$/);
