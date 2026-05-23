@@ -118,11 +118,12 @@ export class PgmqAdapter implements QueueAdapter, PgmqConsumer {
     options?: { delaySeconds?: number },
   ): Promise<void> {
     // Setting the visibility timeout delays redelivery -> retry backoff.
-    await this.client().query("SELECT * FROM pgmq.set_vt($1, $2::bigint, $3)", [
-      queue,
-      msgId,
-      options?.delaySeconds ?? 0,
-    ]);
+    // $3 needs an explicit ::integer cast: pgmq.set_vt is overloaded on the
+    // third arg (integer vs timestamptz), so an untyped param is ambiguous.
+    await this.client().query(
+      "SELECT * FROM pgmq.set_vt($1, $2::bigint, $3::integer)",
+      [queue, msgId, options?.delaySeconds ?? 0],
+    );
   }
 
   async archive(queue: string, msgId: string): Promise<void> {

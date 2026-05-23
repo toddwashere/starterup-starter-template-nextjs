@@ -118,6 +118,8 @@ describe("PgmqAdapter.nack", () => {
 
     const [sql, params] = db.query.mock.calls[0]!;
     expect(sql).toContain("pgmq.set_vt");
+    // explicit ::integer cast disambiguates the overloaded set_vt signature
+    expect(sql).toContain("$3::integer");
     expect(params).toEqual(["jobs", "7", 15]);
   });
 
