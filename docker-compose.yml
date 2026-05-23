@@ -17,5 +17,35 @@ services:
       timeout: 3s
       retries: 5
 
+  # Long-lived worker that polls the pgmq `jobs` queue and runs job handlers.
+  # NOTE: the `jobs` queue + extensions are created by the database migration
+  # (prisma migrate deploy). Run migrations against this postgres before (or
+  # shortly after) starting the worker — until the queue exists the worker
+  # fails fast and is restarted by the restart policy. See README / the
+  # worker-queue deploy guide.
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Inside the compose network postgres is reachable by service name.
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/starter_dev
+      WORKER_QUEUE_ADAPTER: pgmq
+      PGMQ_QUEUE_NAME: jobs
+      WORKER_HEALTH_PORT: 4300
+      WORKER_POLL_INTERVAL_MS: 1000
+      WORKER_MAX_ATTEMPTS: 5
+      NEXT_PUBLIC_DASHBOARD_URL: http://localhost:4000
+      # Email is optional locally; without RESEND_API_KEY the welcome-email
+      # handler just logs. Uncomment to send real email:
+      # RESEND_API_KEY: ${RESEND_API_KEY}
+      # EMAIL_FROM: ${EMAIL_FROM}
+    ports:
+      - "4300:4300"
+
 volumes:
   postgres_data:

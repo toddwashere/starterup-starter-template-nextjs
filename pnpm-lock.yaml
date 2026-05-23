@@ -216,6 +216,9 @@ importers:
       '@workspace/worker-queue':
         specifier: workspace:*
         version: link:../../packages/worker-queue
+      tsx:
+        specifier: ^4
+        version: 4.21.0
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -223,9 +226,6 @@ importers:
       '@workspace/tooling':
         specifier: workspace:*
         version: link:../../tooling
-      tsx:
-        specifier: ^4
-        version: 4.21.0
       typescript:
         specifier: ^5.7
         version: 5.9.3
