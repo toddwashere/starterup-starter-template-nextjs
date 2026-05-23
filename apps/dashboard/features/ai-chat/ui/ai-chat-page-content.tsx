@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
+import type { ProviderModelValue } from "@workspace/ai/ai-models-available";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
 import { ToolResultCard } from "./tool-result-card";
 import { MessageFeedback } from "./message-feedback";
-import { loadChatThreadAction } from "../data/ai-chat-actions";
+import { AiProviderModelSelect } from "./ai-provider-model-select";
+import type { ProviderModelSelectOption } from "./ai-provider-model-select-utils";
+import {
+  listAvailableAiModelsAction,
+  loadChatThreadAction,
+} from "../data/ai-chat-actions";
 import type { ChatMessage, ToolResult } from "../data/ai-chat-types";
 
 // ---------------------------------------------------------------------------
@@ -127,13 +133,48 @@ function UiMessageItem({ message }: { message: UIMessage }) {
 // ---------------------------------------------------------------------------
 
 export function AiChatPageContent() {
-  const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/ai/chat" }),
+  const [providerModel, setProviderModel] = useState<ProviderModelValue | null>(
+    null,
+  );
+  const [modelOptions, setModelOptions] = useState<ProviderModelSelectOption[]>(
+    [],
+  );
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
+  // Send the selected model on every request. Recreating the transport when the
+  // selection changes keeps the request body in sync without a stale closure.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/ai/chat",
+        body: { providerModel },
+      }),
+    [providerModel],
+  );
+
+  const { messages, sendMessage, status, setMessages, error } = useChat({
+    transport,
   });
 
   const [input, setInput] = useState("");
 
   const isActive = status === "streaming" || status === "submitted";
+  const canChat = providerModel !== null;
+
+  // ------------------------------------------------------------------
+  // Load available models on mount and preselect the default
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    listAvailableAiModelsAction().then((res) => {
+      if (res.success) {
+        setModelOptions(res.data.models);
+        setProviderModel(res.data.defaultValue);
+        setModelsError(null);
+      } else {
+        setModelsError(res.error);
+      }
+    });
+  }, []);
 
   // ------------------------------------------------------------------
   // Hydrate history on mount from the DB
@@ -178,7 +219,7 @@ export function AiChatPageContent() {
   // Send handler
   // ------------------------------------------------------------------
   function handleSend() {
-    if (!input.trim() || isActive) return;
+    if (!input.trim() || isActive || !canChat) return;
     void sendMessage({ text: input });
     setInput("");
   }
@@ -194,19 +235,41 @@ export function AiChatPageContent() {
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <div className="flex min-h-0 flex-1 flex-col">
+          {modelOptions.length > 0 && providerModel && (
+            <div className="flex shrink-0 items-center justify-end gap-2 border-b px-4 py-2">
+              <span className="text-xs text-muted-foreground">Model</span>
+              <AiProviderModelSelect
+                value={providerModel}
+                onValueChange={setProviderModel}
+                options={modelOptions}
+                disabled={isActive}
+              />
+            </div>
+          )}
+
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {messages.length === 0 && (
-              <p className="mt-8 text-center text-sm text-muted-foreground">
-                Send a message to interact with AI tools.
-              </p>
+            {modelsError ? (
+              <div className="mt-8 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center text-sm text-destructive">
+                {modelsError}
+              </div>
+            ) : (
+              messages.length === 0 && (
+                <p className="mt-8 text-center text-sm text-muted-foreground">
+                  Send a message to interact with AI tools.
+                </p>
+              )
             )}
             {messages.map((msg) => (
               <UiMessageItem key={msg.id} message={msg} />
             ))}
             {status === "error" && (
-              <p className="text-center text-sm text-destructive">
-                Something went wrong. Please try again.
-              </p>
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                <p className="font-medium">Something went wrong</p>
+                <p className="mt-1 text-destructive/90">
+                  {error?.message ??
+                    "The assistant could not respond. Check your AI provider API keys in .env, then restart the dev server."}
+                </p>
+              </div>
             )}
           </div>
 
@@ -221,11 +284,11 @@ export function AiChatPageContent() {
                   handleSend();
                 }
               }}
-              disabled={isActive}
+              disabled={isActive || !canChat}
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isActive}
+              disabled={!input.trim() || isActive || !canChat}
             >
               {isActive ? "…" : "Send"}
             </Button>
