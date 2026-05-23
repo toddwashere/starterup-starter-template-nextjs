@@ -13,9 +13,19 @@ import { routeVerificationEmail } from "./email-routing";
 import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
 import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
 import { createBetterAuthId } from "./better-auth-id";
+import { enqueueWelcomeEmail } from "./welcome-email-hook";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          await enqueueWelcomeEmail(user.id);
+        },
+      },
+    },
+  },
   advanced: {
     database: {
       generateId: createBetterAuthId,

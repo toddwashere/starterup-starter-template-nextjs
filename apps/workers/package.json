@@ -1,0 +1,27 @@
+{
+  "name": "@apps/workers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist .turbo node_modules"
+  },
+  "dependencies": {
+    "@workspace/database": "workspace:*",
+    "@workspace/email": "workspace:*",
+    "@workspace/worker-queue": "workspace:*",
+    "tsx": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@workspace/tooling": "workspace:*",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}

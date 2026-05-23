@@ -1,0 +1,13 @@
+{
+  "extends": "@workspace/tooling/typescript/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // The @workspace/email senders we import resolve (via bundler resolution)
+    // to React `.tsx` email templates, so TypeScript must be able to parse JSX
+    // and see the DOM lib even though this worker process renders nothing.
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src"]
+}

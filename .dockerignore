@@ -1,0 +1,31 @@
+# Build-context ignore for image builds that use the repo root as context
+# (e.g. apps/workers/Dockerfile, which runs `turbo prune` over the workspace).
+# Without this at the context root, Docker would transfer node_modules (~1.4GB)
+# and other heavy dirs into the build, which is slow and can stall.
+
+# Dependencies and build output (regenerated inside the image)
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/generated/prisma
+
+# VCS, editor, and agent tooling
+.git
+**/.git
+.claude
+.cursor
+.ai
+
+# Local env / secrets — never bake into an image
+.env
+.env.*
+!.env.example
+
+# Compose + docs not needed by the worker image
+docker-compose*.yml
+docs
+plans
+
+# Logs
+**/*.log
