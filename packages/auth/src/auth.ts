@@ -3,7 +3,11 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { organization, admin, jwt } from "better-auth/plugins";
 import { apiKey } from "@better-auth/api-key";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { stripe } from "@better-auth/stripe";
+import { APIError } from "better-auth/api";
 import { prisma } from "@workspace/database";
+import { getStripeClient } from "@workspace/billing/stripe-client";
+import { stripePluginOptions } from "@workspace/billing/stripe-plugin-options";
 import { ac, permissions } from "./permissions";
 import { routeVerificationEmail } from "./email-routing";
 import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
@@ -18,6 +22,38 @@ export const auth = betterAuth({
     },
   },
   experimental: { joins: true },
+  user: {
+    deleteUser: {
+      enabled: true,
+      beforeDelete: async (user) => {
+        const customerId = (user as { stripeCustomerId?: string | null })
+          .stripeCustomerId;
+        if (!customerId) return;
+        const subscriptions = await getStripeClient().subscriptions.list({
+          customer: customerId,
+          status: "all",
+          limit: 100,
+        });
+        const NON_TERMINAL = new Set([
+          "active",
+          "trialing",
+          "past_due",
+          "unpaid",
+          "incomplete",
+          "paused",
+        ]);
+        const hasNonTerminal = subscriptions.data.some((s) =>
+          NON_TERMINAL.has(s.status),
+        );
+        if (hasNonTerminal) {
+          throw new APIError("BAD_REQUEST", {
+            message:
+              "Cannot delete your account while you have active subscriptions. Please cancel them first.",
+          });
+        }
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
@@ -112,6 +148,7 @@ export const auth = betterAuth({
         },
       },
     ]),
+    stripe(stripePluginOptions(getStripeClient())),
   ],
 });
 

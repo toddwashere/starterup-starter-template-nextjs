@@ -19,12 +19,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@better-auth/api-key": "^1.6.10",
+    "@better-auth/api-key": "^1.6.11",
     "@better-auth/oauth-provider": "^1.6.11",
+    "@better-auth/stripe": "^1.6.11",
+    "@workspace/billing": "workspace:*",
     "@workspace/common": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
-    "better-auth": "^1.6.10"
+    "better-auth": "^1.6.11",
+    "stripe": "^22"
   },
   "peerDependencies": {
     "next": ">=15"
