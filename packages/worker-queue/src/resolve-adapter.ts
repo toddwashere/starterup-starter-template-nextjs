@@ -1,5 +1,6 @@
 import { keys } from "../keys";
 
+import { createPgmqAdapter } from "./adapters/pgmq";
 import { syncAdapter } from "./adapters/sync";
 import type { QueueAdapter } from "./types";
 
@@ -12,8 +13,10 @@ export function resolveAdapter(): QueueAdapter {
     case "sync":
       return syncAdapter;
     case "pgmq":
-      // TODO(Task 6): return the pgmq adapter here
-      throw new Error("pgmq adapter is not available yet");
+      // Constructs the adapter object only; the pg pool is created lazily on
+      // the first query (see getPool in adapters/pgmq), so selecting sync or
+      // merely importing this module never opens a DB connection.
+      return createPgmqAdapter();
     default: {
       const exhaustive: never = adapter;
       throw new Error(`Unknown WORKER_QUEUE_ADAPTER: ${String(exhaustive)}`);
