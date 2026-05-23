@@ -5,6 +5,9 @@ import { WelcomeEmail } from "./welcome-email";
 import { EmailChangeVerificationEmail } from "./email-change-verification-email";
 import { PasswordResetEmail } from "./password-reset-email";
 import { InvitationEmail } from "./invitation-email";
+import { SubscriptionWelcomeEmail } from "./subscription-welcome-email";
+import { SubscriptionCanceledEmail } from "./subscription-canceled-email";
+import { PaymentFailedEmail } from "./payment-failed-email";
 
 describe("Template render smoke tests", () => {
   it("WelcomeAndVerifyEmail renders to HTML and text", async () => {
@@ -72,5 +75,62 @@ describe("Template render smoke tests", () => {
     expect(html).toContain("Acme Inc");
     expect(html).toContain("https://app.example.com/accept-invitation/inv_123");
     expect(html).toContain("Bob");
+  });
+
+  it("SubscriptionWelcomeEmail renders to HTML and text", async () => {
+    const element = SubscriptionWelcomeEmail({
+      organizationName: "Acme Inc",
+      planName: "Pro",
+    });
+    const html = await render(element);
+    const text = await render(element, { plainText: true });
+    expect(html.length).toBeGreaterThan(0);
+    expect(text.length).toBeGreaterThan(0);
+    expect(html).toContain("Acme Inc");
+    expect(html).toContain("Pro");
+  });
+
+  it("SubscriptionCanceledEmail renders to HTML and text (no accessEndsAt)", async () => {
+    const element = SubscriptionCanceledEmail({
+      organizationName: "Acme Inc",
+      planName: "Pro",
+    });
+    const html = await render(element);
+    const text = await render(element, { plainText: true });
+    expect(html.length).toBeGreaterThan(0);
+    expect(text.length).toBeGreaterThan(0);
+    expect(html).toContain("Acme Inc");
+    expect(html).toContain("Pro");
+  });
+
+  it("SubscriptionCanceledEmail renders with accessEndsAt", async () => {
+    const element = SubscriptionCanceledEmail({
+      organizationName: "Acme Inc",
+      planName: "Pro",
+      accessEndsAt: "June 30, 2026",
+    });
+    const html = await render(element);
+    expect(html).toContain("June 30, 2026");
+  });
+
+  it("PaymentFailedEmail renders to HTML and text (no updatePaymentUrl)", async () => {
+    const element = PaymentFailedEmail({
+      organizationName: "Acme Inc",
+    });
+    const html = await render(element);
+    const text = await render(element, { plainText: true });
+    expect(html.length).toBeGreaterThan(0);
+    expect(text.length).toBeGreaterThan(0);
+    expect(html).toContain("Acme Inc");
+  });
+
+  it("PaymentFailedEmail renders with updatePaymentUrl", async () => {
+    const element = PaymentFailedEmail({
+      organizationName: "Acme Inc",
+      updatePaymentUrl: "https://app.example.com/billing/payment",
+    });
+    const html = await render(element);
+    expect(html).toContain("https://app.example.com/billing/payment");
+    expect(html).toContain("Update Payment Method");
   });
 });
