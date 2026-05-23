@@ -1,9 +1,21 @@
 import { streamText, stepCountIs } from "ai";
 import type { UIMessage, ModelMessage } from "ai";
 import { requireUser } from "@workspace/auth/guards";
-import { getModel, getGenerationDefaults, buildTelemetryOptions } from "@workspace/ai";
+import {
+  getModel,
+  getGenerationParams,
+  buildTelemetryOptions,
+  logAiCall,
+  resolveAiCallOptions,
+} from "@workspace/ai";
 import { ASSISTANT_SYSTEM_PROMPT } from "@workspace/ai/prompts/assistant-system";
 import { keys } from "@workspace/ai/keys";
+import { getDefaultAvailableProviderModel } from "@workspace/ai/list-available-ai-models";
+import { resolveProviderModel } from "@workspace/ai/resolve-provider-model";
+import {
+  DEFAULT_PROVIDER_MODEL,
+  type ProviderModelValue,
+} from "@workspace/ai/ai-models-available";
 import {
   getOrCreateActiveThread,
   appendUserMessage,
@@ -21,7 +33,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
   // 1. Parse body
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages, providerModel }: {
+    messages: UIMessage[];
+    providerModel?: string | null;
+  } = await req.json();
 
   // 2. Auth
   let session: Awaited<ReturnType<typeof requireUser>>;
@@ -44,22 +59,29 @@ export async function POST(req: Request): Promise<Response> {
 
   const userId = session.user.id;
 
-  // 3. Resolve the model — return 503 if AI is not configured
-  const model = (() => {
-    try {
-      return getModel();
-    } catch {
-      return null;
-    }
-  })();
+  // 3. Resolve + validate the model. The client sends its selection, but the
+  // server is authoritative: resolveProviderModel rejects anything not in the
+  // catalog or whose provider has no credentials. Falls back to the configured
+  // default when the client sends nothing.
+  const config = keys();
+  const requested =
+    providerModel ||
+    getDefaultAvailableProviderModel(config) ||
+    DEFAULT_PROVIDER_MODEL;
 
-  if (!model) {
+  let resolved: ReturnType<typeof resolveAiCallOptions>;
+  let model;
+  try {
+    resolveProviderModel(config, requested); // throws on unknown/unconfigured
+    resolved = resolveAiCallOptions({
+      preset: "assistant",
+      overrides: { providerModel: requested as ProviderModelValue },
+    });
+    model = getModel({ providerModel: resolved.providerModel });
+  } catch (err) {
     return Response.json(
-      {
-        error:
-          "AI is not configured. Set AI_PROVIDER and a provider API key.",
-      },
-      { status: 503 },
+      { error: err instanceof Error ? err.message : "Invalid model" },
+      { status: 400 },
     );
   }
 
@@ -116,15 +138,23 @@ export async function POST(req: Request): Promise<Response> {
   );
 
   // 8. Stream response
+  logAiCall({
+    functionId: "ai.chat",
+    providerModel: resolved.providerModel,
+    userId,
+    orgId: activeOrganizationId,
+  });
+
   const result = streamText({
     model,
     system: ASSISTANT_SYSTEM_PROMPT,
     messages: modelMessages,
     tools,
-    stopWhen: stepCountIs(keys().AI_AGENT_MAX_STEPS),
-    ...getGenerationDefaults(),
+    stopWhen: stepCountIs(resolved.maxSteps),
+    ...getGenerationParams(resolved),
     ...buildTelemetryOptions({
       functionId: "ai.chat",
+      providerModel: resolved.providerModel,
       userId,
       orgId: activeOrganizationId,
       sessionId: thread.id,
@@ -157,7 +187,7 @@ export async function POST(req: Request): Promise<Response> {
           content: text,
           toolPayload:
             toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
-          metadata: undefined,
+          metadata: { providerModel: resolved.providerModel },
         });
       } catch (err) {
         // Persistence failure must not crash the stream
