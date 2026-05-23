@@ -41,6 +41,25 @@ packages/
 tooling/            — ESLint, Prettier, Tailwind, TypeScript configs
 ```
 
+## Billing (Stripe)
+
+Organization-scoped subscriptions are powered by the [`@better-auth/stripe`](https://better-auth.com/docs/plugins/stripe) plugin. Plan definitions live in the database (`BillingPlan`, seeded with `free`/`pro`/`team`); entitlements are enforced in `packages/billing`. See the [design spec](docs/superpowers/specs/2026-05-23-stripe-billing-design.md).
+
+**Setup:**
+
+1. Add `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to `.env` (see `.env.example`).
+2. Replace the seeded placeholder price IDs with real Stripe **test-mode** price IDs (via the `STRIPE_PRICE_*` env vars or by editing `packages/database/prisma/seed.ts`), then run `pnpm --filter @workspace/database db:seed`.
+3. Forward webhooks to the Better Auth handler while developing:
+
+   ```bash
+   stripe listen --forward-to localhost:4000/api/auth/stripe/webhook
+   ```
+
+   Use the `whsec_…` it prints as `STRIPE_WEBHOOK_SECRET`.
+4. Test checkout with card `4242 4242 4242 4242` (any future expiry / CVC).
+
+Org owners/admins manage billing under **Settings → Billing**; members get a read-only view.
+
 ## AI-Assisted Development
 
 Includes skills, hooks, and instruction files for agentic development with Claude Code, Cursor, and other AI tools via the Superpowers framework.
