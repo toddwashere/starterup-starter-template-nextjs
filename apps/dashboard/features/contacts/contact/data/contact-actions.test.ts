@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireOrgPermissionWithActiveOrg } from "@workspace/auth/guards";
+import { requireOrgEntitlement } from "@workspace/billing";
 import {
   archiveContactAction,
   createContactAction,
@@ -21,6 +22,23 @@ vi.mock("@workspace/contacts", () => ({
   createContactWithValidation: vi.fn().mockResolvedValue({ id: "contact_1" }),
   updateContactWithValidation: vi.fn().mockResolvedValue({ id: "contact_1" }),
   archiveContact: vi.fn().mockResolvedValue({ id: "contact_1" }),
+  countContactsForOrg: vi.fn().mockResolvedValue(0),
+}));
+
+// Defined via vi.hoisted so the class exists when the (hoisted) vi.mock factory runs.
+const { BillingEntitlementError } = vi.hoisted(() => {
+  class BillingEntitlementError extends Error {
+    constructor() {
+      super("Billing limit reached");
+      this.name = "BillingEntitlementError";
+    }
+  }
+  return { BillingEntitlementError };
+});
+
+vi.mock("@workspace/billing", () => ({
+  requireOrgEntitlement: vi.fn().mockResolvedValue(undefined),
+  BillingEntitlementError,
 }));
 
 describe("contact actions permissions", () => {
@@ -48,6 +66,23 @@ describe("contact actions permissions", () => {
 
     expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({
       contact: ["create"],
+    });
+  });
+
+  it("blocks create and returns a friendly error when over the plan limit", async () => {
+    vi.mocked(requireOrgEntitlement).mockRejectedValueOnce(
+      new BillingEntitlementError(),
+    );
+
+    const result = await createContactAction({
+      kind: "person",
+      displayName: "Jane Doe",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "You've reached your plan's contact limit. Upgrade your plan to add more contacts.",
     });
   });
 
