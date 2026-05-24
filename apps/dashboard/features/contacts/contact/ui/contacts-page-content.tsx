@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useTransition, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import NiceModal from "@ebay/nice-modal-react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
-import { Badge } from "@workspace/ui/components/badge";
 import { StageView, TagView } from "@workspace/ui/components/entity-label-views";
 import {
   Select,
@@ -14,69 +13,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { PageToolbar, ResponsivePageToolbarFilters } from "@workspace/ui/components/page-toolbar";
-import {
-  DataList,
-  DataListCard,
-  DataListCardHeader,
-  DataListCardMeta,
-  ResponsiveDataView,
-} from "@workspace/ui/components/responsive-data-view";
 import {
   ResponsivePageAction,
   ResponsivePageActions,
 } from "@workspace/ui/components/responsive-page-actions";
-import { TagListCompact } from "@workspace/ui/components/tag-list-compact";
-import { IconForAdd, IconForMore } from "@workspace/ui/components/icon-for";
+import { IconForAdd } from "@workspace/ui/components/icon-for";
 import { responsiveLayout } from "@workspace/ui/lib/responsive-layout";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
-import type { ContactListFilters } from "@workspace/contacts/schemas/contact-schemas";
-import { listContactsAction, archiveContactAction } from "../data/contact-actions";
 import { exportContactsCsvAction } from "../data/contact-csv-actions";
 import { listContactStagesAction } from "../../contact-stage/data/contact-stage-actions";
 import { listContactTagsAction } from "../../contact-tag/data/contact-tag-actions";
-import {
-  listContactSegmentsAction,
-  listContactsForSegmentAction,
-} from "../../contact-segment/data/contact-segment-actions";
+import { listContactSegmentsAction } from "../../contact-segment/data/contact-segment-actions";
 import { SaveContactSegmentButtonModal } from "../../contact-segment/ui/save-contact-segment-button-modal";
 import { AddContactButtonModal } from "./add-contact-button-modal";
 import { openAddContactFlow, type AddContactResult } from "./add-contact-flow";
 import { CsvImportDialog } from "./csv-import-dialog";
+import { ContactsList, type ContactsListQuery } from "./contacts-list";
 
-type Contact = NonNullable<
-  Extract<Awaited<ReturnType<typeof listContactsAction>>, { success: true }>["data"]
->["rows"][number];
+const EMPTY_QUERY: ContactsListQuery = {};
 
-type ListQuery = Partial<ContactListFilters> & { segmentId?: string };
-
-const EMPTY_QUERY: ListQuery = {};
-
-function hasActiveFilters(query: ListQuery) {
-  return Boolean(
-    query.search ||
-      query.stageId ||
-      query.tagIds?.length ||
-      query.segmentId,
-  );
+function hasActiveFilters(query: ContactsListQuery) {
+  return Boolean(query.search || query.stageId || query.tagIds?.length || query.segmentId);
 }
 
-function activeFilterCount(query: ListQuery) {
+function activeFilterCount(query: ContactsListQuery) {
   let count = 0;
   if (query.segmentId) count += 1;
   if (query.stageId) count += 1;
@@ -84,60 +46,17 @@ function activeFilterCount(query: ListQuery) {
   return count;
 }
 
-function ContactRowActions({
-  onArchive,
-  onView,
-}: {
-  onArchive: () => void;
-  onView: () => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
-          <IconForMore />
-          <span className="sr-only">Actions</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onView}>View</DropdownMenuItem>
-        <DropdownMenuItem className="text-destructive" onClick={onArchive}>
-          Archive
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
   const router = useRouter();
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [query, setQuery] = useState<ListQuery>(EMPTY_QUERY);
+  const [query, setQuery] = useState<ContactsListQuery>(EMPTY_QUERY);
   const [searchInput, setSearchInput] = useState("");
   const [stages, setStages] = useState<{ id: string; name: string; color: string }[]>([]);
   const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([]);
   const [segments, setSegments] = useState<{ id: string; name: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [refreshToken, setRefreshToken] = useState(0);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadGenRef = useRef(0);
 
-  const load = useCallback((nextQuery: ListQuery) => {
-    const gen = ++loadGenRef.current;
-    startTransition(async () => {
-      const result = nextQuery.segmentId
-        ? await listContactsForSegmentAction(nextQuery.segmentId, { pageSize: 100 })
-        : await listContactsAction({
-            search: nextQuery.search,
-            stageId: nextQuery.stageId,
-            tagIds: nextQuery.tagIds,
-            pageSize: 100,
-          });
-      if (result.success && gen === loadGenRef.current) {
-        setContacts(result.data.rows);
-      }
-    });
-  }, []);
+  const refresh = () => setRefreshToken((t) => t + 1);
 
   useEffect(() => {
     void (async () => {
@@ -150,13 +69,10 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
       if (tagsResult.success) setTags(tagsResult.data);
       if (segmentsResult.success) setSegments(segmentsResult.data);
     })();
-    load(EMPTY_QUERY);
-  }, [load]);
+  }, []);
 
-  function applyQuery(patch: Partial<ListQuery>) {
-    const next = { ...query, ...patch };
-    setQuery(next);
-    load(next);
+  function applyQuery(patch: Partial<ContactsListQuery>) {
+    setQuery((prev) => ({ ...prev, ...patch }));
   }
 
   function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -171,17 +87,6 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
   function handleClearFilters() {
     setSearchInput("");
     setQuery(EMPTY_QUERY);
-    load(EMPTY_QUERY);
-  }
-
-  async function handleArchive(id: string) {
-    const result = await archiveContactAction(id);
-    if (!result.success) {
-      setError(result.error);
-      return;
-    }
-    setError(null);
-    load(query);
   }
 
   async function handleExport() {
@@ -210,7 +115,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
       showAddContactModal: () =>
         NiceModal.show(AddContactButtonModal) as Promise<AddContactResult | undefined>,
     });
-    load(query);
+    refresh();
   }
 
   async function handleSaveSegment() {
@@ -297,17 +202,21 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
     </>
   );
 
-  const filterActions =
-    hasActiveFilters(query) ? (
-      <>
-        <Button variant="ghost" size="sm" className="h-9" onClick={handleClearFilters}>
-          Clear filters
-        </Button>
-        <Button variant="outline" size="sm" className="h-9" onClick={() => void handleSaveSegment()}>
-          Save segment
-        </Button>
-      </>
-    ) : null;
+  const filterActions = hasActiveFilters(query) ? (
+    <>
+      <Button variant="ghost" size="sm" className="h-9" onClick={handleClearFilters}>
+        Clear filters
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-9"
+        onClick={() => void handleSaveSegment()}
+      >
+        Save segment
+      </Button>
+    </>
+  ) : null;
 
   const filterToolbar = (
     <PageToolbar>
@@ -347,7 +256,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
             secondary={
               <>
                 <ResponsivePageAction>
-                  <CsvImportDialog onImported={() => load(query)} />
+                  <CsvImportDialog onImported={refresh} />
                 </ResponsivePageAction>
                 <ResponsivePageAction>
                   <Button variant="outline" onClick={() => void handleExport()}>
@@ -361,126 +270,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
         toolbar={filterToolbar}
       />
       <PageBody className={`space-y-4 ${responsiveLayout.pageBodyPadding}`}>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <ResponsiveDataView
-          mobile={
-            isPending ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-            ) : contacts.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No contacts match these filters.
-              </p>
-            ) : (
-              <DataList>
-                {contacts.map((c) => (
-                  <DataListCard
-                    key={c.id}
-                    onActivate={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
-                  >
-                    <DataListCardHeader
-                      actions={
-                        <ContactRowActions
-                          onView={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
-                          onArchive={() => void handleArchive(c.id)}
-                        />
-                      }
-                    >
-                      {c.displayName}
-                    </DataListCardHeader>
-                    {c.primaryEmail ? (
-                      <DataListCardMeta>{c.primaryEmail}</DataListCardMeta>
-                    ) : null}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{c.kind}</Badge>
-                      {c.stage ? (
-                        <StageView name={c.stage.name} color={c.stage.color} size="sm" />
-                      ) : null}
-                    </div>
-                    <TagListCompact
-                      tags={c.tags.map((a) => ({
-                        id: a.tagId,
-                        name: a.tag.name,
-                        color: a.tag.color,
-                      }))}
-                      size="sm"
-                    />
-                  </DataListCard>
-                ))}
-              </DataList>
-            )
-          }
-          desktop={
-            <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className={responsiveLayout.hideBelowMdTableCell}>Kind</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead className={responsiveLayout.hideBelowLgTableCell}>Stage</TableHead>
-                <TableHead>Tags</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isPending ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Loading…
-                  </TableCell>
-                </TableRow>
-              ) : contacts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No contacts match these filters.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                contacts.map((c) => (
-                  <TableRow
-                    key={c.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
-                  >
-                    <TableCell className="max-w-[12rem] truncate font-medium">
-                      {c.displayName}
-                    </TableCell>
-                    <TableCell className={responsiveLayout.hideBelowMdTableCell}>
-                      <Badge variant="outline">{c.kind}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[240px] truncate text-muted-foreground">
-                      {c.primaryEmail ?? "—"}
-                    </TableCell>
-                    <TableCell className={responsiveLayout.hideBelowLgTableCell}>
-                      {c.stage ? (
-                        <StageView name={c.stage.name} color={c.stage.color} />
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-normal">
-                      <TagListCompact
-                        tags={c.tags.map((a) => ({
-                          id: a.tagId,
-                          name: a.tag.name,
-                          color: a.tag.color,
-                        }))}
-                      />
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <ContactRowActions
-                        onView={() => router.push(`/${orgSlug}/contacts/${c.id}`)}
-                        onArchive={() => void handleArchive(c.id)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-            </div>
-          }
-        />
+        <ContactsList query={query} orgSlug={orgSlug} refreshToken={refreshToken} />
       </PageBody>
     </Page>
   );
