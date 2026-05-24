@@ -13,10 +13,12 @@ import {
   ChevronRight,
   ChevronsUpDown,
   CreditCard,
+  Download,
   Globe,
   Italic,
   KeyRound,
   LayoutDashboard,
+  Layers,
   Link2,
   ListFilter,
   LogOut,
@@ -315,3 +317,17 @@ export const IconForThumbsDown = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForThumbsDown.displayName = "IconForThumbsDown";
+
+export const IconForExport = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Download ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForExport.displayName = "IconForExport";
+
+export const IconForSegment = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Layers ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForSegment.displayName = "IconForSegment";
