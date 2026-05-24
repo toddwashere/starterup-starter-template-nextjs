@@ -1,11 +1,16 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { assertPublicMcpEnv } from "@workspace/common/env/public-mcp";
+import { withSentryConfig } from "@workspace/observability/next";
 
 assertPublicMcpEnv();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@workspace/common", "@workspace/routes"],
+  transpilePackages: [
+    "@workspace/common",
+    "@workspace/routes",
+    "@workspace/observability",
+  ],
   turbopack: {
     root: path.resolve(__dirname, "../.."),
   },
@@ -14,4 +19,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, "dashboard");

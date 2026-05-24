@@ -5,4 +5,5 @@ export {
   initEdgeSentry,
 } from "./init";
 export { withSentryConfig } from "./with-sentry-config";
-export { createGlobalError } from "./global-error";
+// createGlobalError is exported via the separate "./next/global-error" entry
+// to avoid loading React/JSX into the next.config.ts evaluation context.

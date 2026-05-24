@@ -8,6 +8,7 @@
     "./sentry-config": "./src/sentry-config.ts",
     "./capture": "./src/capture.ts",
     "./next": "./src/next/index.ts",
+    "./next/global-error": "./src/next/global-error.tsx",
     "./node": "./src/node/init.ts"
   },
   "scripts": {
