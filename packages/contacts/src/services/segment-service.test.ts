@@ -19,8 +19,16 @@ describe("validateSegmentFilters", () => {
     expect(result.kind).toBe("person");
   });
 
-  it("rejects unknown filterVersion", () => {
-    expect(() => validateSegmentFilters({}, 2)).toThrow("Unsupported filter version");
+  it("accepts valid v2 filters with contactIds", () => {
+    expect(validateSegmentFilters({ contactIds: ["c1"] }, 2)).toEqual({ contactIds: ["c1"] });
+  });
+
+  it("accepts v1 filter with search field", () => {
+    expect(validateSegmentFilters({ search: "a" }, 1)).toEqual({ search: "a" });
+  });
+
+  it("rejects unsupported filterVersion (v3+)", () => {
+    expect(() => validateSegmentFilters({}, 3)).toThrow(/Unsupported/);
   });
 
   it("rejects unknown filter keys (strict mode)", () => {

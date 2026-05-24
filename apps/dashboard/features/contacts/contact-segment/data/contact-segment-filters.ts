@@ -1,13 +1,13 @@
 import type { ContactListFilters } from "@workspace/contacts/schemas/contact-schemas";
 import type {
-  ContactSegmentFilterV1,
+  ContactSegmentFilterV2,
   CreateContactSegmentInput,
 } from "@workspace/contacts/schemas/segment-schemas";
 import { CURRENT_FILTER_VERSION } from "@workspace/contacts/schemas/segment-schemas";
 
 export function contactListFiltersToSegmentFilters(
   filters: Partial<ContactListFilters>,
-): ContactSegmentFilterV1 {
+): ContactSegmentFilterV2 {
   return {
     ...(filters.search ? { search: filters.search } : {}),
     ...(filters.kind ? { kind: filters.kind } : {}),

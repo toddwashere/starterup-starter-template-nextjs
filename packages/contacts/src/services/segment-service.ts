@@ -3,22 +3,26 @@ import type { Prisma } from "@workspace/database";
 import { getContactSegmentById } from "../data-models/contact-segment-repo";
 import {
   ContactSegmentFilterSchemaV1,
-  type ContactSegmentFilterV1,
+  ContactSegmentFilterSchemaV2,
+  type ContactSegmentFilterV2,
 } from "../schemas/segment-schemas";
 
 export function validateSegmentFilters(
   filters: unknown,
   filterVersion: number,
-): ContactSegmentFilterV1 {
-  if (filterVersion !== 1) {
-    throw new Error(`Unsupported filter version: ${filterVersion}`);
+): ContactSegmentFilterV2 {
+  if (filterVersion === 1) {
+    return ContactSegmentFilterSchemaV1.parse(filters);
   }
-  return ContactSegmentFilterSchemaV1.parse(filters);
+  if (filterVersion === 2) {
+    return ContactSegmentFilterSchemaV2.parse(filters);
+  }
+  throw new Error(`Unsupported filter version: ${filterVersion}`);
 }
 
 export function buildContactWhereFromSegment(
   organizationId: string,
-  filters: ContactSegmentFilterV1,
+  filters: ContactSegmentFilterV2,
 ): Prisma.ContactWhereInput {
   const where: Prisma.ContactWhereInput = { organizationId };
 
