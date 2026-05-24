@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Load .env.example values for validation; override ensures the script validates
+// example values, not accidentally-set process env vars from a local .env.
 config({ path: path.join(root, ".env.example"), override: true });
 
 type Validator = { name: string; validate: () => Promise<unknown> };

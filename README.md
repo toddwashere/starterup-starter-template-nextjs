@@ -46,8 +46,9 @@ tooling/            — ESLint, Prettier, Tailwind, TypeScript configs
 GitHub Actions runs on every pull request and push to `main`:
 
 1. `pnpm validate:env` — validates `.env.example` against typed env schemas
-2. `pnpm lint` / `pnpm type-check` / `pnpm test` / `pnpm build`
+2. `pnpm lint` / `pnpm type-check` — static checks
 3. `prisma migrate deploy` against Postgres with **pgmq** and **pg_cron** (custom `docker/postgres` image)
+4. `pnpm test` / `pnpm build`
 
 **Local simulation:**
 
