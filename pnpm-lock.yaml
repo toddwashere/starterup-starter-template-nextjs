@@ -644,6 +644,9 @@ importers:
       '@workspace/tooling':
         specifier: workspace:*
         version: link:../../tooling
+      eslint:
+        specifier: ^9.18
+        version: 9.39.4(jiti@2.7.0)
       typescript:
         specifier: ^5.7
         version: 5.9.3

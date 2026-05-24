@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "@workspace/tooling": "workspace:*",
+    "eslint": "^9.18",
     "typescript": "^5.7",
     "vitest": "^3"
   }
