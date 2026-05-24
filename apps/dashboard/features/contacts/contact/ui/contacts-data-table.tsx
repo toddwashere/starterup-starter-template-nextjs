@@ -58,6 +58,7 @@ export function createContactColumns(): ColumnDef<Contact>[] {
     {
       accessorKey: "displayName",
       header: "Name",
+      enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
         <span className="block max-w-[12rem] truncate font-medium">

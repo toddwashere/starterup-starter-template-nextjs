@@ -88,6 +88,12 @@ export function ContactsList({
       return;
     }
     setError(null);
+    setRowSelection((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     setReloadTick((t) => t + 1);
   }
 
