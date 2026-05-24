@@ -269,6 +269,13 @@ function DataTableColumnOptionsHeader<TData>({
   )
 }
 
+export function getDataTableSelectedRowCount<TData>(
+  table: TanStackTable<TData>,
+): number {
+  const rowSelection = table.getState().rowSelection
+  return Object.values(rowSelection).filter(Boolean).length
+}
+
 export type DataTableSelectionProps<TData> = React.PropsWithChildren<{
   table: TanStackTable<TData>
 }>
@@ -286,10 +293,10 @@ function DataTableBulkActions<TData>({
         size="sm"
         className="-mr-4 text-sm"
         title="Deselect all"
-        onClick={() => table.toggleAllRowsSelected(false)}
+        onClick={() => table.resetRowSelection()}
       >
         <span className="text-sm font-semibold">
-          {table.getSelectedRowModel().rows.length} selected
+          {getDataTableSelectedRowCount(table)} selected
         </span>
         <XIcon className="ml-2 size-4" aria-hidden="true" />
       </Button>
