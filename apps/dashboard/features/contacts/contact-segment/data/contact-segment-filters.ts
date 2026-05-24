@@ -3,6 +3,7 @@ import type {
   ContactSegmentFilterV1,
   CreateContactSegmentInput,
 } from "@workspace/contacts/schemas/segment-schemas";
+import { CURRENT_FILTER_VERSION } from "@workspace/contacts/schemas/segment-schemas";
 
 export function contactListFiltersToSegmentFilters(
   filters: Partial<ContactListFilters>,
@@ -23,7 +24,7 @@ export function buildCreateSegmentInput(
   return {
     name: name.trim(),
     filters: contactListFiltersToSegmentFilters(filters),
-    filterVersion: 1,
+    filterVersion: CURRENT_FILTER_VERSION,
     sortKey: "displayName",
     sortDirection: "asc",
   };

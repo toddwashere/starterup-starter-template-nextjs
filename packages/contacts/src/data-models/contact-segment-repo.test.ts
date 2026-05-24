@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import { CURRENT_FILTER_VERSION } from "../schemas/segment-schemas";
 
 vi.mock("@workspace/database", () => ({
   prisma: {
@@ -49,13 +50,13 @@ describe("createContactSegment", () => {
     await createContactSegment("org_1", "user_1", {
       name: "My Segment",
       filters: {},
-      filterVersion: 1,
+      filterVersion: CURRENT_FILTER_VERSION,
       sortKey: "displayName",
       sortDirection: "asc",
     });
     const call = vi.mocked(prisma.contactSegment.create).mock.calls[0]?.[0];
     expect(call?.data.id).toMatch(/^cseg_/);
-    expect(call?.data.filterVersion).toBe(1);
+    expect(call?.data.filterVersion).toBe(CURRENT_FILTER_VERSION);
     expect(call?.data.organizationId).toBe("org_1");
   });
 });
@@ -69,7 +70,7 @@ describe("updateContactSegment", () => {
     });
     const call = vi.mocked(prisma.contactSegment.update).mock.calls[0]?.[0];
     expect(call?.where).toEqual({ id: "cseg_1", organizationId: "org_1" });
-    expect(call?.data.filterVersion).toBe(1); // pinned to CURRENT_FILTER_VERSION
+    expect(call?.data.filterVersion).toBe(CURRENT_FILTER_VERSION); // pinned to CURRENT_FILTER_VERSION
   });
 });
 

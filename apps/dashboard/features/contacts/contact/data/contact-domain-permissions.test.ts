@@ -37,6 +37,7 @@ import {
   listContactSegmentsAction,
   listContactsForSegmentAction,
 } from "../../contact-segment/data/contact-segment-actions";
+import { CURRENT_FILTER_VERSION } from "@workspace/contacts/schemas/segment-schemas";
 import {
   createContactStageAction,
   deleteContactStageAction,
@@ -225,7 +226,7 @@ describe("contact domain action permissions", () => {
     await createContactSegmentAction({
       name: "Active VIP",
       filters: { tagIds: ["tag_1"] },
-      filterVersion: 1,
+      filterVersion: CURRENT_FILTER_VERSION,
       sortKey: "displayName",
       sortDirection: "asc",
     });
