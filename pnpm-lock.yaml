@@ -38,6 +38,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5
         version: 5.100.9(react@19.2.6)
+      '@tanstack/react-table':
+        specifier: ^8.21.3
+        version: 8.21.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@workspace/ai':
         specifier: workspace:*
         version: link:../../packages/ai
