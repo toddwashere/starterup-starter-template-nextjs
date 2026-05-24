@@ -105,9 +105,17 @@ AI_MODEL=llama3
 
 Set both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to enable trace collection. The app runs without it. Use Langfuse Cloud (hobby tier free) or self-hosted OSS. Traces integrate with the Vercel AI SDK; full OTEL trace-id capture onto messages is a v1 follow-up.
 
-**Optional: Evals**
+**Optional: Evals (live LLM — uses API tokens)**
 
-Run `pnpm eval:ai` to evaluate the assistant system prompt with [promptfoo](https://promptfoo.dev). Requires a provider API key and generated test cases.
+[promptfoo](https://promptfoo.dev) golden tests for the assistant system prompt. **Not included in `pnpm test`.** Each uncached run calls the configured provider once per test case (3 today). Identical reruns hit promptfoo’s disk cache and cost nothing.
+
+| Command | Uses tokens? |
+|---------|----------------|
+| `pnpm eval:ai` | Yes, on cache miss |
+| `pnpm eval:ai:live` | Yes, always (`--no-cache`) |
+| `pnpm eval:ai:view` | No — browse past results locally |
+
+Requires a provider API key in `.env`. See [`evals/promptfoo/README.md`](evals/promptfoo/README.md). For free prompt/wiring checks, use `pnpm test --filter @workspace/ai`.
 
 ## AI-Assisted Development
 

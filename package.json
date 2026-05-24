@@ -10,7 +10,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "clean": "turbo run clean",
-    "eval:ai": "dotenv -- npx promptfoo@latest eval -c evals/promptfoo/promptfooconfig.yaml"
+    "eval:ai": "echo '⚠️  LIVE LLM CALLS — uses API tokens. Cached reruns are free. See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/promptfooconfig.yaml",
+    "eval:ai:view": "npx promptfoo@latest view",
+    "eval:ai:live": "echo '⚠️  LIVE LLM CALLS — bypassing cache (--no-cache). See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/promptfooconfig.yaml --no-cache"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",
