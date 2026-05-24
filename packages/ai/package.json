@@ -9,6 +9,7 @@
     "./ai-models-available": "./src/platform/models/ai-models-available.ts",
     "./list-available-ai-models": "./src/platform/list-available-ai-models.ts",
     "./resolve-provider-model": "./src/platform/resolve-provider-model.ts",
+    "./ai-calls/assistant-chat": "./src/ai-calls/assistant-chat/assistant-chat.ts",
     "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
   },
   "scripts": {
