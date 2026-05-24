@@ -8,7 +8,7 @@ vi.mock("@workspace/auth/guards", () => ({
 }));
 
 // Repos pull in Prisma; mock them so importing the actions module is DB-free.
-vi.mock("@workspace/ai-chat", () => ({
+vi.mock("@workspace/ai/ai-calls/assistant-chat/persistence", () => ({
   getOrCreateActiveThread: vi.fn(),
   listMessagesForThread: vi.fn(),
   setMessageFeedback: vi.fn(),

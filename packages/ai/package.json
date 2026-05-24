@@ -10,6 +10,8 @@
     "./list-available-ai-models": "./src/platform/list-available-ai-models.ts",
     "./resolve-provider-model": "./src/platform/resolve-provider-model.ts",
     "./ai-calls/assistant-chat": "./src/ai-calls/assistant-chat/assistant-chat.ts",
+    "./ai-calls/assistant-chat/persistence": "./src/ai-calls/assistant-chat/persistence.ts",
+    "./ai-calls/assistant-chat/schemas": "./src/ai-calls/assistant-chat/schemas.ts",
     "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
   },
   "scripts": {
@@ -21,6 +23,7 @@
     "@ai-sdk/openai": "^3.0.65",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@workspace/common": "workspace:*",
+    "@workspace/database": "workspace:*",
     "ai": "^6.0.191",
     "mustache": "^4.2.0",
     "zod": "^3"

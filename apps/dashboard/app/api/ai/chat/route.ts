@@ -21,7 +21,7 @@ import {
   appendUserMessage,
   appendAssistantMessage,
   listMessagesForThread,
-} from "@workspace/ai-chat";
+} from "@workspace/ai/ai-calls/assistant-chat/persistence";
 import { listMcpToolsAction } from "@/features/ai-chat/data/ai-chat-actions";
 import {
   buildToolsFromMcpList,

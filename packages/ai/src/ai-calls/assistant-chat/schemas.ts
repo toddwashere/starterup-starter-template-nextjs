@@ -26,4 +26,6 @@ export const AppendAssistantMessageSchema = z.object({
   metadata: z.unknown().optional(),
 });
 
-export type AppendAssistantMessageInput = z.infer<typeof AppendAssistantMessageSchema>;
+export type AppendAssistantMessageInput = z.infer<
+  typeof AppendAssistantMessageSchema
+>;

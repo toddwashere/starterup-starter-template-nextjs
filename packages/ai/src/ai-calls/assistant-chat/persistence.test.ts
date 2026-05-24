@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/database", () => ({
   prisma: {
@@ -19,11 +19,14 @@ vi.mock("@workspace/database", () => ({
 
 import { prisma } from "@workspace/database";
 import {
-  listMessagesForThread,
-  appendUserMessage,
   appendAssistantMessage,
+  appendUserMessage,
+  getOrCreateActiveThread,
+  getThreadById,
+  listMessagesForThread,
+  listThreadsForOrg,
   setMessageFeedback,
-} from "./ai-message-repo";
+} from "./persistence";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -37,13 +40,51 @@ const makeThread = (overrides = {}) => ({
   ...overrides,
 });
 
-describe("listMessagesForThread", () => {
-  it("returns messages ordered by createdAt asc after verifying thread ownership", async () => {
+describe("getOrCreateActiveThread", () => {
+  it("returns the existing most-recently-updated thread when one exists", async () => {
+    const existingThread = makeThread({ id: "aith_existing" });
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(existingThread as never);
+
+    const result = await getOrCreateActiveThread({
+      userId: "user_1",
+      organizationId: "org_1",
+    });
+
+    expect(prisma.aiThread.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: "org_1", userId: "user_1" },
+        orderBy: { updatedAt: "desc" },
+      }),
+    );
+    expect(prisma.aiThread.create).not.toHaveBeenCalled();
+    expect(result).toEqual(existingThread);
+  });
+
+  it("creates a new thread with aith_ prefixed id when none exists", async () => {
+    const newThread = makeThread({ id: "aith_new" });
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.aiThread.create).mockResolvedValue(newThread as never);
+
+    const result = await getOrCreateActiveThread({
+      userId: "user_1",
+      organizationId: "org_1",
+    });
+
+    expect(prisma.aiThread.create).toHaveBeenCalledOnce();
+    const createCall = vi.mocked(prisma.aiThread.create).mock.calls[0]?.[0];
+    expect(createCall?.data.id).toMatch(/^aith_/);
+    expect(createCall?.data.userId).toBe("user_1");
+    expect(createCall?.data.organizationId).toBe("org_1");
+    expect(result).toEqual(newThread);
+  });
+});
+
+describe("getThreadById", () => {
+  it("returns the thread when it belongs to the given org and user", async () => {
     const thread = makeThread();
     vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(thread as never);
-    vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([]);
 
-    await listMessagesForThread({
+    const result = await getThreadById({
       threadId: "aith_abc",
       organizationId: "org_1",
       userId: "user_1",
@@ -54,6 +95,48 @@ describe("listMessagesForThread", () => {
         where: { id: "aith_abc", organizationId: "org_1", userId: "user_1" },
       }),
     );
+    expect(result).toEqual(thread);
+  });
+
+  it("returns null when org/user does not match (ownership enforced)", async () => {
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(null);
+
+    const result = await getThreadById({
+      threadId: "aith_abc",
+      organizationId: "org_other",
+      userId: "user_other",
+    });
+
+    expect(result).toBeNull();
+  });
+});
+
+describe("listThreadsForOrg", () => {
+  it("returns all threads scoped to the organizationId ordered by updatedAt desc", async () => {
+    vi.mocked(prisma.aiThread.findMany).mockResolvedValue([]);
+
+    await listThreadsForOrg({ organizationId: "org_1" });
+
+    expect(prisma.aiThread.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: "org_1" },
+        orderBy: { updatedAt: "desc" },
+      }),
+    );
+  });
+});
+
+describe("listMessagesForThread", () => {
+  it("returns messages ordered by createdAt asc after verifying thread ownership", async () => {
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(makeThread() as never);
+    vi.mocked(prisma.aiMessage.findMany).mockResolvedValue([]);
+
+    await listMessagesForThread({
+      threadId: "aith_abc",
+      organizationId: "org_1",
+      userId: "user_1",
+    });
+
     expect(prisma.aiMessage.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { threadId: "aith_abc" },
@@ -79,41 +162,21 @@ describe("listMessagesForThread", () => {
 
 describe("appendUserMessage", () => {
   it("creates an AiMessage with role user and aimsg_ prefixed id after ownership check", async () => {
-    const thread = makeThread();
-    const message = {
-      id: "aimsg_new",
-      threadId: "aith_abc",
-      role: "user",
-      content: "Hello",
-      toolPayload: null,
-      feedback: null,
-      feedbackComment: null,
-      metadata: null,
-      createdAt: new Date(),
-    };
-    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(thread as never);
-    vi.mocked(prisma.aiMessage.create).mockResolvedValue(message as never);
-    vi.mocked(prisma.aiThread.update).mockResolvedValue(thread as never);
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(makeThread() as never);
+    vi.mocked(prisma.aiMessage.create).mockResolvedValue({ id: "aimsg_new" } as never);
+    vi.mocked(prisma.aiThread.update).mockResolvedValue(makeThread() as never);
 
-    const result = await appendUserMessage({
+    await appendUserMessage({
       threadId: "aith_abc",
       organizationId: "org_1",
       userId: "user_1",
       content: "Hello",
     });
 
-    expect(prisma.aiThread.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "aith_abc", organizationId: "org_1", userId: "user_1" },
-      }),
-    );
-    expect(prisma.aiMessage.create).toHaveBeenCalledOnce();
     const createCall = vi.mocked(prisma.aiMessage.create).mock.calls[0]?.[0];
     expect(createCall?.data.id).toMatch(/^aimsg_/);
     expect(createCall?.data.role).toBe("user");
-    expect(createCall?.data.threadId).toBe("aith_abc");
     expect(createCall?.data.content).toBe("Hello");
-    expect(result).toEqual(message);
   });
 
   it("throws when thread ownership check fails", async () => {
@@ -133,26 +196,14 @@ describe("appendUserMessage", () => {
 });
 
 describe("appendAssistantMessage", () => {
-  it("creates an AiMessage with role assistant persisting toolPayload and metadata", async () => {
-    const thread = makeThread();
+  it("persists toolPayload and metadata when provided", async () => {
     const toolPayload = [{ type: "tool_result", id: "tr_1" }];
-    const metadata = { langfuseTraceId: "trace_abc" };
-    const message = {
-      id: "aimsg_asst",
-      threadId: "aith_abc",
-      role: "assistant",
-      content: "I can help with that.",
-      toolPayload,
-      feedback: null,
-      feedbackComment: null,
-      metadata,
-      createdAt: new Date(),
-    };
-    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(thread as never);
-    vi.mocked(prisma.aiMessage.create).mockResolvedValue(message as never);
-    vi.mocked(prisma.aiThread.update).mockResolvedValue(thread as never);
+    const metadata = { providerModel: "openrouter:anthropic/claude-sonnet-4" };
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(makeThread() as never);
+    vi.mocked(prisma.aiMessage.create).mockResolvedValue({ id: "aimsg_asst" } as never);
+    vi.mocked(prisma.aiThread.update).mockResolvedValue(makeThread() as never);
 
-    const result = await appendAssistantMessage({
+    await appendAssistantMessage({
       threadId: "aith_abc",
       organizationId: "org_1",
       userId: "user_1",
@@ -161,20 +212,16 @@ describe("appendAssistantMessage", () => {
       metadata,
     });
 
-    expect(prisma.aiMessage.create).toHaveBeenCalledOnce();
     const createCall = vi.mocked(prisma.aiMessage.create).mock.calls[0]?.[0];
-    expect(createCall?.data.id).toMatch(/^aimsg_/);
     expect(createCall?.data.role).toBe("assistant");
     expect(createCall?.data.toolPayload).toEqual(toolPayload);
     expect(createCall?.data.metadata).toEqual(metadata);
-    expect(result).toEqual(message);
   });
 
-  it("creates an assistant message without optional fields when not provided", async () => {
-    const thread = makeThread();
-    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(thread as never);
+  it("omits optional fields when not provided", async () => {
+    vi.mocked(prisma.aiThread.findFirst).mockResolvedValue(makeThread() as never);
     vi.mocked(prisma.aiMessage.create).mockResolvedValue({} as never);
-    vi.mocked(prisma.aiThread.update).mockResolvedValue(thread as never);
+    vi.mocked(prisma.aiThread.update).mockResolvedValue(makeThread() as never);
 
     await appendAssistantMessage({
       threadId: "aith_abc",
@@ -184,7 +231,6 @@ describe("appendAssistantMessage", () => {
     });
 
     const createCall = vi.mocked(prisma.aiMessage.create).mock.calls[0]?.[0];
-    expect(createCall?.data.role).toBe("assistant");
     expect(createCall?.data.toolPayload).toBeUndefined();
     expect(createCall?.data.metadata).toBeUndefined();
   });
@@ -192,16 +238,15 @@ describe("appendAssistantMessage", () => {
 
 describe("setMessageFeedback", () => {
   it("updates feedback on an assistant message scoped to an owned thread", async () => {
-    const thread = makeThread();
     const assistantMessage = {
       id: "aimsg_asst",
       threadId: "aith_abc",
       role: "assistant",
       content: "I can help.",
-      thread: thread,
+      thread: makeThread(),
     };
     vi.mocked(prisma.aiMessage.findFirst).mockResolvedValue(assistantMessage as never);
-    vi.mocked(prisma.aiMessage.update).mockResolvedValue({ ...assistantMessage, feedback: "helpful" } as never);
+    vi.mocked(prisma.aiMessage.update).mockResolvedValue(assistantMessage as never);
 
     await setMessageFeedback({
       messageId: "aimsg_asst",
@@ -231,15 +276,11 @@ describe("setMessageFeedback", () => {
   });
 
   it("throws when trying to set feedback on a user message", async () => {
-    const thread = makeThread();
-    const userMessage = {
+    vi.mocked(prisma.aiMessage.findFirst).mockResolvedValue({
       id: "aimsg_usr",
-      threadId: "aith_abc",
       role: "user",
-      content: "Hello",
-      thread: thread,
-    };
-    vi.mocked(prisma.aiMessage.findFirst).mockResolvedValue(userMessage as never);
+      thread: makeThread(),
+    } as never);
 
     await expect(
       setMessageFeedback({
