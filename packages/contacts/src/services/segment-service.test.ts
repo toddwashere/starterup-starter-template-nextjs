@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@workspace/database", () => ({
   prisma: {
-    contact: { findMany: vi.fn() },
+    contact: { findMany: vi.fn(), count: vi.fn() },
   },
 }));
 
@@ -11,7 +11,14 @@ vi.mock("../data-models/contact-segment-repo", () => ({
   getContactSegmentById: vi.fn(),
 }));
 
-import { validateSegmentFilters, buildContactWhereFromSegment } from "./segment-service";
+import { prisma } from "@workspace/database";
+import { getContactSegmentById } from "../data-models/contact-segment-repo";
+import {
+  validateSegmentFilters,
+  buildContactWhereFromSegment,
+  buildSegmentMembershipWhere,
+  countContactsForSegment,
+} from "./segment-service";
 
 describe("validateSegmentFilters", () => {
   it("accepts valid v1 filters", () => {
@@ -63,5 +70,50 @@ describe("buildContactWhereFromSegment", () => {
       { tags: { some: { tagId: "ctag_1" } } },
       { tags: { some: { tagId: "ctag_2" } } },
     ]);
+  });
+});
+
+describe("buildSegmentMembershipWhere", () => {
+  it("returns the dynamic where when no contactIds are present", () => {
+    const where = buildSegmentMembershipWhere("org_1", { kind: "person" });
+    expect(where).toEqual(buildContactWhereFromSegment("org_1", { kind: "person" }));
+  });
+
+  it("ORs dynamic filters with explicit contactIds", () => {
+    const where = buildSegmentMembershipWhere("org_1", {
+      kind: "person",
+      contactIds: ["c1", "c2"],
+    });
+    expect(where).toEqual({
+      organizationId: "org_1",
+      OR: [
+        buildContactWhereFromSegment("org_1", { kind: "person", contactIds: ["c1", "c2"] }),
+        { id: { in: ["c1", "c2"] } },
+      ],
+    });
+  });
+});
+
+describe("countContactsForSegment", () => {
+  it("uses OR membership semantics for v2 segments with contactIds", async () => {
+    vi.mocked(getContactSegmentById).mockResolvedValue({
+      id: "seg_1",
+      organizationId: "org_1",
+      filterVersion: 2,
+      filters: { contactIds: ["c1"] },
+      sortKey: "displayName",
+      sortDirection: "asc",
+    } as never);
+    vi.mocked(prisma.contact.count).mockResolvedValue(5 as never);
+
+    await countContactsForSegment("org_1", "seg_1");
+
+    const where = vi.mocked(prisma.contact.count).mock.calls[0]?.[0]?.where;
+    expect(where).toEqual(buildSegmentMembershipWhere("org_1", { contactIds: ["c1"] }));
+  });
+
+  it("throws when the segment is not found", async () => {
+    vi.mocked(getContactSegmentById).mockResolvedValue(null as never);
+    await expect(countContactsForSegment("org_1", "missing")).rejects.toThrow(/not found/);
   });
 });

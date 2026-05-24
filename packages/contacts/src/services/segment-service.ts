@@ -53,6 +53,39 @@ export function buildContactWhereFromSegment(
   return where;
 }
 
+// A contact belongs to a segment if it matches the dynamic filters OR is one of
+// the explicit contactIds. v1 segments (no contactIds) behave exactly as before.
+export function buildSegmentMembershipWhere(
+  organizationId: string,
+  filters: ContactSegmentFilterV2,
+): Prisma.ContactWhereInput {
+  const dynamicWhere = buildContactWhereFromSegment(organizationId, filters);
+  const contactIds = filters.contactIds ?? [];
+  if (contactIds.length === 0) {
+    return dynamicWhere;
+  }
+  return {
+    organizationId,
+    OR: [dynamicWhere, { id: { in: contactIds } }],
+  };
+}
+
+export async function countContactsForSegment(
+  organizationId: string,
+  segmentId: string,
+): Promise<number> {
+  const segment = await getContactSegmentById(segmentId, organizationId);
+  if (!segment) {
+    throw new Error("Segment not found in this organization");
+  }
+
+  const filters = validateSegmentFilters(segment.filters, segment.filterVersion);
+
+  return prisma.contact.count({
+    where: buildSegmentMembershipWhere(organizationId, filters),
+  });
+}
+
 export async function listContactsForSegment(
   organizationId: string,
   segmentId: string,
@@ -67,7 +100,7 @@ export async function listContactsForSegment(
   const { page = 1, pageSize = 20 } = options;
 
   return prisma.contact.findMany({
-    where: buildContactWhereFromSegment(organizationId, filters),
+    where: buildSegmentMembershipWhere(organizationId, filters),
     include: {
       stage: true,
       tags: { include: { tag: true } },
