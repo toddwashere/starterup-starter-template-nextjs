@@ -1,6 +1,7 @@
 import { prisma } from "@workspace/database";
 import type { Prisma } from "@workspace/database";
-import { getContactSegmentById } from "../data-models/contact-segment-repo";
+import { getContactSegmentById, updateContactSegment } from "../data-models/contact-segment-repo";
+import { listContactsByIds } from "../data-models/contact-repo";
 import {
   ContactSegmentFilterSchemaV1,
   ContactSegmentFilterSchemaV2,
@@ -109,4 +110,39 @@ export async function listContactsForSegment(
     take: pageSize,
     skip: (page - 1) * pageSize,
   });
+}
+
+export async function addContactsToSegment(
+  organizationId: string,
+  segmentId: string,
+  contactIds: string[],
+): Promise<{ addedCount: number; totalExplicitIds: number }> {
+  if (contactIds.length === 0) {
+    throw new Error("No contacts provided");
+  }
+
+  const segment = await getContactSegmentById(segmentId, organizationId);
+  if (!segment) {
+    throw new Error("Segment not found in this organization");
+  }
+
+  // Fail loudly if any id is not a live contact in this org (no silent partial add).
+  const found = await listContactsByIds(organizationId, contactIds);
+  if (found.length !== contactIds.length) {
+    throw new Error("One or more contacts were not found in this organization");
+  }
+
+  const filters = validateSegmentFilters(segment.filters, segment.filterVersion);
+  const existing = filters.contactIds ?? [];
+  const merged = Array.from(new Set([...existing, ...contactIds]));
+
+  // updateContactSegment bumps filterVersion to CURRENT_FILTER_VERSION (2) when filters change.
+  await updateContactSegment(segmentId, organizationId, {
+    filters: { ...filters, contactIds: merged },
+  });
+
+  return {
+    addedCount: merged.length - existing.length,
+    totalExplicitIds: merged.length,
+  };
 }

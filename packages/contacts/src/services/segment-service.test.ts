@@ -1,5 +1,5 @@
 // packages/contacts/src/services/segment-service.test.ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@workspace/database", () => ({
   prisma: {
@@ -9,15 +9,22 @@ vi.mock("@workspace/database", () => ({
 
 vi.mock("../data-models/contact-segment-repo", () => ({
   getContactSegmentById: vi.fn(),
+  updateContactSegment: vi.fn(),
+}));
+
+vi.mock("../data-models/contact-repo", () => ({
+  listContactsByIds: vi.fn(),
 }));
 
 import { prisma } from "@workspace/database";
-import { getContactSegmentById } from "../data-models/contact-segment-repo";
+import { getContactSegmentById, updateContactSegment } from "../data-models/contact-segment-repo";
+import { listContactsByIds } from "../data-models/contact-repo";
 import {
   validateSegmentFilters,
   buildContactWhereFromSegment,
   buildSegmentMembershipWhere,
   countContactsForSegment,
+  addContactsToSegment,
 } from "./segment-service";
 
 describe("validateSegmentFilters", () => {
@@ -115,5 +122,46 @@ describe("countContactsForSegment", () => {
   it("throws when the segment is not found", async () => {
     vi.mocked(getContactSegmentById).mockResolvedValue(null as never);
     await expect(countContactsForSegment("org_1", "missing")).rejects.toThrow(/not found/);
+  });
+});
+
+describe("addContactsToSegment", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("merges new ids, dedupes, upgrades v1 to v2, and reports added count", async () => {
+    vi.mocked(getContactSegmentById).mockResolvedValue({
+      id: "seg_1",
+      organizationId: "org_1",
+      filterVersion: 1,
+      filters: { search: "x" },
+      sortKey: "displayName",
+      sortDirection: "asc",
+    } as never);
+    vi.mocked(listContactsByIds).mockResolvedValue([{ id: "c1" }, { id: "c2" }] as never);
+    vi.mocked(updateContactSegment).mockResolvedValue({} as never);
+
+    const result = await addContactsToSegment("org_1", "seg_1", ["c1", "c2"]);
+
+    expect(updateContactSegment).toHaveBeenCalledWith("seg_1", "org_1", {
+      filters: { search: "x", contactIds: ["c1", "c2"] },
+    });
+    expect(result).toEqual({ addedCount: 2, totalExplicitIds: 2 });
+  });
+
+  it("fails the whole merge when an id is missing in the org", async () => {
+    vi.mocked(getContactSegmentById).mockResolvedValue({
+      id: "seg_1",
+      organizationId: "org_1",
+      filterVersion: 1,
+      filters: {},
+      sortKey: "displayName",
+      sortDirection: "asc",
+    } as never);
+    vi.mocked(listContactsByIds).mockResolvedValue([{ id: "c1" }] as never);
+
+    await expect(
+      addContactsToSegment("org_1", "seg_1", ["c1", "missing"]),
+    ).rejects.toThrow();
+    expect(updateContactSegment).not.toHaveBeenCalled();
   });
 });
