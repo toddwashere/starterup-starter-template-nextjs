@@ -89,7 +89,7 @@ export function AcceptInvitationPageContent({
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              You've been invited to join{" "}
+              You&apos;ve been invited to join{" "}
               <span className="font-medium">
                 {invitation.organizationName}
               </span>{" "}
@@ -152,7 +152,7 @@ export function AcceptInvitationPageContent({
         <CardHeader>
           <CardTitle>Organization Invitation</CardTitle>
           <CardDescription>
-            You've been invited to join an organization.
+            You&apos;ve been invited to join an organization.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

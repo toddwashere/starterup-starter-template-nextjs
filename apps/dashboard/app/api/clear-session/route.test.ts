@@ -13,7 +13,7 @@ describe("GET /api/clear-session", () => {
   });
 
   it("deletes both session cookie variants", async () => {
-    const response = await GET();
+    await GET();
 
     expect(mockDelete).toHaveBeenCalledWith("better-auth.session_token");
     expect(mockDelete).toHaveBeenCalledWith(

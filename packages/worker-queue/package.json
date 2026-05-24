@@ -22,6 +22,7 @@
     "@types/node": "^22",
     "@types/pg": "^8",
     "@workspace/tooling": "workspace:*",
+    "eslint": "^9.18",
     "typescript": "^5.7",
     "vitest": "^3.0.0"
   }

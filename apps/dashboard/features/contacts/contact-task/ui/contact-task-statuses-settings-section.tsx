@@ -8,7 +8,7 @@ import { ContactSettingsEntityChip } from "../../common/ui/contact-settings-enti
 import {
   createContactTaskStatusAction,
   deleteContactTaskStatusAction,
-  listContactTaskStatusesAction,
+  type listContactTaskStatusesAction,
 } from "../data/contact-task-actions";
 
 type ContactTaskStatus = Extract<

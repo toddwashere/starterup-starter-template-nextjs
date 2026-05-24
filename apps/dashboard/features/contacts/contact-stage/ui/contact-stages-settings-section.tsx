@@ -8,7 +8,7 @@ import { ContactSettingsEntityChip } from "../../common/ui/contact-settings-enti
 import {
   createContactStageAction,
   deleteContactStageAction,
-  listContactStagesAction,
+  type listContactStagesAction,
 } from "../data/contact-stage-actions";
 
 type ContactStage = Extract<

@@ -118,7 +118,7 @@ export function CreateOrgPageContent() {
                       />
                     </FormControl>
                     <FormDescription>
-                      This will be used in your organization's URL.
+                      This will be used in your organization&apos;s URL.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

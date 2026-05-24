@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "better-auth.session_token";
 const SESSION_COOKIE_SECURE = "__Secure-better-auth.session_token";
