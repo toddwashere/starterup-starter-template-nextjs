@@ -1,0 +1,38 @@
+{
+  "name": "@workspace/observability",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./keys": "./keys.ts",
+    "./sentry-config": "./src/sentry-config.ts",
+    "./capture": "./src/capture.ts",
+    "./next": "./src/next/index.ts",
+    "./node": "./src/node/init.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "^10.0.0",
+    "@sentry/node": "^10.0.0",
+    "zod": "^3"
+  },
+  "peerDependencies": {
+    "next": ">=15",
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@workspace/tooling": "workspace:*",
+    "eslint": "^9.18",
+    "next": "^16",
+    "react": "^19",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
