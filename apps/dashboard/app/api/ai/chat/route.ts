@@ -1,17 +1,9 @@
-import { streamText, stepCountIs } from "ai";
 import type { UIMessage, ModelMessage } from "ai";
 import { requireUser } from "@workspace/auth/guards";
-import {
-  getModel,
-  getGenerationParams,
-  buildTelemetryOptions,
-  logAiCall,
-  resolveAiCallOptions,
-} from "@workspace/ai";
-import { ASSISTANT_SYSTEM_PROMPT } from "@workspace/ai/prompts/assistant-system";
+import { prisma } from "@workspace/database";
+import { askAssistantChat } from "@workspace/ai/ai-calls/assistant-chat";
 import { keys } from "@workspace/ai/keys";
 import { getDefaultAvailableProviderModel } from "@workspace/ai/list-available-ai-models";
-import { resolveProviderModel } from "@workspace/ai/resolve-provider-model";
 import {
   DEFAULT_PROVIDER_MODEL,
   type ProviderModelValue,
@@ -21,12 +13,11 @@ import {
   appendUserMessage,
   appendAssistantMessage,
   listMessagesForThread,
-} from "@workspace/ai-chat";
+} from "@workspace/ai/ai-calls/assistant-chat/persistence";
 import { listMcpToolsAction } from "@/features/ai-chat/data/ai-chat-actions";
-import {
-  buildToolsFromMcpList,
-} from "@/features/ai-chat/data/mcp-agent-tools";
+import { buildToolsFromMcpList } from "@/features/ai-chat/data/mcp-agent-tools";
 import { executeMcpTool } from "@/features/ai-chat/data/mcp-tool-executor";
+import { formatToolSummary } from "@/features/ai-chat/data/format-tool-summary";
 
 // Node runtime required — Prisma needs Node.js (not edge)
 export const dynamic = "force-dynamic";
@@ -51,39 +42,17 @@ export async function POST(req: Request): Promise<Response> {
   ).activeOrganizationId;
 
   if (!activeOrganizationId) {
-    return Response.json(
-      { error: "No active organization" },
-      { status: 400 },
-    );
+    return Response.json({ error: "No active organization" }, { status: 400 });
   }
 
   const userId = session.user.id;
 
-  // 3. Resolve + validate the model. The client sends its selection, but the
-  // server is authoritative: resolveProviderModel rejects anything not in the
-  // catalog or whose provider has no credentials. Falls back to the configured
-  // default when the client sends nothing.
+  // 3. Choose the model: the client's selection, else the first configured
+  // default. askAssistantChat revalidates it (catalog + keys) and 400s below.
   const config = keys();
-  const requested =
-    providerModel ||
+  const requested = (providerModel ||
     getDefaultAvailableProviderModel(config) ||
-    DEFAULT_PROVIDER_MODEL;
-
-  let resolved: ReturnType<typeof resolveAiCallOptions>;
-  let model;
-  try {
-    resolveProviderModel(config, requested); // throws on unknown/unconfigured
-    resolved = resolveAiCallOptions({
-      preset: "assistant",
-      overrides: { providerModel: requested as ProviderModelValue },
-    });
-    model = getModel({ providerModel: resolved.providerModel });
-  } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Invalid model" },
-      { status: 400 },
-    );
-  }
+    DEFAULT_PROVIDER_MODEL) as ProviderModelValue;
 
   // 4. Get or create the active thread for this user/org
   const thread = await getOrCreateActiveThread({
@@ -92,16 +61,12 @@ export async function POST(req: Request): Promise<Response> {
   });
 
   // 5. Persist the latest user message
-  const lastUserMessage = [...messages]
-    .reverse()
-    .find((m) => m.role === "user");
-
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMessage) {
     const text = lastUserMessage.parts
       .filter((p) => p.type === "text")
       .map((p) => (p as { type: "text"; text: string }).text)
       .join("");
-
     if (text.trim()) {
       await appendUserMessage({
         threadId: thread.id,
@@ -113,9 +78,8 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // 6. Build the model context from persisted DB history (not the client's
-  // message array). The client could otherwise fabricate prior assistant turns
-  // in the context window; sourcing from the DB keeps context server-authoritative
-  // and consistent with what loadChatThreadAction renders on reload.
+  // message array) so context stays server-authoritative and consistent with
+  // what loadChatThreadAction renders on reload.
   const history = await listMessagesForThread({
     threadId: thread.id,
     organizationId: activeOrganizationId,
@@ -129,72 +93,85 @@ export async function POST(req: Request): Promise<Response> {
         : [],
   );
 
-  // 7. Build tools from MCP
+  // 7. Build tools from MCP and assemble prompt variables.
   const cookie = req.headers.get("cookie") ?? "";
   const mcpTools = await listMcpToolsAction();
-  const tools = buildToolsFromMcpList(
-    mcpTools,
-    (name, args) => executeMcpTool(cookie, name, args),
+  const tools = buildToolsFromMcpList(mcpTools, (name, args) =>
+    executeMcpTool(cookie, name, args),
   );
+  const toolSummary = formatToolSummary(mcpTools);
 
-  // 8. Stream response
-  logAiCall({
-    functionId: "ai.chat",
-    providerModel: resolved.providerModel,
-    userId,
-    orgId: activeOrganizationId,
+  const org = await prisma.organization.findUnique({
+    where: { id: activeOrganizationId },
+    select: { name: true },
   });
+  const orgName = org?.name ?? "your organization";
 
-  const result = streamText({
-    model,
-    system: ASSISTANT_SYSTEM_PROMPT,
-    messages: modelMessages,
-    tools,
-    stopWhen: stepCountIs(resolved.maxSteps),
-    ...getGenerationParams(resolved),
-    ...buildTelemetryOptions({
-      functionId: "ai.chat",
-      providerModel: resolved.providerModel,
-      userId,
-      orgId: activeOrganizationId,
-      sessionId: thread.id,
-    }),
-    onFinish: async ({ text, steps }) => {
-      try {
-        // Build a JSON-serializable tool payload from all steps.
-        // TypedToolCall uses `.input`, TypedToolResult uses `.output`.
-        const toolPayload =
-          steps.length > 0
-            ? steps.flatMap((step) =>
-                step.toolCalls.map((call) => {
-                  const result = step.toolResults.find(
-                    (r) => r.toolCallId === call.toolCallId,
-                  );
-                  return {
-                    toolName: call.toolName,
-                    // input is typed per-tool; cast to plain object for storage
-                    arguments: call.input as Record<string, unknown>,
-                    result: result != null ? (result as { output: unknown }).output : null,
-                  };
-                }),
-              )
-            : undefined;
+  // 8. Delegate to the assistant-chat call. It renders the prompt, resolves +
+  // validates the model, logs, and streams. Invalid model selections reject and
+  // are surfaced as a 400.
+  let result: Awaited<ReturnType<typeof askAssistantChat>>;
+  try {
+    result = await askAssistantChat({
+      messages: modelMessages,
+      tools,
+      variables: { orgName, ...(toolSummary ? { toolSummary } : {}) },
+      overrides: { providerModel: requested },
+      context: {
+        userId,
+        orgId: activeOrganizationId,
+        sessionId: thread.id,
+      },
+      onFinish: async ({ text, steps }) => {
+        try {
+          // Steps carry typed tool calls/results at runtime; the call command's
+          // onFinish type erases them, so narrow to the shape we persist.
+          const typedSteps = steps as Array<{
+            toolCalls: Array<{
+              toolName: string;
+              toolCallId: string;
+              input: unknown;
+            }>;
+            toolResults: Array<{ toolCallId: string; output: unknown }>;
+          }>;
 
-        await appendAssistantMessage({
-          threadId: thread.id,
-          organizationId: activeOrganizationId,
-          userId,
-          content: text,
-          toolPayload:
-            toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
-          metadata: { providerModel: resolved.providerModel },
-        });
-      } catch (err) {
-        // Persistence failure must not crash the stream
-        console.error("[ai/chat] Failed to persist assistant message:", err);
-      }
-    },
-  });
+          const toolPayload =
+            typedSteps.length > 0
+              ? typedSteps.flatMap((step) =>
+                  step.toolCalls.map((call) => {
+                    const toolResult = step.toolResults.find(
+                      (r) => r.toolCallId === call.toolCallId,
+                    );
+                    return {
+                      toolName: call.toolName,
+                      arguments: call.input as Record<string, unknown>,
+                      result: toolResult ? toolResult.output : null,
+                    };
+                  }),
+                )
+              : undefined;
+
+          await appendAssistantMessage({
+            threadId: thread.id,
+            organizationId: activeOrganizationId,
+            userId,
+            content: text,
+            toolPayload:
+              toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
+            metadata: { providerModel: requested },
+          });
+        } catch (err) {
+          // Persistence failure must not crash the stream
+          console.error("[ai/chat] Failed to persist assistant message:", err);
+        }
+      },
+    });
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Invalid model" },
+      { status: 400 },
+    );
+  }
 
   // 9. Return UI message stream
   return result.toUIMessageStreamResponse();

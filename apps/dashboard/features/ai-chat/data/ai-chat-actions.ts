@@ -8,8 +8,8 @@ import {
   getOrCreateActiveThread,
   listMessagesForThread,
   setMessageFeedback,
-} from "@workspace/ai-chat";
-import { SetMessageFeedbackSchema } from "@workspace/ai-chat/schemas/ai-chat-schemas";
+} from "@workspace/ai/ai-calls/assistant-chat/persistence";
+import { SetMessageFeedbackSchema } from "@workspace/ai/ai-calls/assistant-chat/schemas";
 import type { ActionResult } from "@/common/data/action-result";
 import type { ChatMessage } from "./ai-chat-types";
 import { mcpPost } from "./mcp-tool-executor";
@@ -153,8 +153,9 @@ export async function loadChatThreadAction(): Promise<
 /**
  * Set user feedback on an assistant message.
  *
- * Input is validated with the canonical zod schema from `@workspace/ai-chat`.
- * The repo enforces assistant-only + org/user ownership.
+ * Input is validated with the canonical zod schema from
+ * `@workspace/ai/ai-calls/assistant-chat/schemas`. The repo enforces
+ * assistant-only + org/user ownership.
  */
 export async function setMessageFeedbackAction(input: {
   messageId: string;

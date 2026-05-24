@@ -10,7 +10,7 @@
 | `pnpm eval:ai:live` | Yes (always) | Same as `eval:ai` but `--no-cache` — forces fresh LLM calls |
 | `pnpm eval:ai:view` | **No** | Open the local browser UI for past eval results |
 
-Requires a provider API key in root `.env` (e.g. `OPENROUTER_API_KEY`). See [`promptfooconfig.yaml`](./promptfooconfig.yaml).
+Requires a provider API key in root `.env` (e.g. `OPENROUTER_API_KEY`). See [`assistant-chat/promptfooconfig.yaml`](./assistant-chat/promptfooconfig.yaml).
 
 ## Free alternative
 
@@ -33,9 +33,10 @@ npx promptfoo@latest show eval
 
 ## Config layout
 
-- [`promptfooconfig.yaml`](./promptfooconfig.yaml) — prompts, provider, test file reference
-- [`tests/golden.yaml`](./tests/golden.yaml) — behavioral assertions (length, keywords)
-- [`prompts/assistant-system.txt`](./prompts/assistant-system.txt) — prompt copy (will move to `packages/ai/src/ai-calls/` when the ai-calls registry lands)
+One config folder per named AI call (`evals/promptfoo/<call>/`):
+
+- [`assistant-chat/promptfooconfig.yaml`](./assistant-chat/promptfooconfig.yaml) — provider + default vars; points at the source prompt `packages/ai/src/ai-calls/assistant-chat/prompt.md` (no duplicate copy)
+- [`assistant-chat/tests/golden.yaml`](./assistant-chat/tests/golden.yaml) — behavioral assertions (length, keywords)
 
 ## Cache behavior
 
