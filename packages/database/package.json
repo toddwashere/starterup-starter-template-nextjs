@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./keys": "./keys.ts"
   },
   "scripts": {
     "db:generate": "dotenv -e ../../.env -- prisma generate",
@@ -13,6 +14,7 @@
     "db:push": "dotenv -e ../../.env -- prisma db push",
     "db:seed": "dotenv -e ../../.env -- prisma db seed",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
   "prisma": {
@@ -22,13 +24,15 @@
     "@prisma/adapter-pg": "^7",
     "@prisma/client": "^7",
     "pg": "^8",
-    "prisma": "^7"
+    "prisma": "^7",
+    "zod": "^3"
   },
   "devDependencies": {
     "@workspace/tooling": "workspace:*",
     "better-auth": "^1.6",
     "dotenv": "^16",
     "tsx": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^3"
   }
 }
