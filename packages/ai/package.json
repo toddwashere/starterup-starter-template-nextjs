@@ -12,6 +12,7 @@
     "./ai-calls/assistant-chat": "./src/ai-calls/assistant-chat/assistant-chat.ts",
     "./ai-calls/assistant-chat/persistence": "./src/ai-calls/assistant-chat/persistence.ts",
     "./ai-calls/assistant-chat/schemas": "./src/ai-calls/assistant-chat/schemas.ts",
+    "./ai-calls/worker-example": "./src/ai-calls/worker-example/worker-example.ts",
     "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
   },
   "scripts": {
