@@ -8,7 +8,6 @@ export type {
 } from "./platform/resolve-ai-call-options";
 export { logAiCall } from "./platform/log-ai-call";
 export type { AiCallLogEvent } from "./platform/log-ai-call";
-export { ASSISTANT_SYSTEM_PROMPT } from "./prompts/assistant-system";
 export { buildTelemetryOptions } from "./platform/telemetry";
 export type { TelemetryContext, TelemetryOptions } from "./platform/telemetry";
 export { runAgent, wireToolExecution } from "./platform/run-agent";
@@ -18,3 +17,14 @@ export type {
   RunAgentInput,
   RunAgentResult,
 } from "./platform/run-agent";
+
+// Platform building blocks for defining new calls
+export { askAi } from "./platform/ask-ai";
+export type { AskAiInput } from "./platform/ask-ai";
+export { defineAiCall, loadCallPrompt } from "./platform/define-ai-call";
+export type { AiCallMode, DefinedAiCall } from "./platform/define-ai-call";
+export { renderPrompt } from "./platform/render-prompt";
+export { extractTemplateVars } from "./platform/extract-template-vars";
+
+// Named AI calls registry
+export * from "./ai-calls";

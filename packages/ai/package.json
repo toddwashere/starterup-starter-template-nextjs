@@ -9,11 +9,11 @@
     "./ai-models-available": "./src/platform/models/ai-models-available.ts",
     "./list-available-ai-models": "./src/platform/list-available-ai-models.ts",
     "./resolve-provider-model": "./src/platform/resolve-provider-model.ts",
+    "./ai-calls": "./src/ai-calls/index.ts",
     "./ai-calls/assistant-chat": "./src/ai-calls/assistant-chat/assistant-chat.ts",
     "./ai-calls/assistant-chat/persistence": "./src/ai-calls/assistant-chat/persistence.ts",
     "./ai-calls/assistant-chat/schemas": "./src/ai-calls/assistant-chat/schemas.ts",
-    "./ai-calls/worker-example": "./src/ai-calls/worker-example/worker-example.ts",
-    "./prompts/assistant-system": "./src/prompts/assistant-system.ts"
+    "./ai-calls/worker-example": "./src/ai-calls/worker-example/worker-example.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",
