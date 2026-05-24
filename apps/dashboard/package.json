@@ -25,7 +25,7 @@
     "@workspace/billing": "workspace:*",
     "@workspace/common": "workspace:*",
     "@workspace/contacts": "workspace:*",
-    "@sentry/nextjs": "^10",
+    "@sentry/nextjs": "^10.0.0",
     "@workspace/database": "workspace:*",
     "@workspace/observability": "workspace:*",
     "@workspace/routes": "workspace:*",

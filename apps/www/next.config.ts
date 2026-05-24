@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { withSentryConfig } from "@workspace/observability/next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@workspace/common", "@workspace/routes"],
+  transpilePackages: [
+    "@workspace/common",
+    "@workspace/routes",
+    "@workspace/observability",
+  ],
   turbopack: {
     root: path.resolve(__dirname, "../.."),
   },
@@ -11,4 +16,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, "www");

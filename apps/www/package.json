@@ -12,7 +12,9 @@
     "clean": "rm -rf .next .turbo node_modules"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.0.0",
     "@workspace/common": "workspace:*",
+    "@workspace/observability": "workspace:*",
     "@workspace/routes": "workspace:*",
     "@workspace/ui": "workspace:*",
     "next": "^16.2",
