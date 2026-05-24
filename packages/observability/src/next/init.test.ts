@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createInitOptions } from "./init";
+
+vi.mock("@sentry/nextjs", () => ({ init: vi.fn() }));
+
+import * as Sentry from "@sentry/nextjs";
+import { createInitOptions, initClientSentry } from "./init";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.clearAllMocks();
 });
 
 describe("createInitOptions()", () => {
@@ -36,5 +41,30 @@ describe("createInitOptions()", () => {
   it("returns null for disabled app", () => {
     vi.stubEnv("SENTRY_DSN", "https://key@o1.ingest.sentry.io/1");
     expect(createInitOptions("public-api")).toBeNull();
+  });
+});
+
+describe("initClientSentry()", () => {
+  it("initializes with NEXT_PUBLIC_SENTRY_DSN when SENTRY_DSN is unset (browser)", () => {
+    vi.stubEnv("SENTRY_DSN", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://key@o1.ingest.sentry.io/1");
+    initClientSentry("dashboard");
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({ dsn: "https://key@o1.ingest.sentry.io/1" }),
+    );
+  });
+
+  it("does not initialize when no DSN is available at all", () => {
+    vi.stubEnv("SENTRY_DSN", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "");
+    initClientSentry("dashboard");
+    expect(Sentry.init).not.toHaveBeenCalled();
+  });
+
+  it("does not initialize for a disabled app even with a client DSN", () => {
+    vi.stubEnv("SENTRY_DSN", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://key@o1.ingest.sentry.io/1");
+    initClientSentry("public-api");
+    expect(Sentry.init).not.toHaveBeenCalled();
   });
 });

@@ -36,6 +36,16 @@ describe("capture API without SENTRY_DSN", () => {
   });
 });
 
+describe("capture API with NEXT_PUBLIC_SENTRY_DSN only (client/browser case)", () => {
+  it("activates via NEXT_PUBLIC_SENTRY_DSN when SENTRY_DSN is unset (client/browser case)", () => {
+    vi.stubEnv("SENTRY_DSN", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", DSN);
+    const error = new Error("boom");
+    captureException(error);
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, undefined);
+  });
+});
+
 describe("capture API with SENTRY_DSN set", () => {
   it("captureException forwards error and maps context to extra", () => {
     vi.stubEnv("SENTRY_DSN", DSN);

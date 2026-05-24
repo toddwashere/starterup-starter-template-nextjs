@@ -1,10 +1,10 @@
 // Use the isomorphic Sentry SDK so this module is safe to import from both
 // server code and Next.js client components (@sentry/node is not browser-safe).
 import * as Sentry from "@sentry/nextjs";
-import { keys } from "../keys";
+import { clientDsn } from "../keys";
 
 function isActive(): boolean {
-  return Boolean(keys().SENTRY_DSN);
+  return Boolean(clientDsn());
 }
 
 export function captureException(

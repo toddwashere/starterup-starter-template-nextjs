@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { ErrorEvent, EventHint } from "@sentry/nextjs";
 import { clientDsn } from "../../keys";
-import { resolveSentryConfig, type SentryAppId } from "../sentry-config";
+import { resolveSentryConfig, sentryApps, type SentryAppId } from "../sentry-config";
 
 // Use the parameter type of Sentry.init to cover the browser/node/edge union
 type InitOptions = NonNullable<Parameters<typeof Sentry.init>[0]>;
@@ -38,16 +38,21 @@ export function createInitOptions(appId: SentryAppId): InitOptions | null {
   return buildBaseOptions(appId, resolved.dsn);
 }
 
+// App-config gate only (does NOT consult the DSN — the caller supplies the
+// runtime-appropriate DSN, which may be the client NEXT_PUBLIC value).
+function appCapturesErrors(appId: SentryAppId): boolean {
+  const app = sentryApps[appId];
+  return app.enabled && app.errors;
+}
+
 // `dsn` is the runtime-appropriate DSN for the calling environment:
 // the client passes clientDsn() (NEXT_PUBLIC_SENTRY_DSN, injected at build time),
-// while server/edge pass the server-side SENTRY_DSN. It intentionally overrides
-// options.dsn (which holds the server SENTRY_DSN) so the client uses the public DSN.
+// while server/edge pass the server-side SENTRY_DSN.
 function safeInit(appId: SentryAppId, dsn: string | undefined): void {
   if (!dsn) return;
-  const options = createInitOptions(appId);
-  if (!options) return;
+  if (!appCapturesErrors(appId)) return;
   try {
-    Sentry.init({ ...options, dsn });
+    Sentry.init(buildBaseOptions(appId, dsn));
   } catch (err) {
     console.error("[observability] Sentry init failed:", err);
   }
