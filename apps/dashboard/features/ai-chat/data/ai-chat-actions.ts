@@ -5,10 +5,10 @@ import { readMcpJsonRpcResponse } from "@workspace/common/mcp/http-client";
 import { getPublicMcpEndpoint } from "@workspace/common/env/public-mcp";
 import { headers } from "next/headers";
 import {
-  getOrCreateActiveThread,
-  listMessagesForThread,
-  setMessageFeedback,
-} from "@workspace/ai/ai-calls/assistant-chat/persistence";
+  listAiMessagesForThread,
+  updateAiMessageFeedback,
+} from "@workspace/ai/data-models/ai-message-repo";
+import { getOrCreateActiveAiThread } from "@workspace/ai/data-models/ai-thread-repo";
 import { SetMessageFeedbackSchema } from "@workspace/ai/ai-calls/assistant-chat/schemas";
 import type { ActionResult } from "@/common/data/action-result";
 import type { ChatMessage } from "./ai-chat-types";
@@ -112,13 +112,13 @@ export async function loadChatThreadAction(): Promise<
 
     const userId = session.user.id;
 
-    const thread = await getOrCreateActiveThread({ userId, organizationId: activeOrganizationId });
+    const thread = await getOrCreateActiveAiThread(userId, activeOrganizationId);
 
-    const dbMessages = await listMessagesForThread({
-      threadId: thread.id,
-      organizationId: activeOrganizationId,
+    const dbMessages = await listAiMessagesForThread(
+      thread.id,
+      activeOrganizationId,
       userId,
-    });
+    );
 
     const messages: ChatMessage[] = dbMessages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -182,13 +182,13 @@ export async function setMessageFeedbackAction(input: {
 
     const userId = session.user.id;
 
-    await setMessageFeedback({
-      messageId: parsed.data.messageId,
-      organizationId: activeOrganizationId,
+    await updateAiMessageFeedback(
+      parsed.data.messageId,
+      activeOrganizationId,
       userId,
-      feedback: parsed.data.feedback,
-      comment: parsed.data.comment,
-    });
+      parsed.data.feedback,
+      parsed.data.comment,
+    );
 
     return { success: true, data: undefined };
   } catch (err) {

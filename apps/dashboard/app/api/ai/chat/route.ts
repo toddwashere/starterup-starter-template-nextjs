@@ -1,6 +1,6 @@
 import type { UIMessage, ModelMessage } from "ai";
 import { requireUser } from "@workspace/auth/guards";
-import { prisma } from "@workspace/database";
+import { getCurrentOrg } from "@workspace/auth/session";
 import { askAssistantChat } from "@workspace/ai/ai-calls/assistant-chat";
 import { keys } from "@workspace/ai/keys";
 import { getDefaultAvailableProviderModel } from "@workspace/ai/list-available-ai-models";
@@ -9,11 +9,11 @@ import {
   type ProviderModelValue,
 } from "@workspace/ai/ai-models-available";
 import {
-  getOrCreateActiveThread,
-  appendUserMessage,
-  appendAssistantMessage,
-  listMessagesForThread,
-} from "@workspace/ai/ai-calls/assistant-chat/persistence";
+  createAiAssistantMessage,
+  createAiUserMessage,
+  listAiMessagesForThread,
+} from "@workspace/ai/data-models/ai-message-repo";
+import { getOrCreateActiveAiThread } from "@workspace/ai/data-models/ai-thread-repo";
 import { listMcpToolsAction } from "@/features/ai-chat/data/ai-chat-actions";
 import { buildToolsFromMcpList } from "@/features/ai-chat/data/mcp-agent-tools";
 import { executeMcpTool } from "@/features/ai-chat/data/mcp-tool-executor";
@@ -55,10 +55,7 @@ export async function POST(req: Request): Promise<Response> {
     DEFAULT_PROVIDER_MODEL) as ProviderModelValue;
 
   // 4. Get or create the active thread for this user/org
-  const thread = await getOrCreateActiveThread({
-    userId,
-    organizationId: activeOrganizationId,
-  });
+  const thread = await getOrCreateActiveAiThread(userId, activeOrganizationId);
 
   // 5. Persist the latest user message
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
@@ -68,23 +65,18 @@ export async function POST(req: Request): Promise<Response> {
       .map((p) => (p as { type: "text"; text: string }).text)
       .join("");
     if (text.trim()) {
-      await appendUserMessage({
-        threadId: thread.id,
-        organizationId: activeOrganizationId,
-        userId,
-        content: text,
-      });
+      await createAiUserMessage(thread.id, activeOrganizationId, userId, text);
     }
   }
 
   // 6. Build the model context from persisted DB history (not the client's
   // message array) so context stays server-authoritative and consistent with
   // what loadChatThreadAction renders on reload.
-  const history = await listMessagesForThread({
-    threadId: thread.id,
-    organizationId: activeOrganizationId,
+  const history = await listAiMessagesForThread(
+    thread.id,
+    activeOrganizationId,
     userId,
-  });
+  );
   const modelMessages: ModelMessage[] = history.flatMap((m): ModelMessage[] =>
     m.role === "user"
       ? [{ role: "user", content: m.content }]
@@ -101,10 +93,7 @@ export async function POST(req: Request): Promise<Response> {
   );
   const toolSummary = formatToolSummary(mcpTools);
 
-  const org = await prisma.organization.findUnique({
-    where: { id: activeOrganizationId },
-    select: { name: true },
-  });
+  const org = await getCurrentOrg();
   const orgName = org?.name ?? "your organization";
 
   // 8. Delegate to the assistant-chat call. It renders the prompt, resolves +
@@ -151,15 +140,17 @@ export async function POST(req: Request): Promise<Response> {
                 )
               : undefined;
 
-          await appendAssistantMessage({
-            threadId: thread.id,
-            organizationId: activeOrganizationId,
+          await createAiAssistantMessage(
+            thread.id,
+            activeOrganizationId,
             userId,
-            content: text,
-            toolPayload:
-              toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
-            metadata: { providerModel: requested },
-          });
+            text,
+            {
+              toolPayload:
+                toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
+              metadata: { providerModel: requested },
+            },
+          );
         } catch (err) {
           // Persistence failure must not crash the stream
           console.error("[ai/chat] Failed to persist assistant message:", err);
