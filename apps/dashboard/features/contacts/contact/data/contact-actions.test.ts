@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireOrgPermissionWithActiveOrg } from "@workspace/auth/guards";
 import { requireOrgEntitlement } from "@workspace/billing";
+import { listContactsForOrg, countContactsMatchingListFilters } from "@workspace/contacts";
 import {
   archiveContactAction,
   createContactAction,
@@ -23,6 +24,7 @@ vi.mock("@workspace/contacts", () => ({
   updateContactWithValidation: vi.fn().mockResolvedValue({ id: "contact_1" }),
   archiveContact: vi.fn().mockResolvedValue({ id: "contact_1" }),
   countContactsForOrg: vi.fn().mockResolvedValue(0),
+  countContactsMatchingListFilters: vi.fn().mockResolvedValue(0),
 }));
 
 // Defined via vi.hoisted so the class exists when the (hoisted) vi.mock factory runs.
@@ -99,6 +101,18 @@ describe("contact actions permissions", () => {
 
     expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({
       contact: ["delete"],
+    });
+  });
+});
+
+describe("listContactsAction shape", () => {
+  it("returns rows and totalCount", async () => {
+    vi.mocked(listContactsForOrg).mockResolvedValue([{ id: "c1" }] as never);
+    vi.mocked(countContactsMatchingListFilters).mockResolvedValue(1 as never);
+    const result = await listContactsAction();
+    expect(result).toEqual({
+      success: true,
+      data: { rows: [{ id: "c1" }], totalCount: 1 },
     });
   });
 });

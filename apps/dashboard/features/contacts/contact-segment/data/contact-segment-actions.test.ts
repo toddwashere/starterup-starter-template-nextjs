@@ -15,6 +15,7 @@ vi.mock("@workspace/contacts", () => ({
   deleteContactSegment: vi.fn(),
   listContactsForSegment: vi.fn(),
   addContactsToSegment: vi.fn().mockResolvedValue({ addedCount: 2, totalExplicitIds: 2 }),
+  countContactsForSegment: vi.fn(),
 }));
 
 import { addContactsToSegment } from "@workspace/contacts";

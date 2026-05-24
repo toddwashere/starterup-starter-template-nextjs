@@ -8,6 +8,7 @@ import {
   updateContactWithValidation,
   archiveContact,
   countContactsForOrg,
+  countContactsMatchingListFilters,
 } from "@workspace/contacts";
 import type { ContactListFilters, CreateContactInput, UpdateContactInput } from "@workspace/contacts";
 import { requireOrgEntitlement, BillingEntitlementError } from "@workspace/billing";
@@ -15,15 +16,26 @@ import type { ActionResult } from "@/common/data/action-result";
 
 export async function listContactsAction(
   filters: Partial<ContactListFilters> = {},
-): Promise<ActionResult<Awaited<ReturnType<typeof listContactsForOrg>>>> {
+): Promise<
+  ActionResult<{
+    rows: Awaited<ReturnType<typeof listContactsForOrg>>;
+    totalCount: number;
+  }>
+> {
   try {
     const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
       contact: ["read"],
     });
-    const data = await listContactsForOrg(activeOrganizationId, filters);
-    return { success: true, data };
+    const [rows, totalCount] = await Promise.all([
+      listContactsForOrg(activeOrganizationId, filters),
+      countContactsMatchingListFilters(activeOrganizationId, filters),
+    ]);
+    return { success: true, data: { rows, totalCount } };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Failed to load contacts" };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load contacts",
+    };
   }
 }
 

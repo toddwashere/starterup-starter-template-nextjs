@@ -61,7 +61,7 @@ import { CsvImportDialog } from "./csv-import-dialog";
 
 type Contact = NonNullable<
   Extract<Awaited<ReturnType<typeof listContactsAction>>, { success: true }>["data"]
->[number];
+>["rows"][number];
 
 type ListQuery = Partial<ContactListFilters> & { segmentId?: string };
 
@@ -134,7 +134,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
             pageSize: 100,
           });
       if (result.success && gen === loadGenRef.current) {
-        setContacts(result.data);
+        setContacts(result.data.rows);
       }
     });
   }, []);

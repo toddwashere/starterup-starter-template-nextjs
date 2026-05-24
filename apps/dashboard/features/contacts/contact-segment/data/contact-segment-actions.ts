@@ -7,6 +7,7 @@ import {
   deleteContactSegment,
   listContactsForSegment,
   addContactsToSegment,
+  countContactsForSegment,
 } from "@workspace/contacts";
 import type { CreateContactSegmentInput } from "@workspace/contacts";
 import type { ActionResult } from "@/common/data/action-result";
@@ -58,15 +59,26 @@ export async function deleteContactSegmentAction(segmentId: string): Promise<Act
 export async function listContactsForSegmentAction(
   segmentId: string,
   options: { page?: number; pageSize?: number } = {},
-): Promise<ActionResult<Awaited<ReturnType<typeof listContactsForSegment>>>> {
+): Promise<
+  ActionResult<{
+    rows: Awaited<ReturnType<typeof listContactsForSegment>>;
+    totalCount: number;
+  }>
+> {
   try {
     const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
       contact: ["read"],
     });
-    const data = await listContactsForSegment(activeOrganizationId, segmentId, options);
-    return { success: true, data };
+    const [rows, totalCount] = await Promise.all([
+      listContactsForSegment(activeOrganizationId, segmentId, options),
+      countContactsForSegment(activeOrganizationId, segmentId),
+    ]);
+    return { success: true, data: { rows, totalCount } };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Failed to load segment contacts" };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load segment contacts",
+    };
   }
 }
 
