@@ -17,7 +17,7 @@
 | Topic | Decision |
 |-------|----------|
 | **Catalog file** | `packages/ai/src/ai-models-available.ts` (not `chat-models.ts`) |
-| **Encoding** | `provider:modelId` string (Bloomlogic-style) |
+| **Encoding** | `provider:modelId` string |
 | **Env routing** | Remove `AI_PROVIDER` / `AI_MODEL`; keys + optional globals only |
 | **Availability** | `getAvailableAiModels(keys())` filters catalog by configured keys |
 | **Server validation** | `resolveProviderModel(value)` allowlists against full catalog |
@@ -352,7 +352,7 @@ export async function listAvailableAiModelsAction() {
 **Files:**
 - Create: `apps/dashboard/features/ai-chat/ui/ai-provider-model-select.tsx`
 
-- [ ] **Step 1:** Client component modeled on Bloomlogic `ai-provider-model-select.tsx`:
+- [ ] **Step 1:** Client component `ai-provider-model-select.tsx`:
 
   - Props: `value: ProviderModelValue`, `onValueChange`, `options` (from server), `disabled?`, `triggerClassName?`
   - Grouped `Select` from `@workspace/ui/components/select`
