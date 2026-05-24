@@ -13,7 +13,8 @@
     "./types": "./src/types.ts",
     "./api-keys": "./src/api-keys/index.ts",
     "./api-keys/permissions": "./src/api-keys/permissions.ts",
-    "./oauth-auth-server-metadata": "./src/oauth-auth-server-metadata.ts"
+    "./oauth-auth-server-metadata": "./src/oauth-auth-server-metadata.ts",
+    "./keys": "./keys.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",
@@ -29,7 +30,8 @@
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
     "better-auth": "^1.6.11",
-    "stripe": "^22"
+    "stripe": "^22",
+    "zod": "^3"
   },
   "peerDependencies": {
     "next": ">=15"

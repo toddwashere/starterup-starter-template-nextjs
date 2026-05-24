@@ -14,6 +14,9 @@ import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-ema
 import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
 import { createBetterAuthId } from "./better-auth-id";
 import { enqueueWelcomeEmail } from "./welcome-email-hook";
+import { keys as authKeys } from "../keys";
+
+const { BETTER_AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID } = authKeys();
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -91,17 +94,17 @@ export const auth = betterAuth({
     },
   },
   socialProviders: {
-    ...(process.env.GOOGLE_CLIENT_ID && {
+    ...(GOOGLE_CLIENT_ID && {
       google: {
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        clientId: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET!,
       },
     }),
-    ...(process.env.MICROSOFT_CLIENT_ID && {
+    ...(MICROSOFT_CLIENT_ID && {
       microsoft: {
-        clientId: process.env.MICROSOFT_CLIENT_ID,
-        clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-        tenantId: process.env.MICROSOFT_TENANT_ID || "common",
+        clientId: MICROSOFT_CLIENT_ID,
+        clientSecret: MICROSOFT_CLIENT_SECRET!,
+        tenantId: MICROSOFT_TENANT_ID,
       },
     }),
   },
@@ -124,12 +127,11 @@ export const auth = betterAuth({
         member: permissions.member,
       },
       async sendInvitationEmail(data) {
-        const baseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
         await sendInvitationEmail({
           recipient: data.email,
           organizationName: data.organization.name,
           inviterName: data.inviter.user.name,
-          acceptUrl: `${baseUrl}/accept-invitation/${data.id}`,
+          acceptUrl: `${BETTER_AUTH_URL}/accept-invitation/${data.id}`,
         });
       },
     }),
