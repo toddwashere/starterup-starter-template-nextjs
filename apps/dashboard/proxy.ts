@@ -15,7 +15,7 @@ const publicPaths = [
 
 const authPaths = ["/sign-in", "/sign-up"];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
