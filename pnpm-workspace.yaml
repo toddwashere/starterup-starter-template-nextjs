@@ -11,6 +11,8 @@ blockExoticSubdeps: true # Disallow transitive deps from git/tarball URLs; regis
 allowBuilds:
   '@prisma/engines': true
   '@sentry/cli': true
+  core-js: set this to true or false
   esbuild: true
   prisma: true
+  protobufjs: set this to true or false
   sharp: true
