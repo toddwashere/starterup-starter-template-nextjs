@@ -11,9 +11,18 @@ config({ path: path.join(root, ".env.example"), override: true });
 type Validator = { name: string; validate: () => Promise<unknown> };
 
 const validators: Validator[] = [
+  { name: "@workspace/database", validate: async () => (await import("../packages/database/keys.ts")).keys() },
+  { name: "@workspace/auth", validate: async () => (await import("../packages/auth/keys.ts")).keys() },
+  { name: "@workspace/billing", validate: async () => (await import("../packages/billing/keys.ts")).keys() },
   { name: "@workspace/worker-queue", validate: async () => (await import("../packages/worker-queue/keys.ts")).keys() },
   { name: "@workspace/ai", validate: async () => (await import("../packages/ai/keys.ts")).keys() },
   { name: "@workspace/email", validate: async () => (await import("../packages/email/keys.ts")).keys() },
+  { name: "apps/dashboard", validate: async () => (await import("../apps/dashboard/keys.ts")).keys() },
+  { name: "apps/www", validate: async () => (await import("../apps/www/keys.ts")).keys() },
+  { name: "apps/public-api", validate: async () => (await import("../apps/public-api/keys.ts")).keys() },
+  { name: "apps/public-mcp", validate: async () => (await import("../apps/public-mcp/keys.ts")).keys() },
+  { name: "apps/workers", validate: async () => (await import("../apps/workers/keys.ts")).keys() },
+  { name: "apps/email-preview", validate: async () => (await import("../apps/email-preview/keys.ts")).keys() },
 ];
 
 let failed = false;

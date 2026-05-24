@@ -2,8 +2,8 @@
   "extends": "@workspace/tooling/typescript/base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "jsx": "react-jsx"
   },
-  "include": ["src"]
+  "include": ["src", "keys.ts"]
 }

@@ -18,7 +18,8 @@
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
     "ai": "^6.0.191",
-    "tsx": "^4"
+    "tsx": "^4",
+    "zod": "^3"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -5,11 +5,13 @@ import { Button } from "@workspace/ui/components/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { getPublicMcpEndpoint } from "@workspace/common/env/public-mcp";
 
+import { keys } from "../../../keys";
+
 type Props = {
   keyPrefix: string;
 };
 
-const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4002";
+const PUBLIC_API_URL = keys().NEXT_PUBLIC_API_URL;
 const MCP_ENDPOINT = getPublicMcpEndpoint();
 
 export function ApiKeyConnectSnippets({ keyPrefix }: Props) {

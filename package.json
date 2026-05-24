@@ -13,7 +13,8 @@
     "eval:ai": "echo '⚠️  LIVE LLM CALLS — uses API tokens. Cached reruns are free. See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/assistant-chat/promptfooconfig.yaml",
     "eval:ai:view": "npx promptfoo@latest view",
     "eval:ai:live": "echo '⚠️  LIVE LLM CALLS — bypassing cache (--no-cache). See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/assistant-chat/promptfooconfig.yaml --no-cache",
-    "validate:env": "tsx scripts/validate-env.mts"
+    "validate:env": "tsx scripts/validate-env.mts",
+    "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
     "dotenv": "^16",
@@ -21,7 +22,9 @@
     "prettier": "^3.4",
     "tsx": "^4",
     "turbo": "^2.4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^3",
+    "zod": "^3"
   },
   "packageManager": "pnpm@11.1.3"
 }

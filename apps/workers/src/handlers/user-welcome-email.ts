@@ -1,6 +1,7 @@
 import { prisma } from "@workspace/database";
 import { sendWelcomeEmail } from "@workspace/email/send-welcome-email";
 
+import { keys } from "../../keys";
 import type { JobHandler } from "../registry";
 
 /**
@@ -23,8 +24,7 @@ export const handleUserWelcomeEmail: JobHandler<"user.welcome-email"> = async (
     return;
   }
 
-  const getStartedUrl =
-    process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "http://localhost:4000";
+  const getStartedUrl = keys().DASHBOARD_URL;
   await sendWelcomeEmail({
     recipient: user.email,
     name: user.name,

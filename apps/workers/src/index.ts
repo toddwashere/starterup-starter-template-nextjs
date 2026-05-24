@@ -1,18 +1,20 @@
 import { createPgmqAdapter } from "@workspace/worker-queue";
-import { keys } from "@workspace/worker-queue/keys";
+import { keys as queueKeys } from "@workspace/worker-queue/keys";
 
 import { startConsumer, type ConsumerConfig } from "./consumer";
 import { handlers } from "./handlers";
 import { startHealthServer } from "./health";
+import { keys as workerKeys } from "../keys";
 
-const healthPort = Number(process.env.WORKER_HEALTH_PORT ?? 4300);
+const { WORKER_HEALTH_PORT, WORKER_MAX_ATTEMPTS, WORKER_POLL_INTERVAL_MS } =
+  workerKeys();
 const config: ConsumerConfig = {
-  queue: keys().PGMQ_QUEUE_NAME,
-  maxAttempts: Number(process.env.WORKER_MAX_ATTEMPTS ?? 5),
-  pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 1000),
+  queue: queueKeys().PGMQ_QUEUE_NAME,
+  maxAttempts: WORKER_MAX_ATTEMPTS,
+  pollIntervalMs: WORKER_POLL_INTERVAL_MS,
 };
 
-const healthServer = startHealthServer(healthPort);
+const healthServer = startHealthServer(WORKER_HEALTH_PORT);
 const adapter = createPgmqAdapter();
 const controller = new AbortController();
 
