@@ -25,6 +25,8 @@ When the user wants to stress-test a plan, get grilled on their design, mentions
 
 When adding a modal, dialog, confirm dialog, alert dialog, drawer, or any overlay triggered by a user action, read `.ai/skills/add-modal-or-confirm-dialog/SKILL.md` before making changes.
 
+When adding a paginated list/table, bulk row selection, bulk export, or "add selected to …" flows to a dashboard list, read `.ai/skills/create-data-table/SKILL.md` before making changes.
+
 When adding or editing LLM instruction files (rules, skills, conventions), read `.ai/conventions/ai-guidance-files.md` before making changes.
 
 When creating or updating implementation plans (`docs/superpowers/plans/`) or design specs (`docs/superpowers/specs/`), read `.ai/conventions/critical-tests-in-plans.md` first. Copy from `docs/superpowers/plans/_template.md` or `docs/superpowers/specs/_template.md` when starting a new doc. Every plan and spec **must** include a `## Critical Tests` section (high-value unit tests, colocated paths) before task breakdown — a doc without it is incomplete.

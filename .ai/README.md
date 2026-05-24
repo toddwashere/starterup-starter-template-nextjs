@@ -13,6 +13,7 @@ Entry points for agents: [../AGENTS.md](../AGENTS.md) and [`.cursor/rules/shared
 - [`skills/add-modal-or-confirm-dialog/SKILL.md`](./skills/add-modal-or-confirm-dialog/SKILL.md) - Modals, confirm dialogs, and overlay UI using NiceModal.
 - [`skills/add-new-app/SKILL.md`](./skills/add-new-app/SKILL.md) - Add a runnable app under `apps/` (ports, Turborepo, package setup).
 - [`skills/add-new-page/SKILL.md`](./skills/add-new-page/SKILL.md) - Sparse routes and feature folders for dashboard and www pages.
+- [`skills/create-data-table/SKILL.md`](./skills/create-data-table/SKILL.md) - Paginated data tables with mobile card lists, cross-page selection, and bulk actions.
 - [`skills/create-skill/SKILL.md`](./skills/create-skill/SKILL.md) - Create project-level skills (canonical `.ai/` + tool wrappers).
 - [`skills/grill-me-matt/SKILL.md`](./skills/grill-me-matt/SKILL.md) - Stress-test a plan or design via relentless one-at-a-time questioning until shared understanding.
 
