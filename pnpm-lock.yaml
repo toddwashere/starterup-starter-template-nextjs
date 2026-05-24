@@ -8,12 +8,18 @@ importers:
 
   .:
     devDependencies:
+      dotenv:
+        specifier: ^16
+        version: 16.6.1
       dotenv-cli:
         specifier: ^11.0.0
         version: 11.0.0
       prettier:
         specifier: ^3.4
         version: 3.8.3
+      tsx:
+        specifier: ^4
+        version: 4.21.0
       turbo:
         specifier: ^2.4
         version: 2.9.9
