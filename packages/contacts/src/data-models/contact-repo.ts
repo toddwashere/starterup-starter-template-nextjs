@@ -3,21 +3,18 @@ import type { Prisma } from "@workspace/database";
 import { createId } from "@workspace/common";
 import type { CreateContactInput, UpdateContactInput, ContactListFilters } from "../schemas/contact-schemas";
 
-export async function listContactsForOrg(
+export const contactListInclude = {
+  stage: true,
+  tags: { include: { tag: true } },
+} as const;
+
+export function buildContactListWhere(
   organizationId: string,
   filters: Partial<ContactListFilters> = {},
-) {
-  const {
-    search,
-    kind,
-    stageId,
-    tagIds,
-    includeArchived = false,
-    page = 1,
-    pageSize = 20,
-  } = filters;
+): Prisma.ContactWhereInput {
+  const { search, kind, stageId, tagIds, includeArchived = false } = filters;
 
-  const where: Prisma.ContactWhereInput = {
+  return {
     organizationId,
     ...(kind ? { kind } : {}),
     ...(stageId ? { stageId } : {}),
@@ -35,16 +32,46 @@ export async function listContactsForOrg(
         }
       : {}),
   };
+}
+
+export async function listContactsForOrg(
+  organizationId: string,
+  filters: Partial<ContactListFilters> = {},
+) {
+  const { page = 1, pageSize = 20 } = filters;
+  const where = buildContactListWhere(organizationId, filters);
 
   return prisma.contact.findMany({
     where,
-    include: {
-      stage: true,
-      tags: { include: { tag: true } },
-    },
+    include: contactListInclude,
     orderBy: { displayName: "asc" },
     take: pageSize,
     skip: (page - 1) * pageSize,
+  });
+}
+
+export async function countContactsMatchingListFilters(
+  organizationId: string,
+  filters: Partial<ContactListFilters> = {},
+): Promise<number> {
+  return prisma.contact.count({
+    where: buildContactListWhere(organizationId, filters),
+  });
+}
+
+export async function listContactsByIds(organizationId: string, contactIds: string[]) {
+  if (contactIds.length === 0) {
+    return [];
+  }
+
+  return prisma.contact.findMany({
+    where: {
+      organizationId,
+      id: { in: contactIds },
+      archivedAt: null,
+    },
+    include: contactListInclude,
+    orderBy: { displayName: "asc" },
   });
 }
 

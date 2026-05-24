@@ -30,7 +30,7 @@ export const ContactListFiltersSchema = z.object({
   tagIds: z.array(z.string()).optional(),
   includeArchived: z.boolean().default(false),
   page: z.number().int().positive().default(1),
-  pageSize: z.number().int().positive().max(100).default(20),
+  pageSize: z.number().int().positive().max(1000).default(20),
 });
 
 export type CreateContactInput = z.infer<typeof CreateContactSchema>;

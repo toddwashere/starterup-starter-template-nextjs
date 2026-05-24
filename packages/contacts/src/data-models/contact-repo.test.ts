@@ -21,6 +21,9 @@ import {
   archiveContact,
   unarchiveContact,
   countContactsForOrg,
+  buildContactListWhere,
+  countContactsMatchingListFilters,
+  listContactsByIds,
 } from "./contact-repo";
 
 const mockContact = {
@@ -169,5 +172,50 @@ describe("countContactsForOrg", () => {
       where: { organizationId: "org_1", archivedAt: null },
     });
     expect(result).toBe(7);
+  });
+});
+
+describe("buildContactListWhere", () => {
+  it("scopes to org and excludes archived by default", () => {
+    expect(buildContactListWhere("org_1", {})).toEqual({
+      organizationId: "org_1",
+      archivedAt: null,
+    });
+  });
+
+  it("uses OR-any-tag semantics for tagIds", () => {
+    const where = buildContactListWhere("org_1", { tagIds: ["t1", "t2"] });
+    expect(where).toMatchObject({
+      tags: { some: { tagId: { in: ["t1", "t2"] } } },
+    });
+  });
+});
+
+describe("countContactsMatchingListFilters", () => {
+  it("counts using the same where clause as the list query", async () => {
+    vi.mocked(prisma.contact.count).mockResolvedValue(3 as never);
+    await countContactsMatchingListFilters("org_1", { search: "ann", stageId: "stage_1" });
+    const countWhere = vi.mocked(prisma.contact.count).mock.calls[0]?.[0]?.where;
+    expect(countWhere).toEqual(
+      buildContactListWhere("org_1", { search: "ann", stageId: "stage_1" }),
+    );
+  });
+});
+
+describe("listContactsByIds", () => {
+  it("scopes to organizationId and excludes archived", async () => {
+    vi.mocked(prisma.contact.findMany).mockResolvedValue([] as never);
+    await listContactsByIds("org_1", ["c1", "c2"]);
+    expect(prisma.contact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: "org_1", id: { in: ["c1", "c2"] }, archivedAt: null },
+      }),
+    );
+  });
+
+  it("returns [] without querying when no ids are given", async () => {
+    const result = await listContactsByIds("org_1", []);
+    expect(result).toEqual([]);
+    expect(prisma.contact.findMany).not.toHaveBeenCalled();
   });
 });
