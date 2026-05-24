@@ -20,24 +20,22 @@ import {
   requireOrgPermissionWithActiveOrg,
 } from "./guards";
 import { auth } from "./auth";
+import { buildUser } from "@workspace/test-utils/factories";
 
 const mockGetSession = vi.mocked(auth.api.getSession);
 const mockHasPermission = vi.mocked(auth.api.hasPermission);
 
+const user = buildUser({ id: "u1", email: "test@example.com", name: "Test User" });
+
 const fakeSession = {
   user: {
-    id: "u1",
-    name: "Test User",
-    email: "test@example.com",
-    emailVerified: true,
+    ...user,
     role: "user" as string,
-    createdAt: new Date(),
-    updatedAt: new Date(),
   },
   session: {
     id: "s1",
     token: "tok_abc",
-    userId: "u1",
+    userId: user.id,
     expiresAt: new Date(Date.now() + 86400000),
     createdAt: new Date(),
     updatedAt: new Date(),
