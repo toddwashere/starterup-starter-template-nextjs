@@ -6,6 +6,7 @@ import {
   createContactSegment,
   deleteContactSegment,
   listContactsForSegment,
+  addContactsToSegment,
 } from "@workspace/contacts";
 import type { CreateContactSegmentInput } from "@workspace/contacts";
 import type { ActionResult } from "@/common/data/action-result";
@@ -66,5 +67,36 @@ export async function listContactsForSegmentAction(
     return { success: true, data };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Failed to load segment contacts" };
+  }
+}
+
+const MAX_SEGMENT_ADD_IDS = 1000;
+
+export async function addContactsToSegmentAction(
+  segmentId: string,
+  contactIds: string[],
+): Promise<ActionResult<{ addedCount: number; totalExplicitIds: number }>> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      contactSettings: ["update"],
+    });
+
+    if (contactIds.length === 0) {
+      return { success: false, error: "No contacts selected" };
+    }
+    if (contactIds.length > MAX_SEGMENT_ADD_IDS) {
+      return {
+        success: false,
+        error: `Cannot add more than ${MAX_SEGMENT_ADD_IDS} contacts at once`,
+      };
+    }
+
+    const data = await addContactsToSegment(activeOrganizationId, segmentId, contactIds);
+    return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to add contacts to segment",
+    };
   }
 }
