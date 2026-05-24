@@ -1,15 +1,8 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import { createMockPrisma } from "@workspace/test-utils/prisma";
 
 vi.mock("@workspace/database", () => ({
-  prisma: {
-    contact: {
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      count: vi.fn(),
-    },
-  },
+  prisma: createMockPrisma(),
 }));
 
 import { prisma } from "@workspace/database";
@@ -25,26 +18,15 @@ import {
   countContactsMatchingListFilters,
   listContactsByIds,
 } from "./contact-repo";
+import { buildContact } from "@workspace/test-utils/factories";
 
 const mockContact = {
+  ...buildContact({ organizationId: "org_1" }),
   id: "contact_abc",
-  organizationId: "org_1",
-  kind: "person",
   displayName: "Jane Doe",
   firstName: "Jane",
   lastName: "Doe",
-  companyName: null,
   primaryEmail: "jane@example.com",
-  primaryPhone: null,
-  website: null,
-  parentContactId: null,
-  stageId: null,
-  ownerId: null,
-  source: null,
-  status: "active",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  archivedAt: null,
   stage: null,
   tags: [],
 };

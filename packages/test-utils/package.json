@@ -1,24 +1,21 @@
 {
-  "name": "@workspace/billing",
+  "name": "@workspace/test-utils",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./keys": "./keys.ts",
-    "./stripe-client": "./src/stripe-client.ts",
-    "./stripe-plugin-options": "./src/stripe-plugin-options.ts"
+    "./prisma": "./src/prisma/create-mock-prisma.ts",
+    "./factories": "./src/factories/index.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
-    "@workspace/common": "workspace:*",
-    "@workspace/database": "workspace:*",
-    "@workspace/email": "workspace:*",
-    "stripe": "^22",
-    "zod": "^3"
+    "@faker-js/faker": "^10",
+    "@workspace/common": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

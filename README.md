@@ -41,6 +41,26 @@ packages/
 tooling/            — ESLint, Prettier, Tailwind, TypeScript configs
 ```
 
+## CI
+
+GitHub Actions runs on every pull request and push to `main`:
+
+1. `pnpm validate:env` — validates `.env.example` against typed env schemas
+2. `pnpm lint` / `pnpm type-check` — static checks
+3. `prisma migrate deploy` against Postgres with **pgmq** and **pg_cron** (custom `docker/postgres` image)
+4. `pnpm test` / `pnpm build`
+
+**Local simulation:**
+
+```bash
+pnpm validate:env && pnpm lint && pnpm type-check && pnpm test && pnpm build
+docker compose up -d postgres
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev \
+  pnpm --filter @workspace/database exec prisma migrate deploy
+```
+
+**Branch protection (recommended):** Require the `CI` / `Lint, test, build` check before merging to `main`.
+
 ## Billing (Stripe)
 
 Organization-scoped subscriptions are powered by the [`@better-auth/stripe`](https://better-auth.com/docs/plugins/stripe) plugin. Plan definitions live in the database (`BillingPlan`, seeded with `free`/`pro`/`team`); entitlements are enforced in `packages/billing`. See the [design spec](docs/superpowers/specs/2026-05-23-stripe-billing-design.md).

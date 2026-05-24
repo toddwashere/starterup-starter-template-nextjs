@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { keys } from "../keys";
 import { loadPlansForStripePlugin } from "./plans/load-plans-for-stripe-plugin";
 import { authorizeOrgBilling } from "./authorize-org-billing";
 import {
@@ -20,7 +21,7 @@ import { onStripeEvent } from "./hooks/on-stripe-event";
 export function stripePluginOptions(stripeClient: Stripe) {
   return {
     stripeClient,
-    stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+    stripeWebhookSecret: keys().STRIPE_WEBHOOK_SECRET,
     createCustomerOnSignUp: false,
     organization: { enabled: true as const },
     subscription: {
