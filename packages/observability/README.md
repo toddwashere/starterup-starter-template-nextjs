@@ -1,10 +1,14 @@
 # @workspace/observability
 
-Centralizes Sentry error monitoring for all apps in this monorepo. A single
-optional env var, `SENTRY_DSN`, gates everything — when unset the entire
-package no-ops (no SDK init, all capture helpers return immediately). V1 is
-**errors only**; tracing, session replay, and log ingestion are pre-configured
-but not yet wired.
+Centralizes **Sentry** error monitoring and **PostHog** product analytics for all
+apps in this monorepo. Each integration is gated by its own optional env vars —
+when unset the entire integration no-ops (no SDK init, all helpers return
+immediately).
+
+- **Sentry v1:** errors only; tracing, session replay, and log ingestion are
+  pre-configured but not yet wired.
+- **PostHog v1:** analytics only (autocapture + pageviews + custom `capture()`);
+  feature flags and session replay are pre-configured but disabled.
 
 ---
 
@@ -18,12 +22,15 @@ but not yet wired.
 | `@workspace/observability/next`              | `initClientSentry`, `initServerSentry`, `initEdgeSentry`, `withSentryConfig` — Next.js wiring. **No JSX.**                                                                                                  |
 | `@workspace/observability/next/global-error` | `createGlobalError(appId)` — returns a React component for `app/global-error.tsx`. Separate entry to keep `./next` free of JSX so it can be safely imported from `next.config.ts` (CJS evaluation context). |
 | `@workspace/observability/node`              | `initNodeObservability(appId)` — Node.js (non-Next) init via `@sentry/node`.                                                                                                                                |
+| `@workspace/observability/posthog-config`    | `posthogApps` registry + `resolvePostHogConfig(appId)` — per-app PostHog toggles.                                                                                                                           |
+| `@workspace/observability/posthog`           | `initClientPostHog`, `capture`, `identify`, `reset` — browser init + no-op-safe analytics helpers.                                                                                                           |
+| `@workspace/observability/posthog/node`      | `initNodePostHog(appId)` — Node.js (non-Next) init via `posthog-node`. Built, unwired in v1.                                                                                                               |
 
 ---
 
-## Configuration
+## Sentry configuration
 
-All per-app settings live in `src/sentry-config.ts`.
+All per-app Sentry settings live in `src/sentry-config.ts`.
 
 ```ts
 // src/sentry-config.ts
@@ -47,7 +54,52 @@ When it returns `null` every init function exits early — nothing is registered
 
 ---
 
-## V1 scope: errors only
+## PostHog configuration
+
+All per-app PostHog settings live in `src/posthog-config.ts`.
+
+```ts
+// src/posthog-config.ts
+export const posthogApps: Record<PostHogAppId, PostHogAppConfig> = {
+  dashboard: { enabled: true, analytics: true, featureFlags: false, sessionReplay: false, ... },
+  www:       { enabled: true, analytics: true, featureFlags: false, sessionReplay: false, ... },
+  "public-api": { enabled: false, ... },
+  workers:      { enabled: false, ... },
+  "public-mcp": { enabled: false, ... },
+};
+```
+
+`PostHogAppId` uses the same app id union as Sentry.
+
+Env vars (see `.env.example`):
+
+- `NEXT_PUBLIC_POSTHOG_TOKEN` — project API key; when unset/empty the whole PostHog integration no-ops.
+- `NEXT_PUBLIC_POSTHOG_HOST` — optional; defaults to `https://us.i.posthog.com`.
+
+`resolvePostHogConfig(appId)` returns `null` when:
+
+- `NEXT_PUBLIC_POSTHOG_TOKEN` is unset, **or**
+- the app's `enabled` flag is `false`.
+
+---
+
+## PostHog v1 scope: analytics only
+
+v1 wires **autocapture**, **pageviews**, and the manual `capture()` / `identify()` /
+`reset()` helpers. `featureFlags` and `sessionReplay` are `false` for all apps;
+`initClientPostHog` sets `advanced_disable_feature_flags: true` and
+`disable_session_recording: true` accordingly.
+
+Enabling feature flags or session replay later requires **two steps**:
+
+1. Set `featureFlags: true` and/or `sessionReplay: true` in `posthogApps` inside
+   `posthog-config.ts`.
+2. Update `buildInitOptions` in `src/posthog/init.ts` if additional SDK options
+   are needed (e.g. remove `advanced_disable_feature_flags` when enabling flags).
+
+---
+
+## Sentry v1 scope: errors only
 
 `src/next/init.ts` and `src/node/init.ts` both hardcode `integrations: []` and
 omit `tracesSampleRate`. The `tracing`, `logs`, and `replay` flags in
@@ -65,9 +117,9 @@ Enabling a product requires **two steps**:
 
 ---
 
-## Wiring a Next.js app
+## Wiring a Next.js app (Sentry)
 
-`dashboard` and `www` are already wired. Follow these steps for a new app:
+`dashboard` and `www` are already wired for Sentry. Follow these steps for a new app:
 
 ### 1. Dependencies
 
@@ -150,7 +202,29 @@ already declared in `turbo.json` `globalEnv` — no extra changes needed.
 
 ---
 
-## Wiring a Node (non-Next) app
+## Wiring a Next.js app (PostHog)
+
+`dashboard` and `www` are already wired for PostHog. Add to
+`instrumentation-client.ts` alongside Sentry init:
+
+```ts
+import { initClientPostHog } from "@workspace/observability/posthog";
+
+initClientPostHog("my-app");
+```
+
+No extra app dependency is needed — `posthog-js` lives in `@workspace/observability`.
+
+For authenticated apps, mount a user-sync component that calls `identify()` on
+login and `reset()` on logout (see `apps/dashboard/features/observability/ui/posthog-user-sync.tsx`).
+Anonymous apps (e.g. `www`) skip user sync.
+
+Declare `NEXT_PUBLIC_POSTHOG_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST` in
+`turbo.json` `globalEnv` if not already present.
+
+---
+
+## Wiring a Node (non-Next) app (Sentry)
 
 Call `initNodeObservability` at process startup and enable the app in
 `sentry-config.ts`:
@@ -163,6 +237,23 @@ initNodeObservability("workers");
 ```
 
 Also set `enabled: true` for `"workers"` in `sentryApps`. Built and type-safe
+in v1 but not yet wired.
+
+---
+
+## Wiring a Node (non-Next) app (PostHog)
+
+Call `initNodePostHog` at process startup and enable the app in
+`posthog-config.ts`:
+
+```ts
+// apps/workers/src/index.ts
+import { initNodePostHog } from "@workspace/observability/posthog/node";
+
+initNodePostHog("workers");
+```
+
+Also set `enabled: true` for `"workers"` in `posthogApps`. Built and type-safe
 in v1 but not yet wired.
 
 ---
@@ -185,22 +276,39 @@ code.
 
 ---
 
+## PostHog manual capture
+
+Import `@workspace/observability/posthog` in client code:
+
+```ts
+import { capture, identify, reset } from "@workspace/observability/posthog";
+
+// All three are no-ops when NEXT_PUBLIC_POSTHOG_TOKEN is unset — safe to call unconditionally.
+capture("button_clicked", { plan: "pro" });
+identify(user.id, { email: user.email });
+reset();
+```
+
+---
+
 ## Relationship to Langfuse
 
-Sentry (app errors) and Langfuse (LLM tracing, via `@workspace/ai` and
-`LANGFUSE_*` env vars) are entirely separate and independent in v1. There is
-no shared context between them.
+Sentry (app errors), PostHog (product analytics), and Langfuse (LLM tracing,
+via `@workspace/ai` and `LANGFUSE_*` env vars) are entirely separate and
+independent in v1. There is no shared context between them.
 
 ---
 
 ## Follow-ups
 
-- **Enable tracing / logs / replay per app** — requires both config flag + init
-  integration change (see [V1 scope: errors only](#v1-scope-errors-only)).
-- **Wire node apps** — `initNodeObservability` is ready; set `enabled: true` in
-  `sentryApps`.
+- **Enable Sentry tracing / logs / replay per app** — requires both config flag + init
+  integration change (see [Sentry v1 scope: errors only](#sentry-v1-scope-errors-only)).
+- **Enable PostHog feature flags / session replay** — flip flags in
+  `posthog-config.ts` and update `src/posthog/init.ts` as needed.
+- **Wire node apps** — `initNodeObservability` and `initNodePostHog` are ready;
+  set `enabled: true` in the respective config registries.
+- **PostHog reverse proxy** — ad-blocker bypass via Next.js rewrites (out of v1 scope).
 - **Source map upload in CI** — requires `SENTRY_AUTH_TOKEN` (a separate build-time
   token, distinct from the runtime `SENTRY_DSN`). Configure in CI and pass to
   `withSentryConfig`.
-- **PostHog integration** — not yet implemented.
 - **Link Langfuse trace IDs to Sentry error context** — not yet implemented.
