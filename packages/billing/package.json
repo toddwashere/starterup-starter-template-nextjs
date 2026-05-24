@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./keys": "./keys.ts",
     "./stripe-client": "./src/stripe-client.ts",
     "./stripe-plugin-options": "./src/stripe-plugin-options.ts"
   },
