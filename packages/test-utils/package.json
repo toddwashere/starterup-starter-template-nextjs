@@ -18,6 +18,7 @@
     "@workspace/common": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",
     "vitest": "^3"

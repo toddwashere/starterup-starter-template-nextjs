@@ -1,36 +1,40 @@
 import { vi } from "vitest";
 
-const DEFAULT_METHODS = [
-  "findMany",
-  "findFirst",
-  "findUnique",
-  "create",
-  "update",
-  "delete",
-  "count",
-  "upsert",
-] as const;
-
 type MockFn = ReturnType<typeof vi.fn>;
 
-function createModelDelegate(
-  overrides: Record<string, MockFn> = {},
-): Record<string, MockFn> {
-  const delegate: Record<string, MockFn> = {};
-  for (const method of DEFAULT_METHODS) {
-    delegate[method] = overrides[method] ?? vi.fn();
-  }
-  for (const [key, fn] of Object.entries(overrides)) {
-    delegate[key] = fn;
-  }
-  return delegate;
+type ModelDelegate = {
+  findMany: MockFn;
+  findFirst: MockFn;
+  findUnique: MockFn;
+  create: MockFn;
+  update: MockFn;
+  delete: MockFn;
+  count: MockFn;
+  upsert: MockFn;
+  [key: string]: MockFn;
+};
+
+type ModelOverrides = Partial<Record<keyof ModelDelegate, MockFn>>;
+
+function createModelDelegate(overrides: ModelOverrides = {}): ModelDelegate {
+  return {
+    findMany: overrides["findMany"] ?? vi.fn(),
+    findFirst: overrides["findFirst"] ?? vi.fn(),
+    findUnique: overrides["findUnique"] ?? vi.fn(),
+    create: overrides["create"] ?? vi.fn(),
+    update: overrides["update"] ?? vi.fn(),
+    delete: overrides["delete"] ?? vi.fn(),
+    count: overrides["count"] ?? vi.fn(),
+    upsert: overrides["upsert"] ?? vi.fn(),
+    ...overrides,
+  };
 }
 
 export type MockPrismaOverrides = {
-  contact?: Partial<Record<string, MockFn>>;
-  user?: Partial<Record<string, MockFn>>;
-  organization?: Partial<Record<string, MockFn>>;
-  member?: Partial<Record<string, MockFn>>;
+  contact?: ModelOverrides;
+  user?: ModelOverrides;
+  organization?: ModelOverrides;
+  member?: ModelOverrides;
 };
 
 export function createMockPrisma(overrides: MockPrismaOverrides = {}) {
