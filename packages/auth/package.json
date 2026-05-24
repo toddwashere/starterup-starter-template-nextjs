@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@types/react": "^19",
+    "@workspace/test-utils": "workspace:*",
     "@workspace/tooling": "workspace:*",
     "next": "^16",
     "react": "^19",
