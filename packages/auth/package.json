@@ -12,7 +12,8 @@
     "./constants": "./src/constants.ts",
     "./types": "./src/types.ts",
     "./api-keys": "./src/api-keys/index.ts",
-    "./api-keys/permissions": "./src/api-keys/permissions.ts"
+    "./api-keys/permissions": "./src/api-keys/permissions.ts",
+    "./oauth-auth-server-metadata": "./src/oauth-auth-server-metadata.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",

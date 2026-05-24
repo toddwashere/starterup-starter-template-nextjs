@@ -21,8 +21,11 @@ src/
     ask-ai.ts                     validate → render → log → stream/generate
     get-model.ts, resolve-*.ts, get-generation-params.ts, log-ai-call.ts,
     telemetry.ts, run-agent.ts, provider-configured.ts, list-available-ai-models.ts
+  data-models/                    domain-owned Prisma repos (shared across AI calls)
+    ai-thread-repo.ts             AiThread CRUD + org/user scoping
+    ai-message-repo.ts            AiMessage CRUD + thread ownership checks
   ai-calls/
-    assistant-chat/               prompt.md, assistant-chat.ts, persistence.ts, schemas.ts
+    assistant-chat/               prompt.md, assistant-chat.ts, schemas.ts
     worker-example/               prompt.md, worker-example.ts
     index.ts                      AI_CALLS registry
 ```
@@ -79,7 +82,8 @@ before the model is constructed.
 - **`@workspace/ai/list-available-ai-models`** *(server)* — filter the catalog by configured keys
 - **`@workspace/ai/resolve-provider-model`** *(server)* — validate a value before `getModel()`
 - **`@workspace/ai/ai-calls/assistant-chat`** — `askAssistantChat`, `call`, `variables`
-- **`@workspace/ai/ai-calls/assistant-chat/persistence`** *(server, Prisma)* — thread/message repos
+- **`@workspace/ai/data-models/ai-thread-repo`** *(server, Prisma)* — `AiThread` repository
+- **`@workspace/ai/data-models/ai-message-repo`** *(server, Prisma)* — `AiMessage` repository
 - **`@workspace/ai/ai-calls/assistant-chat/schemas`** — feedback Zod schemas
 - **`@workspace/ai/ai-calls/worker-example`** — `runWorkerExample`, `call`
 
@@ -107,7 +111,7 @@ included in telemetry metadata.
 ## Testing
 
 - **Vitest** (CI, no API keys): per-call render + contract tests, platform unit
-  tests, and migrated persistence repo tests. Run `pnpm test --filter @workspace/ai`.
+  tests, and colocated data-model repo tests. Run `pnpm test --filter @workspace/ai`.
 - **promptfoo** (optional API key): prompt-quality evals per call under
   `evals/promptfoo/<call>/`, pointing at the source `prompt.md`. Run `pnpm eval:ai`.
 
