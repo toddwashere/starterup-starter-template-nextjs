@@ -1,0 +1,24 @@
+description: "assistant-chat prompt evals"
+
+# Points at the SOURCE prompt.md (no duplicate copy). promptfoo renders vars with
+# Nunjucks; this prompt uses only plain {{placeholders}} ({{orgName}}, {{toolSummary}}),
+# which render identically under the app's Mustache and promptfoo's Nunjucks.
+prompts:
+  - id: assistant-chat-system
+    file: file://../../../packages/ai/src/ai-calls/assistant-chat/prompt.md
+    suffix: "\n\nUser: {{question}}"
+
+# Default variable values used to render the prompt for every test case.
+defaultTest:
+  vars:
+    orgName: "Acme Corp"
+    toolSummary: "Available tools:\n- account-info: Returns account info."
+
+providers:
+  - id: openrouter:anthropic/claude-sonnet-4
+
+# Alternative provider (uncomment if OPENROUTER_API_KEY not available):
+# providers:
+#  - id: openai:gpt-4o-mini
+
+tests: file://tests/golden.yaml

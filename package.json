@@ -10,7 +10,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "clean": "turbo run clean",
-    "eval:ai": "dotenv -- npx promptfoo@latest eval -c evals/promptfoo/promptfooconfig.yaml"
+    "eval:ai": "dotenv -- npx promptfoo@latest eval -c evals/promptfoo/assistant-chat/promptfooconfig.yaml"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",
