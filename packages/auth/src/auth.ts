@@ -19,6 +19,7 @@ import { keys as authKeys } from "../keys";
 const { BETTER_AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID } = authKeys();
 
 export const auth = betterAuth({
+  baseURL: BETTER_AUTH_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   databaseHooks: {
     user: {
@@ -118,6 +119,7 @@ export const auth = betterAuth({
       // Better Auth docs warn this behavior may change as MCP standards settle.
       allowUnauthenticatedClientRegistration: true,
       scopes: ["account:read", "offline_access"],
+      silenceWarnings: { oauthAuthServerConfig: true },
     }),
     organization({
       ac,

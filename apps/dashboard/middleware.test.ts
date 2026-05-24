@@ -23,6 +23,13 @@ describe("middleware", () => {
     expect(res.status).not.toBe(307);
   });
 
+  it("passes through OAuth authorization server metadata without auth", () => {
+    const res = middleware(
+      buildRequest("/.well-known/oauth-authorization-server/api/auth"),
+    );
+    expect(res.status).not.toBe(307);
+  });
+
   it("redirects unauthenticated user on protected path to /sign-in", () => {
     const res = middleware(buildRequest("/create-org"));
     expect(res.status).toBe(307);
