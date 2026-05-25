@@ -39,4 +39,28 @@ describe("authorizeOrgBilling", () => {
     });
     expect(ok).toBe(false);
   });
+
+  it('allows "admin,member" CSV role', async () => {
+    vi.mocked(prisma.member.findFirst).mockResolvedValue({ role: "admin,member" } as never);
+    const ok = await authorizeOrgBilling({
+      user: { id: "user_4" }, referenceId: "org_1", action: "upgrade-subscription",
+    });
+    expect(ok).toBe(true);
+  });
+
+  it('allows "member,admin" CSV role (order-independent)', async () => {
+    vi.mocked(prisma.member.findFirst).mockResolvedValue({ role: "member,admin" } as never);
+    const ok = await authorizeOrgBilling({
+      user: { id: "user_5" }, referenceId: "org_1", action: "upgrade-subscription",
+    });
+    expect(ok).toBe(true);
+  });
+
+  it('allows "owner,member" CSV role', async () => {
+    vi.mocked(prisma.member.findFirst).mockResolvedValue({ role: "owner,member" } as never);
+    const ok = await authorizeOrgBilling({
+      user: { id: "user_6" }, referenceId: "org_1", action: "upgrade-subscription",
+    });
+    expect(ok).toBe(true);
+  });
 });
