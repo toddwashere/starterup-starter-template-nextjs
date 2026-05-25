@@ -51,6 +51,7 @@ export type DataTableProps<TData> = Omit<
   onRowClicked?: (row: Row<TData>) => void
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode
   getRowClassName?: (row: Row<TData>) => string | undefined
+  getRowTestId?: (row: Row<TData>, index: number) => string | undefined
   emptyState?: React.ReactNode
 }
 
@@ -67,6 +68,7 @@ function DataTable<TData>({
   onRowClicked,
   renderSubComponent,
   getRowClassName,
+  getRowTestId,
   emptyState = "No results.",
   className,
   ...props
@@ -100,10 +102,11 @@ function DataTable<TData>({
         </TableHeader>
         <TableBody>
           {rows.length > 0 ? (
-            rows.map((row) => (
+            rows.map((row, index) => (
               <React.Fragment key={row.id}>
                 <TableRow
                   data-row-id={row.id}
+                  data-testid={getRowTestId?.(row, index)}
                   data-state={row.getIsSelected() && "selected"}
                   tabIndex={onRowClicked ? 0 : undefined}
                   aria-label={onRowClicked ? `Open row ${row.id}` : undefined}
