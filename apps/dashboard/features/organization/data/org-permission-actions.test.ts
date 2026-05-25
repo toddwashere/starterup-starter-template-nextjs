@@ -5,7 +5,10 @@ vi.mock("@workspace/auth/org-permission-context", () => ({
 }));
 
 import { getOrgPermissionContext } from "@workspace/auth/org-permission-context";
-import { getApiKeyManageContextAction } from "./org-permission-actions";
+import {
+  getApiKeyManageContextAction,
+  getMemberManageContextAction,
+} from "./org-permission-actions";
 
 describe("getApiKeyManageContextAction", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -30,5 +33,34 @@ describe("getApiKeyManageContextAction", () => {
     expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { apiKey: ["read"] });
     expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { apiKey: ["create"] });
     expect(getOrgPermissionContext).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("getMemberManageContextAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("maps allowed -> canManage based on permission context result", async () => {
+    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: true });
+
+    const result = await getMemberManageContextAction("org_123");
+
+    expect(result).toEqual({ canManage: true });
+  });
+
+  it("maps allowed: false -> canManage: false", async () => {
+    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: false });
+
+    const result = await getMemberManageContextAction("org_123");
+
+    expect(result).toEqual({ canManage: false });
+  });
+
+  it("calls getOrgPermissionContext with { member: ['update'] } for the given orgId", async () => {
+    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: true });
+
+    await getMemberManageContextAction("org_abc");
+
+    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { member: ["update"] });
+    expect(getOrgPermissionContext).toHaveBeenCalledTimes(1);
   });
 });

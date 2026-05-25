@@ -10,3 +10,10 @@ export async function getApiKeyManageContextAction(
   ]);
   return { canRead: read.allowed, canCreate: create.allowed };
 }
+
+export async function getMemberManageContextAction(
+  organizationId: string,
+): Promise<{ canManage: boolean }> {
+  const ctx = await getOrgPermissionContext(organizationId, { member: ["update"] });
+  return { canManage: ctx.allowed };
+}

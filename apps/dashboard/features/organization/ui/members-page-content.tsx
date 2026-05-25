@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@workspace/auth/client";
 import {
   Avatar,
@@ -27,6 +28,7 @@ import {
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
+import { getMemberManageContextAction } from "../data/org-permission-actions";
 import { useCurrentOrg } from "./org-provider";
 import { InviteMemberDialog } from "./invite-member-dialog";
 import { PendingInvitations } from "./pending-invitations";
@@ -57,8 +59,8 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
     open: boolean;
     memberId: string;
     memberName: string;
-    currentRole: string;
-  }>({ open: false, memberId: "", memberName: "", currentRole: "" });
+    currentRoles: string[];
+  }>({ open: false, memberId: "", memberName: "", currentRoles: [] });
 
   const [removeDialog, setRemoveDialog] = useState<{
     open: boolean;
@@ -67,12 +69,18 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
   }>({ open: false, memberId: "", memberName: "" });
 
   const showSkeleton = isLoading || !organization;
-  const currentMember = showSkeleton
-    ? undefined
-    : members.find((m) => m.userId === session?.user?.id);
-  const currentUserRole = currentMember?.role ?? "member";
-  const canManageMembers =
-    currentUserRole === "owner" || currentUserRole === "admin";
+
+  const orgId = organization?.id;
+  const { data: manageCtx } = useQuery({
+    queryKey: ["member-manage-context", orgId],
+    queryFn: () => getMemberManageContextAction(orgId!),
+    enabled: !!orgId,
+  });
+  const canManageMembers = manageCtx?.canManage ?? false;
+
+  const ownerExistsElsewhere = members.some(
+    (m) => m.id !== roleDialog.memberId && m.roles.includes("owner"),
+  );
 
   return (
     <Page className="flex min-h-0 flex-1 flex-col">
@@ -116,7 +124,8 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
           <TableBody>
             {members.map((member) => {
               const isCurrentUser = member.userId === session?.user?.id;
-              const isOwner = member.role === "owner";
+              const isOwner = member.roles.includes("owner");
+              const memberRoles = member.roles.length > 0 ? member.roles : ["member"];
 
               return (
                 <TableRow key={member.id}>
@@ -147,9 +156,16 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={roleBadgeVariant[member.role] ?? "outline"}>
-                      {member.role}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {memberRoles.map((role) => (
+                        <Badge
+                          key={role}
+                          variant={roleBadgeVariant[role] ?? "outline"}
+                        >
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(member.createdAt).toLocaleDateString()}
@@ -171,7 +187,7 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
                                   open: true,
                                   memberId: member.id,
                                   memberName: member.user.name ?? "Member",
-                                  currentRole: member.role,
+                                  currentRoles: memberRoles,
                                 })
                               }
                             >
@@ -222,7 +238,8 @@ export function MembersPageContent({ orgSlug }: { orgSlug: string }) {
         }
         memberId={roleDialog.memberId}
         memberName={roleDialog.memberName}
-        currentRole={roleDialog.currentRole}
+        currentRoles={roleDialog.currentRoles}
+        ownerExistsElsewhere={ownerExistsElsewhere}
         organizationId={organization!.id}
         orgSlug={orgSlug}
       />
