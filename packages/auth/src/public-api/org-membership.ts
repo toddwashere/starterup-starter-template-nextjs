@@ -38,7 +38,7 @@ export async function listOrganizationsForUser(
     },
     orderBy: { organization: { name: "asc" } },
   });
-  return members.map((m) => ({
+  return members.map((m: (typeof members)[number]) => ({
     id: m.organization.id,
     name: m.organization.name,
     slug: m.organization.slug,

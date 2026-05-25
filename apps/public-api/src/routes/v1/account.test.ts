@@ -25,7 +25,7 @@ const mockCtx = {
 function buildApp() {
   const app = new OpenAPIHono<AppEnv>();
   app.use("/*", async (c, next) => {
-    c.set("apiKeyContext", mockCtx);
+    c.set("authContext", { kind: "api-key", ...mockCtx });
     await next();
   });
   registerAccountRoute(app);
@@ -56,11 +56,37 @@ describe("GET /v1/account", () => {
   it("returns 403 when account:read permission is missing", async () => {
     const app = new OpenAPIHono<AppEnv>();
     app.use("/*", async (c, next) => {
-      c.set("apiKeyContext", { ...mockCtx, permissions: {} });
+      c.set("authContext", { kind: "api-key", ...mockCtx, permissions: {} });
       await next();
     });
     registerAccountRoute(app);
     const res = await app.request("/v1/account");
     expect(res.status).toBe(403);
+  });
+
+  it("returns 401 when only Bearer oauth is provided", async () => {
+    const app = new OpenAPIHono<AppEnv>();
+    app.use("/*", async (c, next) => {
+      c.set("authContext", {
+        kind: "oauth",
+        userId: "user_1",
+        orgId: null,
+        scopes: ["account:read"],
+        clientId: null,
+      });
+      await next();
+    });
+    app.use("/*", async (c, next) => {
+      if (c.get("authContext").kind !== "api-key") {
+        return c.json(
+          { error: { code: "UNAUTHORIZED", message: "API key required" } },
+          401,
+        );
+      }
+      await next();
+    });
+    registerAccountRoute(app);
+    const res = await app.request("/v1/account");
+    expect(res.status).toBe(401);
   });
 });

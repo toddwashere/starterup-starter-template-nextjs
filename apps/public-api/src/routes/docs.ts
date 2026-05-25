@@ -10,6 +10,12 @@ export function registerDocs(app: OpenAPIHono<AppEnv>): void {
     name: "x-api-key",
   });
 
+  app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "JWT",
+  });
+
   app.doc("/openapi.json", {
     openapi: "3.1.0",
     info: { title: "Public API", version: "1.0.0" },

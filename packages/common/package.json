@@ -8,6 +8,7 @@
     "./create-id": "./src/create-id.ts",
     "./format-date": "./src/format-date.ts",
     "./env/public-mcp": "./src/env/public-mcp.ts",
+    "./env/public-api": "./src/env/public-api.ts",
     "./mcp/http-client": "./src/mcp/http-client.ts"
   },
   "scripts": {

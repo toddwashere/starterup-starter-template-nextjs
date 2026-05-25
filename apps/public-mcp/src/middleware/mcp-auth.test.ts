@@ -9,6 +9,10 @@ vi.mock("@workspace/auth/api-keys", () => ({
   },
 }));
 
+vi.mock("@workspace/auth/oauth/verify-access-token", () => ({
+  verifyOAuthAccessToken: vi.fn(),
+}));
+
 vi.mock("@workspace/auth", () => ({
   auth: {
     api: {
@@ -18,6 +22,7 @@ vi.mock("@workspace/auth", () => ({
 }));
 
 import { verifyApiKey, ApiKeyError } from "@workspace/auth/api-keys";
+import { verifyOAuthAccessToken } from "@workspace/auth/oauth/verify-access-token";
 import { auth } from "@workspace/auth";
 import { resolveMcpAuthContext, McpAuthError } from "./mcp-auth";
 import type { IncomingMessage } from "node:http";
@@ -47,7 +52,23 @@ describe("resolveMcpAuthContext", () => {
     expect(ctx.orgId).toBe("org_1");
   });
 
-  it("authenticates via Bearer session token", async () => {
+  it("authenticates via Bearer OAuth JWT", async () => {
+    vi.mocked(verifyOAuthAccessToken).mockResolvedValue({
+      userId: "user_oauth",
+      orgId: "org_oauth",
+      scopes: ["account:read"],
+      clientId: "client_1",
+    });
+
+    const ctx = await resolveMcpAuthContext(
+      makeReq({ authorization: "Bearer oauth_jwt" }),
+    );
+    expect(ctx.kind).toBe("oauth");
+    expect(ctx.userId).toBe("user_oauth");
+  });
+
+  it("authenticates via Bearer session token when OAuth verify fails", async () => {
+    vi.mocked(verifyOAuthAccessToken).mockResolvedValue(null);
     vi.mocked(auth.api.getSession).mockResolvedValue({
       user: { id: "user_1" },
       session: { activeOrganizationId: "org_2" },
@@ -82,6 +103,7 @@ describe("resolveMcpAuthContext", () => {
   });
 
   it("authenticates via Cookie header", async () => {
+    vi.mocked(verifyOAuthAccessToken).mockResolvedValue(null);
     vi.mocked(auth.api.getSession).mockResolvedValue({
       user: { id: "user_cookie" },
       session: { activeOrganizationId: null },
@@ -95,6 +117,7 @@ describe("resolveMcpAuthContext", () => {
   });
 
   it("throws McpAuthError when Cookie is present but session is invalid", async () => {
+    vi.mocked(verifyOAuthAccessToken).mockResolvedValue(null);
     vi.mocked(auth.api.getSession).mockResolvedValue(null);
 
     await expect(
