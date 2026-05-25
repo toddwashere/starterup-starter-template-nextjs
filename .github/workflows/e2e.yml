@@ -56,7 +56,7 @@ jobs:
 
       # Better Auth — origin must be localhost:4000 (signing in from any other
       # origin is rejected by Better Auth's CSRF checks).
-      BETTER_AUTH_SECRET: ci-e2e-better-auth-secret-change-me
+      BETTER_AUTH_SECRET: ci-e2e-3f9a1c7d8b2e4f6a0c5d9e1b3a7f2c4d6e8b0a2c
       BETTER_AUTH_URL: http://localhost:4000
       NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:4000
 
@@ -78,18 +78,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # -----------------------------------------------------------------------
-      # Turbo cache (speeds up the `pnpm --filter @apps/dashboard build` step)
-      # -----------------------------------------------------------------------
-      - name: Cache Turbo
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-${{ runner.os }}-
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
