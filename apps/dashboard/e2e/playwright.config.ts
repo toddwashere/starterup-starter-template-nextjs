@@ -25,6 +25,8 @@ export default defineConfig({
   retries: process.env.E2E_CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
+    // Must be "localhost" (not 127.0.0.1): Better Auth's BETTER_AUTH_URL is
+    // http://localhost:4000, and signing in from a different origin is rejected.
     baseURL: "http://localhost:4000",
     trace: process.env.E2E_CI ? "on-first-retry" : "off",
   },
