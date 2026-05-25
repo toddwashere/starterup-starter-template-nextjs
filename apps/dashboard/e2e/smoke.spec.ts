@@ -133,16 +133,16 @@ test.describe("authenticated", () => {
     await expect(page.getByRole("heading", { name }).first()).toBeVisible();
   });
 
-  // E8 (fallback for E4) — billing page renders its plan/pricing section
-  // without redirecting to Stripe.
-  //
-  // E4 (create an API key) was attempted but the org API-key create flow is
-  // broken on the server: `createOrgApiKeyAction` calls
-  // `auth.api.createApiKey({ body })` WITHOUT forwarding request `headers`
-  // (unlike every other Better Auth call in api-key-actions.ts), so the create
-  // throws a Server Components render error and the modal never reaches the
-  // "Done"/one-time-key state. That is an app-source bug (out of scope to fix),
-  // so per the task instructions we fall back to E8.
+  // Org API keys are owner/admin-only: a member must NOT see the "Create Key"
+  // button (clicking it would 403). Guards the permission-gating in the UI.
+  test("members do not see the org API-key Create button", async ({ page }) => {
+    await page.goto(`/${ORG_SLUG}/settings/api-keys`);
+    await expect(page.getByRole("heading", { name: "API Keys" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create Key" })).toHaveCount(0);
+  });
+
+  // E8 — billing page renders its plan/pricing section without redirecting to
+  // Stripe. A bonus smoke alongside the API-key test (E4, in the owner block).
   test("E8: billing page renders the plan section without a Stripe redirect", async ({
     page,
   }) => {
@@ -163,5 +163,46 @@ test.describe("authenticated", () => {
     await expect(page).toHaveURL(
       new RegExp(`/${ORG_SLUG}/settings/billing$`),
     );
+  });
+});
+
+/**
+ * E4 needs OWNER privileges: org API keys are owner/admin-only by design
+ * (members get a 403 — this is correct authorization, not a bug). The default
+ * storageState is the seed *member* (user@example.com), so sign in fresh as the
+ * seed owner (admin@example.com) for this journey.
+ */
+test.describe("owner", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // E4 — create an org API key and see it in the list.
+  test("E4: owner creates an org API key and sees it listed", async ({ page }) => {
+    await signIn(page, { email: "admin@example.com", password: "password123" });
+    await enterOrg(page, ORG_SLUG);
+
+    await page.goto(`/${ORG_SLUG}/settings/api-keys`);
+    await expect(page.getByRole("heading", { name: "API Keys" })).toBeVisible();
+
+    // Open the create modal (page-level button is unique before the modal opens).
+    await page.getByRole("button", { name: "Create Key" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: "Create API Key" }),
+    ).toBeVisible();
+
+    const keyName = `E2E Key ${Date.now()}`;
+    await dialog.getByLabel("Name").fill(keyName);
+    // Grant at least one permission so the key is meaningful.
+    await dialog.getByRole("checkbox").first().check();
+
+    // Submit via the dialog's own "Create Key" button.
+    await dialog.getByRole("button", { name: "Create Key" }).click();
+
+    // The one-time key is shown; finish the flow.
+    await expect(dialog.getByText(/won.t be shown again/i)).toBeVisible();
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    // The new key appears in the list.
+    await expect(page.getByText(keyName)).toBeVisible();
   });
 });
