@@ -3,6 +3,11 @@ packages:
   - "packages/*"
   - "tooling"
 
+# Align the transitive @better-auth/passkey peer (pulled by @better-auth-ui/react)
+# with the rest of the Better Auth 1.6.11 family. passkey is not used in app code.
+overrides:
+  "@better-auth/passkey": "1.6.11"
+
 # Supply chain (pnpm 11) — https://pnpm.io/supply-chain-security
 minimumReleaseAge: 600 # Wait 10h after a version is published before pnpm may install it (reduces compromised-release window).
 blockExoticSubdeps: true # Disallow transitive deps from git/tarball URLs; registry packages only.
