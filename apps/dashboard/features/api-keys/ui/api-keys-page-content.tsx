@@ -18,13 +18,14 @@ export function ApiKeysPageContent() {
   const [keys, setKeys] = useState<ApiKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Org API keys are owner/admin-only (see permissions.ts: `apiKey`). Hide the
-  // create action from members, who would otherwise get a 403 on click.
+  // Org API keys are owner/admin-only (see permissions.ts: `apiKey`). Members may
+  // open this page but must not call list/create actions (they 403 server-side).
   const { members, isLoading: orgLoading } = useCurrentOrg();
   const { data: session } = authClient.useSession();
   const currentRole =
     members.find((m) => m.userId === session?.user?.id)?.role ?? "member";
-  const canCreate = currentRole === "owner" || currentRole === "admin";
+  const canManageApiKeys =
+    currentRole === "owner" || currentRole === "admin";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,8 +40,14 @@ export function ApiKeysPageContent() {
   }, []);
 
   useEffect(() => {
+    if (orgLoading) return;
+    if (!canManageApiKeys) {
+      setKeys([]);
+      setLoading(false);
+      return;
+    }
     void load();
-  }, [load]);
+  }, [load, orgLoading, canManageApiKeys]);
 
   const handleRevoke = useCallback(async (keyId: string) => {
     try {
@@ -69,7 +76,7 @@ export function ApiKeysPageContent() {
         actions={
           orgLoading ? (
             <Skeleton className="h-9 w-24" />
-          ) : canCreate ? (
+          ) : canManageApiKeys ? (
             <Button onClick={() => void handleCreate()}>Create Key</Button>
           ) : undefined
         }
