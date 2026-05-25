@@ -11,6 +11,9 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf .next .turbo node_modules",
     "test": "vitest run",
+    "test:e2e": "tsx e2e/run-e2e.mts",
+    "test:e2e:headed": "tsx e2e/run-e2e.mts -- --headed",
+    "test:e2e:ui": "tsx e2e/run-e2e.mts -- --ui",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -41,11 +44,13 @@
     "zod": "^3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51",
     "@types/node": "^22.10",
     "@types/react": "^19.1",
     "@types/react-dom": "^19.1",
     "@workspace/tooling": "workspace:*",
     "eslint": "^9.18",
+    "tsx": "^4",
     "typescript": "^5.7",
     "vitest": "^3"
   }

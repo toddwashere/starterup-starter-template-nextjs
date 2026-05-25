@@ -76,6 +76,7 @@ export function OrgPickerPageContent() {
               key={org.id}
               className="cursor-pointer transition-colors hover:bg-accent"
               onClick={() => handleSelectOrg(org.id, org.slug)}
+              data-testid={`org-picker-${org.slug}`}
             >
               <CardContent className="flex items-center gap-4 p-4">
                 <Avatar className="size-10">

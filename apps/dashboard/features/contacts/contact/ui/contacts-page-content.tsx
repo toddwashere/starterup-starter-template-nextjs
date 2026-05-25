@@ -247,7 +247,7 @@ export function ContactsPageContent({ orgSlug }: { orgSlug: string }) {
         actions={
           <ResponsivePageActions
             primary={
-              <Button onClick={() => void handleAddContact()}>
+              <Button onClick={() => void handleAddContact()} data-testid="contacts-add">
                 <IconForAdd className="md:mr-2" />
                 <span className="hidden md:inline">New Contact</span>
                 <span className="sr-only md:hidden">New Contact</span>

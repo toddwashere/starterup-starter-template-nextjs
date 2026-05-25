@@ -248,7 +248,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev \
 ## Follow-ups (not v1)
 
 - GHCR-published `starter-postgres:16` image for faster CI
-- Playwright smoke workflow (separate spec)
+- Playwright smoke workflow (separate spec) — addressed by [`2026-05-25-dashboard-playwright-e2e-design.md`](./2026-05-25-dashboard-playwright-e2e-design.md)
 - Sentry source map upload step (observability spec follow-up)
 - Dependabot / Renovate config
 - Turbo remote cache (Vercel)

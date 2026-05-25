@@ -140,6 +140,7 @@ export function ContactsDataTable({
       <DataTable
         table={table}
         onRowClicked={(row: Row<Contact>) => meta.onView(row.original.id)}
+        getRowTestId={(_row, index) => `contact-row-${index}`}
         emptyState={
           <span className="text-muted-foreground">
             {isPending ? "Loading…" : "No contacts match these filters."}

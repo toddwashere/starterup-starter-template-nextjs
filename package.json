@@ -7,6 +7,7 @@
     "lint": "dotenv -- turbo run lint",
     "type-check": "dotenv -- turbo run type-check",
     "test": "dotenv -- turbo run test",
+    "test:e2e": "pnpm --filter @apps/dashboard test:e2e",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "clean": "turbo run clean",
