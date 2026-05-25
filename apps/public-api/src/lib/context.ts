@@ -6,7 +6,7 @@ export type AppEnv = {
   Variables: {
     authContext: PublicApiAuthContext;
     orgId?: string;
-    orgRole?: string;
+    orgRoles?: string[];
   };
 };
 

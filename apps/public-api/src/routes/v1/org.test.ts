@@ -39,11 +39,11 @@ function buildApp() {
 describe("GET /v1/orgs/{orgId}/ping", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns orgId and role for members", async () => {
-    vi.mocked(assertUserOrgMember).mockResolvedValue("member");
+  it("returns orgId and roles for members", async () => {
+    vi.mocked(assertUserOrgMember).mockResolvedValue(["member"]);
     const res = await buildApp().request("/v1/orgs/org_1/ping");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: "org_1", role: "member" });
+    expect(await res.json()).toEqual({ orgId: "org_1", roles: ["member"] });
   });
 
   it("returns 403 for non-members", async () => {

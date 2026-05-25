@@ -4,7 +4,7 @@ import { errorResponse } from "../../lib/errors";
 
 const PingResponseSchema = z.object({
   orgId: z.string(),
-  role: z.string(),
+  roles: z.array(z.string()),
 });
 
 const pingRoute = createRoute({
@@ -27,10 +27,10 @@ const pingRoute = createRoute({
 export function registerOrgRoutes(app: OpenAPIHono<AppEnv>): void {
   app.openapi(pingRoute, (c) => {
     const orgId = c.get("orgId");
-    const orgRole = c.get("orgRole");
-    if (!orgId || !orgRole) {
+    const orgRoles = c.get("orgRoles");
+    if (!orgId || !orgRoles || orgRoles.length === 0) {
       return errorResponse(c, 400, "VALIDATION_ERROR", "Missing organization context");
     }
-    return c.json({ orgId, role: orgRole }, 200);
+    return c.json({ orgId, roles: orgRoles }, 200);
   });
 }
