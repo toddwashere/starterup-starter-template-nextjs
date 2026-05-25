@@ -1,0 +1,202 @@
+# ============================================================================
+# E2E — Opt-in Playwright end-to-end workflow
+# ============================================================================
+#
+# OPT-IN: This workflow is SKIPPED unless the repo variable E2E_CI_ENABLED
+# is set to the string "true".
+#
+#   Enable:  GitHub → Settings → Secrets and variables → Actions → Variables
+#            → New repository variable: E2E_CI_ENABLED = true
+#
+# BYPASS: Add "[skip e2e]" to the PR title or the head commit message to skip
+# this workflow for a single push/PR even when E2E_CI_ENABLED is true.
+#
+# CAUTION: Do NOT add the "e2e" job to required branch-protection checks until
+# the suite has proven stable on a few real CI runs.
+# ============================================================================
+
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # -------------------------------------------------------------------------
+    # OPT-IN GATE
+    # Runs only when:
+    #   1. Repo variable E2E_CI_ENABLED == 'true', AND
+    #   2. No "[skip e2e]" in PR title (safe on push — github.event.pull_request is null,
+    #      and contains(null, '...') evaluates to false), AND
+    #   3. No "[skip e2e]" in head commit message (safe on pull_request —
+    #      github.event.head_commit is null, same reasoning).
+    # -------------------------------------------------------------------------
+    if: >-
+      vars.E2E_CI_ENABLED == 'true' &&
+      !contains(github.event.pull_request.title, '[skip e2e]') &&
+      !contains(github.event.head_commit.message, '[skip e2e]')
+
+    env:
+      # -----------------------------------------------------------------------
+      # CI test values — NOT real secrets; safe to commit.
+      # -----------------------------------------------------------------------
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/starter_dev
+      TURBO_TELEMETRY_DISABLED: 1
+      E2E_CI: 1
+
+      # Better Auth — origin must be localhost:4000 (signing in from any other
+      # origin is rejected by Better Auth's CSRF checks).
+      BETTER_AUTH_SECRET: ci-e2e-3f9a1c7d8b2e4f6a0c5d9e1b3a7f2c4d6e8b0a2c
+      BETTER_AUTH_URL: http://localhost:4000
+      NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:4000
+
+      # Dashboard URL (used by UI cross-links)
+      NEXT_PUBLIC_DASHBOARD_URL: http://localhost:4000
+
+      # Other workspace URL vars — default localhost ports, no real service needed
+      NEXT_PUBLIC_WWW_URL: http://localhost:4001
+      NEXT_PUBLIC_API_URL: http://localhost:4002
+      NEXT_PUBLIC_MCP_URL: http://localhost:4003
+
+      # Stripe — required (non-optional) by packages/billing/keys.ts; the auth
+      # module calls stripe() at module-load time so these must be non-empty or
+      # the server fails to boot. Dummy values are fine since tests don't
+      # exercise billing flows.
+      STRIPE_SECRET_KEY: sk_test_ci_dummy_not_real
+      STRIPE_WEBHOOK_SECRET: whsec_ci_dummy_not_real
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # -----------------------------------------------------------------------
+      # Postgres — custom docker/postgres image that includes pgmq + pg_cron,
+      # mirrored exactly from ci.yml so `prisma migrate deploy` succeeds.
+      # -----------------------------------------------------------------------
+      - name: Start Postgres (pgmq + pg_cron)
+        run: |
+          docker build -t starter-postgres:16 docker/postgres
+          docker run -d --name postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=starter_dev \
+            -p 5432:5432 \
+            starter-postgres:16
+          for i in $(seq 1 60); do
+            if pg_isready -h localhost -U postgres; then
+              echo "Postgres ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres failed to start"
+          docker logs postgres
+          exit 1
+
+      # -----------------------------------------------------------------------
+      # Prisma — generate client BEFORE building; the generated client is
+      # gitignored and not committed, so it does not exist after checkout.
+      # Using `exec` form (not the package.json script) avoids `dotenv -e .env`
+      # which would fail in CI (no .env file present).
+      # -----------------------------------------------------------------------
+      - name: Generate Prisma client
+        run: pnpm --filter @workspace/database exec prisma generate
+
+      - name: Run database migrations
+        run: pnpm --filter @workspace/database exec prisma migrate deploy
+
+      - name: Seed database
+        run: pnpm --filter @workspace/database exec prisma db seed
+
+      # -----------------------------------------------------------------------
+      # Build the dashboard. Workspace packages export raw ./src/*.ts consumed
+      # via Next.js transpile, so no pre-build of deps is needed.
+      # -----------------------------------------------------------------------
+      - name: Build dashboard
+        run: pnpm --filter @apps/dashboard build
+
+      # -----------------------------------------------------------------------
+      # Playwright browsers — cached by OS + lockfile hash to avoid re-download
+      # on every run. Install only Chromium (the single browser used in CI).
+      # -----------------------------------------------------------------------
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @apps/dashboard exec playwright install --with-deps chromium
+
+      # -----------------------------------------------------------------------
+      # Server — must be running on localhost:4000 before Playwright starts.
+      # playwright.config.ts sets reuseExistingServer: true, so Playwright will
+      # attach to this process rather than spawning its own (which would rely on
+      # a local .env that does not exist in CI).
+      # nohup + & keeps the process alive across subsequent steps.
+      # -----------------------------------------------------------------------
+      - name: Start dashboard server
+        run: |
+          nohup pnpm --filter @apps/dashboard exec next start --port 4000 > /tmp/next-start.log 2>&1 &
+          echo "Server starting (pid $!)"
+
+      - name: Wait for server
+        run: npx wait-on http://localhost:4000 --timeout 120000
+
+      # -----------------------------------------------------------------------
+      # E2E — E2E_CI=1 is already in job env; the run-e2e.mts launcher passes
+      # it through to playwright.config.ts (retries:2, forbidOnly:true,
+      # trace:on-first-retry).
+      # -----------------------------------------------------------------------
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      # -----------------------------------------------------------------------
+      # Artifacts — upload report on failure for post-mortem inspection.
+      # -----------------------------------------------------------------------
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/dashboard/playwright-report
+          retention-days: 7
+
+      # -----------------------------------------------------------------------
+      # Debug / cleanup — always runs so logs are available even on success.
+      # -----------------------------------------------------------------------
+      - name: Print server log (tail)
+        if: always()
+        run: |
+          echo "=== /tmp/next-start.log (last 50 lines) ==="
+          tail -50 /tmp/next-start.log || echo "(log not found)"
+
+      - name: Stop Postgres
+        if: always()
+        run: docker rm -f postgres || true

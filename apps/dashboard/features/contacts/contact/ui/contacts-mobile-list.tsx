@@ -42,10 +42,10 @@ export function ContactsMobileList({
 
   return (
     <DataList>
-      {rows.map((row) => {
+      {rows.map((row, index) => {
         const c = row.original;
         return (
-          <DataListCard key={c.id} onActivate={() => meta.onView(c.id)}>
+          <DataListCard key={c.id} onActivate={() => meta.onView(c.id)} data-testid={`contact-row-${index}`}>
             <div className="flex items-start gap-3">
               <Checkbox
                 aria-label="Select contact"
