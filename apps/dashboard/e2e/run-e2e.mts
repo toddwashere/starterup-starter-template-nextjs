@@ -5,9 +5,9 @@
  * entire suite without error.  Useful in CI pipelines that opt out of E2E.
  */
 
-import { spawnSync } from "child_process";
-import path from "path";
-import { fileURLToPath } from "url";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
 // Skip gate — must run before spawning anything
@@ -27,11 +27,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 
 // ---------------------------------------------------------------------------
-// Forward extra args, stripping any leading standalone "--" separator.
+// Forward extra args, stripping a leading standalone "--" separator.
 // tsx passes the "--" token from scripts like `tsx run-e2e.mts -- --headed`
-// through to process.argv, which would confuse Playwright.
+// through to process.argv, which would confuse Playwright. A "--" elsewhere
+// is preserved (Playwright may use it to delimit positional args).
 // ---------------------------------------------------------------------------
-const extraArgs = process.argv.slice(2).filter((arg) => arg !== "--");
+const extraArgs = process.argv.slice(2);
+if (extraArgs[0] === "--") extraArgs.shift();
 
 // ---------------------------------------------------------------------------
 // Spawn Playwright via `pnpm exec` so the dashboard-local binary is used.
