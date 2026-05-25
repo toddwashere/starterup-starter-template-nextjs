@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import NiceModal from "@ebay/nice-modal-react";
-import { authClient } from "@workspace/auth/client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@workspace/ui/components/button";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { toast } from "@workspace/ui/components/sonner";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
 import { useCurrentOrg } from "@/features/organization/ui/org-provider";
+import { getApiKeyManageContextAction } from "@/features/organization/data/org-permission-actions";
 import { ApiKeyTable } from "./api-key-table";
 import { ApiKeyCreateModal } from "./api-key-create-modal";
 import { listOrgApiKeysAction, revokeApiKeyAction } from "../data/api-key-actions";
@@ -18,14 +19,18 @@ export function ApiKeysPageContent() {
   const [keys, setKeys] = useState<ApiKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Org API keys are owner/admin-only (see permissions.ts: `apiKey`). Members may
-  // open this page but must not call list/create actions (they 403 server-side).
-  const { members, isLoading: orgLoading } = useCurrentOrg();
-  const { data: session } = authClient.useSession();
-  const currentRole =
-    members.find((m) => m.userId === session?.user?.id)?.role ?? "member";
-  const canManageApiKeys =
-    currentRole === "owner" || currentRole === "admin";
+  // Gate list/create on server-driven permission context (apiKey:read / apiKey:create)
+  // rather than a role string — correct under multi-role membership.
+  const { organization, isLoading: orgLoading } = useCurrentOrg();
+  const orgId = organization?.id;
+
+  const { data: permCtx, isLoading: permLoading } = useQuery({
+    queryKey: ["api-key-manage-context", orgId],
+    queryFn: () => getApiKeyManageContextAction(orgId!),
+    enabled: !!orgId,
+  });
+  const canRead = permCtx?.canRead ?? false;
+  const canCreate = permCtx?.canCreate ?? false;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,14 +45,14 @@ export function ApiKeysPageContent() {
   }, []);
 
   useEffect(() => {
-    if (orgLoading) return;
-    if (!canManageApiKeys) {
+    if (orgLoading || permLoading) return;
+    if (!canRead) {
       setKeys([]);
       setLoading(false);
       return;
     }
     void load();
-  }, [load, orgLoading, canManageApiKeys]);
+  }, [load, orgLoading, permLoading, canRead]);
 
   const handleRevoke = useCallback(async (keyId: string) => {
     try {
@@ -74,9 +79,9 @@ export function ApiKeysPageContent() {
         title="API Keys"
         description="Manage keys for third-party integrations and AI agents."
         actions={
-          orgLoading ? (
+          (orgLoading || permLoading) ? (
             <Skeleton className="h-9 w-24" />
-          ) : canManageApiKeys ? (
+          ) : canCreate ? (
             <Button onClick={() => void handleCreate()}>Create Key</Button>
           ) : undefined
         }
