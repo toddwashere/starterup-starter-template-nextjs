@@ -286,12 +286,11 @@ No new Vitest coverage required unless `run-e2e` gate logic is extracted for uni
 
 | Item | Notes |
 |------|--------|
-| P1 tests | create-org, sign-out, redirectTo, edit contact, cross-org denial, billing render |
-| GHCR Postgres image | Shave 2–4 min off E2E CI |
+| **Phase 2 E2E** | [Phase 2 design](./2026-05-26-dashboard-playwright-e2e-phase-2-design.md) — tags, manifest, `db:seed:e2e`, nightly |
+| GHCR Postgres image | Shave 2–4 min off E2E CI (phase 2 plan 2B) |
 | Artifact reuse | Share `apps/dashboard/.next` from `ci.yml` |
-| Required check | After 1–2 weeks stable, require `e2e` in branch protection |
+| Required check | After 1–2 weeks stable, require `e2e` in branch protection (documented in phase 2) |
 | `test.only` in CI | Already `forbidOnly` when `E2E_CI=1` |
-| Page-load matrix | Cheap `*.spec.ts` per org route |
 
 ---
 
