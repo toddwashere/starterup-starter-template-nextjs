@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { verifyApiKey, ApiKeyError } from "@workspace/auth/api-keys";
+import { verifyOAuthAccessToken } from "@workspace/auth/oauth/verify-access-token";
 import { auth } from "@workspace/auth";
 import type { AuthContext } from "../lib/context";
 import { McpAuthError } from "../lib/errors";
@@ -26,37 +27,15 @@ async function resolveSessionContext(
 async function resolveOAuthContext(
   token: string,
 ): Promise<AuthContext | null> {
-  try {
-    // oauthProviderResourceClient wraps verifyAccessToken with auto-populated
-    // issuer and JWKS URL derived from the auth config (BETTER_AUTH_URL).
-    // This verifies JWT access tokens issued by Better Auth's OAuth Provider
-    // when clients pass a `resource` parameter during token issuance.
-    const { oauthProviderResourceClient } = await import(
-      "@better-auth/oauth-provider/resource-client"
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const client = oauthProviderResourceClient(auth as any);
-    // Cast to the with-auth overload: verifyAccessToken(token) with no required opts
-    const verifyFn = client.getActions().verifyAccessToken as (
-      token: string,
-    ) => Promise<Record<string, unknown>>;
-    const payload = await verifyFn(token);
-    if (!payload) return null;
-    const sub = payload["sub"];
-    const scope = payload["scope"];
-    const clientId = payload["client_id"] ?? payload["azp"] ?? null;
-    const orgId = payload["orgId"] ?? null;
-    if (typeof sub !== "string") return null;
-    return {
-      kind: "oauth",
-      userId: sub,
-      orgId: typeof orgId === "string" ? orgId : null,
-      scopes: typeof scope === "string" ? scope.split(" ") : [],
-      clientId: typeof clientId === "string" ? clientId : null,
-    };
-  } catch {
-    return null;
-  }
+  const ctx = await verifyOAuthAccessToken(token);
+  if (!ctx) return null;
+  return {
+    kind: "oauth",
+    userId: ctx.userId,
+    orgId: ctx.orgId,
+    scopes: ctx.scopes,
+    clientId: ctx.clientId,
+  };
 }
 
 export async function resolveMcpAuthContext(

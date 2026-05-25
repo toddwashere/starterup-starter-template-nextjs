@@ -14,6 +14,8 @@
     "./api-keys": "./src/api-keys/index.ts",
     "./api-keys/permissions": "./src/api-keys/permissions.ts",
     "./oauth-auth-server-metadata": "./src/oauth-auth-server-metadata.ts",
+    "./oauth/verify-access-token": "./src/oauth/verify-access-token.ts",
+    "./public-api": "./src/public-api/index.ts",
     "./keys": "./keys.ts"
   },
   "scripts": {
