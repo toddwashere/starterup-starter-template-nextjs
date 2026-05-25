@@ -8,7 +8,7 @@ import { APIError } from "better-auth/api";
 import { prisma } from "@workspace/database";
 import { getStripeClient } from "@workspace/billing/stripe-client";
 import { stripePluginOptions } from "@workspace/billing/stripe-plugin-options";
-import { ac, permissions } from "./permissions";
+import { ac, orgRoles } from "./org-roles";
 import { routeVerificationEmail } from "./email-routing";
 import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
 import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
@@ -123,11 +123,7 @@ export const auth = betterAuth({
     }),
     organization({
       ac,
-      roles: {
-        owner: permissions.owner,
-        admin: permissions.admin,
-        member: permissions.member,
-      },
+      roles: orgRoles,
       async sendInvitationEmail(data) {
         await sendInvitationEmail({
           recipient: data.email,
