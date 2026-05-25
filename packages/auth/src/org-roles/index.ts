@@ -10,3 +10,5 @@ export const orgRoles = { owner, admin, member } as const;
 export type OrgRoleId = keyof typeof orgRoles;
 
 export const ASSIGNABLE_ORG_ROLE_IDS = ["owner", "admin", "member"] as const satisfies readonly OrgRoleId[];
+
+export { memberRoleFieldHasPermission } from "./member-permissions";
