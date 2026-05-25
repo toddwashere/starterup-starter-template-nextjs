@@ -61,6 +61,70 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev \
 
 **Branch protection (recommended):** Require the `CI` / `Lint, test, build` check before merging to `main`.
 
+**Optional parallel workflow:** `.github/workflows/e2e.yml` runs Playwright smoke tests against the dashboard when the repo variable `E2E_CI_ENABLED` is set to `true` (see [E2E tests](#end-to-end-e2e-tests) below and the [design spec](docs/superpowers/specs/2026-05-25-dashboard-playwright-e2e-design.md)).
+
+## End-to-end (E2E) tests
+
+Playwright smoke tests for `apps/dashboard` — eight P0 journeys (sign-in, org navigation, contacts CRUD, API key creation) running against a real Next.js production server and seeded Postgres database.
+
+### Prerequisites
+
+1. **Postgres running** — follow the DB setup steps in the [CI](#ci) section (`docker compose up -d postgres`).
+2. **Root `.env`** — copy `.env.example` and fill in `DATABASE_URL` and auth URLs.
+3. **Migrate and seed:**
+
+   ```bash
+   pnpm --filter @workspace/database exec prisma migrate deploy
+   pnpm --filter @workspace/database db:seed
+   ```
+
+   Seed provides: `user@example.com` / `password123`, org `acme-inc`.
+
+### Build and run
+
+`next start` requires a production build first. The dashboard `start` script doesn't load env or bind port 4000, so use the `dotenv` recipe:
+
+```bash
+# 1. Build once (or after code changes)
+pnpm exec dotenv -e .env -- pnpm --filter @apps/dashboard build
+
+# 2a. Let Playwright's webServer start and manage the server automatically:
+pnpm test:e2e
+
+# 2b. Or start the server yourself in a separate terminal, then run:
+pnpm exec dotenv -e .env -- pnpm --filter @apps/dashboard exec next start --port 4000
+pnpm test:e2e
+```
+
+Playwright's `webServer` block auto-starts the server (loads `.env`, binds port 4000) and reuses one that's already running. Either way, a production build must exist first.
+
+### Skip locally
+
+```bash
+E2E_DISABLED=1 pnpm test:e2e
+```
+
+Prints a skip message and exits 0 without launching a browser. Also accepts `E2E_DISABLED=true`.
+
+### Debug
+
+```bash
+pnpm --filter @apps/dashboard test:e2e:headed   # visible browser
+pnpm --filter @apps/dashboard test:e2e:ui       # Playwright UI mode
+```
+
+### Enabling E2E in CI
+
+The E2E workflow (`.github/workflows/e2e.yml`) is **opt-in** and runs in parallel with `ci.yml`. Main CI is unchanged — no Playwright, no seed.
+
+**Enable:** GitHub → Settings → Secrets and variables → Actions → **Variables** → add `E2E_CI_ENABLED` = `true`.
+
+**Bypass (when enabled):** Put `[skip e2e]` in the PR title or the head commit message.
+
+**Estimated duration:** ~8–15 min (warm cache); ~12–18 min (cold Docker build).
+
+**Branch protection:** Do not add `e2e` to required checks until the suite is proven stable (recommend 1–2 weeks).
+
 ## Billing (Stripe)
 
 Organization-scoped subscriptions are powered by the [`@better-auth/stripe`](https://better-auth.com/docs/plugins/stripe) plugin. Plan definitions live in the database (`BillingPlan`, seeded with `free`/`pro`/`team`); entitlements are enforced in `packages/billing`. See the [design spec](docs/superpowers/specs/2026-05-23-stripe-billing-design.md).
