@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { prisma } from "@workspace/database";
-import { formatDate } from "@workspace/common";
+import { formatDate, parseOrgRoles } from "@workspace/common";
 import {
   sendSubscriptionWelcomeEmail,
   sendSubscriptionCanceledEmail,
@@ -24,10 +24,14 @@ export async function resolveOrgBillingContactByOrgId(
     where: { id: orgId },
     select: { name: true },
   });
-  const owner = await prisma.member.findFirst({
-    where: { organizationId: orgId, role: "owner" },
-    select: { user: { select: { email: true } } },
+  // Members can hold multiple roles stored as a CSV (e.g. "owner,member"), so an
+  // exact role === "owner" match would miss multi-role owners. Narrow at the DB
+  // with a substring filter, then confirm with parseOrgRoles.
+  const owners = await prisma.member.findMany({
+    where: { organizationId: orgId, role: { contains: "owner" } },
+    select: { role: true, user: { select: { email: true } } },
   });
+  const owner = owners.find((m) => parseOrgRoles(m.role).includes("owner"));
 
   const recipient = owner?.user?.email;
   if (!org || !recipient) {
