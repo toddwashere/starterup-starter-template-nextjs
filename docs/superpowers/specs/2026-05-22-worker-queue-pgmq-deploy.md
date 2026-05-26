@@ -122,7 +122,7 @@ template). Any container host that can run the image and reach Postgres works.
 ### Build the image
 
 The Dockerfile is `apps/workers/Dockerfile`. It is a multi-stage Turborepo-prune
-build on `node:22-slim`: it prunes the monorepo to `@apps/workers` and its
+build on `node:24.16.0-slim`: it prunes the monorepo to `@apps/workers` and its
 workspace dependencies, installs the pruned dependency set with a frozen
 lockfile, runs `prisma generate`, and starts the worker via `tsx src/index.ts`
 (the workspace packages export their `.ts` source, so there is no compiled-JS

@@ -21,7 +21,7 @@
     "zod": "^3"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",
     "vitest": "^3"

@@ -2,6 +2,11 @@
 
 A production-ready SaaS starter template built with [Superpowers](https://github.com/obra/superpowers) for agentic AI development.
 
+## Prerequisites
+
+- **Node.js** 24.16+ LTS ([`.nvmrc`](.nvmrc) pins `24.16.0`)
+- **pnpm** 11.1.3+ (via [Corepack](https://nodejs.org/api/corepack.html): `corepack enable`)
+
 ## Tech Stack
 
 - **Next.js 16** (App Router) + **React 19** Server Components

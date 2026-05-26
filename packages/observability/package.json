@@ -32,7 +32,7 @@
     "react": ">=19"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@workspace/tooling": "workspace:*",
     "eslint": "^9.18",

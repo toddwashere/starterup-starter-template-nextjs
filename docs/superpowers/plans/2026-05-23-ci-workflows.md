@@ -6,7 +6,7 @@
 
 **Architecture:** Single workflow file runs Turbo tasks monorepo-wide. Postgres starts via `docker build` + `docker run` using `docker/postgres` (not stock `postgres:16`). Database name is `starter_dev` to match `cron.database_name`. Depends on typed-env plan shipping `pnpm validate:env` first.
 
-**Tech Stack:** GitHub Actions, pnpm 11, Turbo, Docker, Prisma migrate deploy, Node 20.
+**Tech Stack:** GitHub Actions, pnpm 11, Turbo, Docker, Prisma migrate deploy, Node 24.
 
 **Design spec:** [`docs/superpowers/specs/2026-05-23-ci-workflows-design.md`](../specs/2026-05-23-ci-workflows-design.md)
 
@@ -77,7 +77,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies

@@ -91,7 +91,7 @@ See [`docker/postgres/README.md`](../../../docker/postgres/README.md) for detail
 **File:** `.github/workflows/ci.yml`
 
 **Runner:** `ubuntu-latest`  
-**Node:** 20 (pin explicitly; match repo engines if present)
+**Node:** 24.16.0 (pin explicitly; match repo engines if present)
 
 ### Environment
 
@@ -105,7 +105,7 @@ env:
 
 ```text
 1.  checkout
-2.  setup-node (node 20, cache: pnpm)
+2.  setup-node (node 24.16.0, cache: pnpm)
 3.  corepack enable && pnpm install --frozen-lockfile
 4.  pnpm validate:env
 5.  pnpm lint

@@ -18,7 +18,7 @@
     "@workspace/common": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@workspace/tooling": "workspace:*",
     "eslint": "^9.18",
     "typescript": "^5.7",

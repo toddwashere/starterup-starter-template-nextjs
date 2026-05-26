@@ -95,7 +95,7 @@ Follow the same structure as `apps/dashboard` or `apps/www`:
     "react-dom": "^19.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10",
+    "@types/node": "^24",
     "@types/react": "^19.1",
     "@types/react-dom": "^19.1",
     "@workspace/tooling": "workspace:*",

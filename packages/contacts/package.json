@@ -23,7 +23,7 @@
     "zod": "^3"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@types/papaparse": "^5",
     "@workspace/test-utils": "workspace:*",
     "@workspace/tooling": "workspace:*",
