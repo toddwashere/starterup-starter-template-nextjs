@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { getPathForSignUp, getPathForForgotPassword } from "@workspace/routes";
+import { passwordManagerSafeFormProps } from "./password-manager-safe-form-props";
 
 export function SignInPageContent() {
   const router = useRouter();
@@ -45,7 +46,11 @@ export function SignInPageContent() {
         <CardTitle className="text-2xl">Welcome back</CardTitle>
         <CardDescription>Sign in to your account to continue</CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit} data-testid="sign-in-form">
+      <form
+        onSubmit={handleSubmit}
+        data-testid="sign-in-form"
+        {...passwordManagerSafeFormProps}
+      >
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>

@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { getPathForSignIn, getPathForResetPassword } from "@workspace/routes";
+import { passwordManagerSafeFormProps } from "./password-manager-safe-form-props";
 
 export function ForgotPasswordPageContent() {
   const [email, setEmail] = useState("");
@@ -67,7 +68,7 @@ export function ForgotPasswordPageContent() {
           Enter your email and we&apos;ll send you a reset link
         </CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} {...passwordManagerSafeFormProps}>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
