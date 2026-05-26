@@ -11,11 +11,13 @@
     "./session": "./src/session.ts",
     "./constants": "./src/constants.ts",
     "./types": "./src/types.ts",
+    "./org-roles": "./src/org-roles/index.ts",
     "./api-keys": "./src/api-keys/index.ts",
     "./api-keys/permissions": "./src/api-keys/permissions.ts",
     "./oauth-auth-server-metadata": "./src/oauth-auth-server-metadata.ts",
     "./oauth/verify-access-token": "./src/oauth/verify-access-token.ts",
     "./public-api": "./src/public-api/index.ts",
+    "./org-permission-context": "./src/org-permission-context.ts",
     "./keys": "./keys.ts"
   },
   "scripts": {

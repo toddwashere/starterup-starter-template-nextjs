@@ -66,13 +66,13 @@ describe("GET /v1/me", () => {
 describe("GET /v1/organizations", () => {
   it("returns organization list", async () => {
     vi.mocked(listOrganizationsForUser).mockResolvedValue([
-      { id: "org_1", name: "Acme", slug: "acme", role: "member" },
+      { id: "org_1", name: "Acme", slug: "acme", roles: ["member"] },
     ]);
     const res = await buildApp(oauthContext).request("/v1/organizations");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       organizations: [
-        { id: "org_1", name: "Acme", slug: "acme", role: "member" },
+        { id: "org_1", name: "Acme", slug: "acme", roles: ["member"] },
       ],
     });
   });

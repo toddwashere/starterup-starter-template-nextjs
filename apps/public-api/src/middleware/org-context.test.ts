@@ -32,7 +32,7 @@ function buildApp() {
   });
   app.use("/orgs/:orgId/*", orgContext);
   app.get("/orgs/:orgId/ping", (c) =>
-    c.json({ orgId: c.get("orgId"), role: c.get("orgRole") }),
+    c.json({ orgId: c.get("orgId"), roles: c.get("orgRoles") }),
   );
   return app;
 }
@@ -40,11 +40,11 @@ function buildApp() {
 describe("orgContext", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("sets orgId and role for members", async () => {
-    vi.mocked(assertUserOrgMember).mockResolvedValue("admin");
+  it("sets orgId and roles for members", async () => {
+    vi.mocked(assertUserOrgMember).mockResolvedValue(["admin"]);
     const res = await buildApp().request("/orgs/org_1/ping");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: "org_1", role: "admin" });
+    expect(await res.json()).toEqual({ orgId: "org_1", roles: ["admin"] });
   });
 
   it("returns 403 for non-members", async () => {
@@ -53,5 +53,6 @@ describe("orgContext", () => {
     );
     const res = await buildApp().request("/orgs/org_2/ping");
     expect(res.status).toBe(403);
+
   });
 });

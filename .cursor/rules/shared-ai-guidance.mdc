@@ -37,4 +37,6 @@ When finishing a development branch with a completed plan, read `.ai/conventions
 
 When adding or changing environment variables in critical-path apps or packages (auth, database, billing, worker-queue, dashboard, www, public-api, public-mcp, workers, email-preview, ai, email), read `.ai/conventions/typed-env.md` and update both `keys.ts` and `.env.example`.
 
+When adding or changing organization roles, org RBAC, member role assignment, or org permission gates, read `.ai/conventions/org-roles.md` before making changes.
+
 Always use ESM `import`/`export` syntax. Never use `require()` or `module.exports`. This applies to all source code, config files, scripts, and generated code across the entire monorepo.

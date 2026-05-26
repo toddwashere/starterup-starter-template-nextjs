@@ -1,11 +1,12 @@
 import { prisma } from "@workspace/database";
+import { parseOrgRoles } from "@workspace/common";
 import { PublicApiOrgError } from "./types";
 
 export type UserOrganizationSummary = {
   id: string;
   name: string;
   slug: string;
-  role: string;
+  roles: string[];
 };
 
 export { PublicApiOrgError };
@@ -13,7 +14,7 @@ export { PublicApiOrgError };
 export async function assertUserOrgMember(
   userId: string,
   organizationId: string,
-): Promise<string> {
+): Promise<string[]> {
   const member = await prisma.member.findFirst({
     where: { userId, organizationId },
     select: { role: true },
@@ -24,7 +25,7 @@ export async function assertUserOrgMember(
       "Not a member of this organization",
     );
   }
-  return member.role;
+  return parseOrgRoles(member.role);
 }
 
 export async function listOrganizationsForUser(
@@ -42,6 +43,6 @@ export async function listOrganizationsForUser(
     id: m.organization.id,
     name: m.organization.name,
     slug: m.organization.slug,
-    role: m.role,
+    roles: parseOrgRoles(m.role),
   }));
 }

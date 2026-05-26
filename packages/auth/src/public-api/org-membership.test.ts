@@ -16,10 +16,16 @@ import {
 describe("assertUserOrgMember", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns role when member exists", async () => {
+  it("returns roles array when member exists (single role)", async () => {
     vi.mocked(prisma.member.findFirst).mockResolvedValue({ role: "admin" } as never);
-    const role = await assertUserOrgMember("user_1", "org_1");
-    expect(role).toBe("admin");
+    const roles = await assertUserOrgMember("user_1", "org_1");
+    expect(roles).toEqual(["admin"]);
+  });
+
+  it("returns roles array when member has CSV roles", async () => {
+    vi.mocked(prisma.member.findFirst).mockResolvedValue({ role: "admin,member" } as never);
+    const roles = await assertUserOrgMember("user_1", "org_1");
+    expect(roles).toEqual(["admin", "member"]);
   });
 
   it("throws FORBIDDEN when not a member", async () => {
@@ -31,7 +37,7 @@ describe("assertUserOrgMember", () => {
 });
 
 describe("listOrganizationsForUser", () => {
-  it("returns mapped org rows", async () => {
+  it("returns mapped org rows with roles array", async () => {
     vi.mocked(prisma.member.findMany).mockResolvedValue([
       {
         role: "member",
@@ -40,7 +46,20 @@ describe("listOrganizationsForUser", () => {
     ] as never);
     const rows = await listOrganizationsForUser("user_1");
     expect(rows).toEqual([
-      { id: "org_1", name: "Acme", slug: "acme", role: "member" },
+      { id: "org_1", name: "Acme", slug: "acme", roles: ["member"] },
+    ]);
+  });
+
+  it("returns mapped org rows with multiple roles from CSV", async () => {
+    vi.mocked(prisma.member.findMany).mockResolvedValue([
+      {
+        role: "admin,member",
+        organization: { id: "org_2", name: "Beta Corp", slug: "beta-corp" },
+      },
+    ] as never);
+    const rows = await listOrganizationsForUser("user_1");
+    expect(rows).toEqual([
+      { id: "org_2", name: "Beta Corp", slug: "beta-corp", roles: ["admin", "member"] },
     ]);
   });
 });

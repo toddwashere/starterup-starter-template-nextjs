@@ -75,23 +75,34 @@ describe("inviteMemberSchema", () => {
 });
 
 describe("updateMemberRoleSchema", () => {
-  it("accepts valid update input", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: "admin" });
+  it("accepts a single role array", () => {
+    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["admin"] });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts multiple roles", () => {
+    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["owner", "member"] });
     expect(result.success).toBe(true);
   });
 
   it("accepts owner role for updates", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: "owner" });
+    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["owner"] });
     expect(result.success).toBe(true);
   });
 
   it("rejects empty memberId", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "", role: "member" });
+    const result = updateMemberRoleSchema.safeParse({ memberId: "", role: ["member"] });
     expect(result.success).toBe(false);
   });
 
+  it("rejects an empty role array", () => {
+    const result = updateMemberRoleSchema.safeParse({ memberId: "abc", role: [] });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe("Select at least one role");
+  });
+
   it("rejects invalid role", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc", role: "superadmin" });
+    const result = updateMemberRoleSchema.safeParse({ memberId: "abc", role: ["superadmin"] });
     expect(result.success).toBe(false);
   });
 });

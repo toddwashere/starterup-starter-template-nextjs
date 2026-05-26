@@ -23,9 +23,9 @@ export const orgContext: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   try {
-    const role = await assertUserOrgMember(authContext.userId, orgId);
+    const roles = await assertUserOrgMember(authContext.userId, orgId);
     c.set("orgId", orgId);
-    c.set("orgRole", role);
+    c.set("orgRoles", roles);
     await next();
   } catch (err) {
     if (err instanceof PublicApiOrgError) {
