@@ -1,7 +1,13 @@
 import { z } from "zod";
 
+const BETTER_AUTH_DEV_SECRET = "better-auth-secret-12345678901234567890";
+
 const schema = z
   .object({
+    BETTER_AUTH_SECRET: z
+      .string()
+      .min(32)
+      .default(BETTER_AUTH_DEV_SECRET),
     BETTER_AUTH_URL: z.string().url().default("http://localhost:4000"),
     NEXT_PUBLIC_BETTER_AUTH_URL: z
       .string()
@@ -32,6 +38,7 @@ const schema = z
 
 export function keys() {
   return schema.parse({
+    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     NEXT_PUBLIC_BETTER_AUTH_URL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,

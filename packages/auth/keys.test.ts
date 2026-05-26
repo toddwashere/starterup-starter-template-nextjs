@@ -8,6 +8,13 @@ describe("auth keys", () => {
     process.env = { ...snapshot };
   });
 
+  it("defaults BETTER_AUTH_SECRET for local dev", () => {
+    delete process.env.BETTER_AUTH_SECRET;
+    expect(keys().BETTER_AUTH_SECRET).toBe(
+      "better-auth-secret-12345678901234567890",
+    );
+  });
+
   it("defaults BETTER_AUTH_URL for local dev", () => {
     delete process.env.BETTER_AUTH_URL;
     expect(keys().BETTER_AUTH_URL).toBe("http://localhost:4000");

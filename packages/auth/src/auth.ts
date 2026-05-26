@@ -16,9 +16,18 @@ import { createBetterAuthId } from "./better-auth-id";
 import { enqueueWelcomeEmail } from "./welcome-email-hook";
 import { keys as authKeys } from "../keys";
 
-const { BETTER_AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT_ID } = authKeys();
+const {
+  BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  MICROSOFT_CLIENT_ID,
+  MICROSOFT_CLIENT_SECRET,
+  MICROSOFT_TENANT_ID,
+} = authKeys();
 
 export const auth = betterAuth({
+  secret: BETTER_AUTH_SECRET,
   baseURL: BETTER_AUTH_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   databaseHooks: {
