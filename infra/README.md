@@ -4,7 +4,7 @@ Choose a hosting platform, run an init wizard, and deploy the full monorepo stac
 
 ## Choose a profile
 
-| Profile | Sandbox | Production | Perpetual 100% free? | Complexity |
+| Profile | Sandbox | Production (floor) | Perpetual 100% free? | Complexity |
 |---------|---------|-----------|-----|-----------|
 | **local** | $0 | $0 | Yes | Low |
 | **vercel + supabase** | $0* | ~$45–90/mo | Sandbox only | Medium |
