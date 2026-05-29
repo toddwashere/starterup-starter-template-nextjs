@@ -64,10 +64,79 @@ pulumi up -s sandbox
 
 ## Sandbox vs production
 
-- **sandbox** (`Pulumi.sandbox.yaml`): minimal resources, smallest Cloud SQL tier (`db-f1-micro`), no HA. Ships in Task 3.2.
-- **production** (`Pulumi.production.yaml`): HA Postgres, VPC, stricter IAM, min-instances on Cloud Run. Ships in Task 7.1.
+- **sandbox** (`Pulumi.sandbox.yaml`): minimal resources, smallest Cloud SQL tier (`db-f1-micro`), no HA, public IP DB, `maxInstanceCount: 2`.
+- **production** (`Pulumi.production.yaml`): HA Postgres, private Cloud SQL IP, VPC connector, min-instance warm dashboard, higher Cloud Run cap.
 
 See the [deploy-profiles spec](../../docs/superpowers/specs/2026-05-28-deploy-profiles-design.md) for the full profile breakdown.
+
+## Production deploy
+
+### What changes in production
+
+| Feature | Sandbox | Production |
+|---------|---------|------------|
+| Cloud SQL tier | `db-f1-micro` | `db-custom-2-7680` (2 vCPU / 7.5 GB) |
+| Availability | `ZONAL` | `REGIONAL` (multi-zone HA) |
+| Point-in-time recovery | disabled | enabled |
+| Cloud SQL IP | public (SQL Proxy socket) | private (VPC connector) |
+| VPC | none | `starter-vpc` + Serverless VPC connector |
+| `minInstanceCount` | 0 (all services) | 1 for dashboard (warm), 0 for others |
+| `maxInstanceCount` | 2 (CrossGuard enforced) | 10 |
+| Global HTTPS LB | n/a | optional — set `enableHttpsLb: true` |
+| Canary traffic split | n/a | optional — set `canaryRevision` + `canaryPercent` |
+
+Use separate GCP projects for sandbox and production to isolate billing, IAM, and quotas.
+
+### First-time production setup
+
+```sh
+cd infra/gcp/core
+pnpm install
+pulumi stack init production
+# Edit Pulumi.production.yaml with your prod project ID, or use:
+pulumi config set gcp:project  your-prod-project-id  --stack production
+# ... set remaining keys as shown in Pulumi.production.yaml ...
+
+cd ../apps
+pnpm install
+pulumi stack init production
+pulumi config set starter-gcp-apps:coreStackRef  <org>/starter-gcp-core/production  --stack production
+# ... set remaining keys ...
+```
+
+### Deploy order (production)
+
+Follow the migration → producers → readiness → workers pattern documented in
+`.github/workflows/deploy-gcp.yml`:
+
+1. `prisma migrate deploy` — run before rolling new images
+2. `pulumi up -s production` in `core/` — Cloud SQL, VPC, Pub/Sub, Secret Manager
+3. `pulumi up -s production` in `apps/` — Cloud Run services
+4. Smoke-test `/api/health` on dashboard and public-api
+
+### Optional: global HTTPS load balancer
+
+Set `enableHttpsLb: true` and `lbDomain: app.example.com` in
+`infra/gcp/apps/Pulumi.production.yaml`. Pulumi will provision a serverless NEG,
+backend service, URL map, Google-managed TLS certificate, HTTPS target proxy,
+and a global forwarding rule. Point your DNS A record at the reserved IP before
+provisioning the cert (Google-managed certs require DNS propagation).
+
+### Optional: canary traffic split
+
+Set `canaryRevision` (e.g. `starter-dashboard-00042-abc`) and `canaryPercent`
+(e.g. `5`) in `infra/gcp/apps/Pulumi.production.yaml`. The scaffolding in
+`apps/index.ts` shows the traffic block shape; wire it into the dashboard
+Service definition and redeploy. Canary only fires on the production stack.
+
+### Required Cloud Run service-account IAM roles
+
+| Role | Required for |
+|------|-------------|
+| `roles/cloudsql.client` | Cloud SQL connections |
+| `roles/secretmanager.secretAccessor` | DATABASE_URL secret |
+| `roles/pubsub.publisher` | Pub/Sub topic publish |
+| `roles/pubsub.subscriber` | Pub/Sub subscription pull |
 
 ## GitHub Actions deploy
 

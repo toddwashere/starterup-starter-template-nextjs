@@ -10,8 +10,56 @@ const project = gcpConfig.require("project");
 // Per-stack tuning (sandbox uses smallest tier).
 const dbTier = config.get("dbTier") ?? "db-f1-micro";
 const dbVersion = config.get("dbVersion") ?? "POSTGRES_16";
+const dbAvailability = config.get("dbAvailability") ?? "ZONAL";
+const dbPointInTime = config.getBoolean("dbPointInTime") ?? false;
+const privateNetwork = config.getBoolean("privateNetwork") ?? false;
+const vpcCidr = config.get("vpcCidr") ?? "10.10.0.0/24";
 
-// --- Cloud SQL Postgres -----------------------------------------------------
+// --- VPC + Serverless VPC connector (production / privateNetwork only) -------
+
+const network = privateNetwork
+  ? new gcp.compute.Network("starter-vpc", { autoCreateSubnetworks: false })
+  : undefined;
+
+const subnet = network
+  ? new gcp.compute.Subnetwork("starter-subnet", {
+      network: network.id,
+      region,
+      ipCidrRange: vpcCidr,
+      privateIpGoogleAccess: true,
+    })
+  : undefined;
+
+const vpcConnector = network
+  ? new gcp.vpcaccess.Connector("starter-connector", {
+      region,
+      network: network.name,
+      ipCidrRange: "10.20.0.0/28", // /28 required for connector
+      minThroughput: 200,
+      maxThroughput: 300,
+    })
+  : undefined;
+
+// Private services access range — required for Cloud SQL private IP.
+const psaRange = network
+  ? new gcp.compute.GlobalAddress("starter-psa", {
+      purpose: "VPC_PEERING",
+      addressType: "INTERNAL",
+      prefixLength: 16,
+      network: network.id,
+    })
+  : undefined;
+
+const psa =
+  network && psaRange
+    ? new gcp.servicenetworking.Connection("starter-psa-conn", {
+        network: network.id,
+        service: "servicenetworking.googleapis.com",
+        reservedPeeringRanges: [psaRange.name],
+      })
+    : undefined;
+
+// --- Cloud SQL Postgres -------------------------------------------------------
 // Random password — alternative: `pulumi config set --secret dbPassword <value>`
 // and `config.requireSecret("dbPassword")`. We default to RandomPassword so the
 // sandbox spins up without manual config.
@@ -29,19 +77,26 @@ const dbInstance = new gcp.sql.DatabaseInstance(
     deletionProtection: true,
     settings: {
       tier: dbTier,
-      availabilityType: "ZONAL", // REGIONAL for prod (Task 7.1)
+      availabilityType: dbAvailability,
       backupConfiguration: {
         enabled: true,
-        pointInTimeRecoveryEnabled: false,
+        pointInTimeRecoveryEnabled: dbPointInTime,
       },
-      // No private IP for sandbox; Cloud Run uses the SQL Proxy socket via the
-      // attached `cloudsql` volume + connectionName. Public IP stays enabled
-      // (default) but authorized networks remain empty.
+      // Production: private IP only (no public IPv4), routed through the VPC.
+      // Sandbox: public IP (default); Cloud Run uses SQL Proxy socket via the
+      // attached `cloudsql` volume + connectionName.
+      ipConfiguration: network
+        ? {
+            ipv4Enabled: false,
+            privateNetwork: network.id,
+          }
+        : { ipv4Enabled: true },
     },
   },
   {
     protect: true,
     deleteBeforeReplace: false,
+    dependsOn: psa ? [psa] : [],
   },
 );
 
@@ -56,12 +111,15 @@ const dbUser = new gcp.sql.User("app-user", {
   password: dbPassword.result,
 });
 
-// Compose the DATABASE_URL connection string. Cloud Run reaches the instance
-// through the SQL Proxy unix socket mounted at `/cloudsql/<connectionName>`.
-// In production (Task 7.1) we switch to private IP + VPC connector.
-const databaseUrlInternal = pulumi.interpolate`postgresql://${dbUser.name}:${dbPassword.result}@/${dbName.name}?host=/cloudsql/${dbInstance.connectionName}`;
+// Compose the DATABASE_URL connection string.
+// Sandbox: Cloud Run reaches the instance through the SQL Proxy unix socket
+//   mounted at `/cloudsql/<connectionName>`.
+// Production: direct TCP via private IP through the VPC connector.
+const databaseUrlInternal = network
+  ? pulumi.interpolate`postgresql://${dbUser.name}:${dbPassword.result}@${dbInstance.privateIpAddress}/${dbName.name}`
+  : pulumi.interpolate`postgresql://${dbUser.name}:${dbPassword.result}@/${dbName.name}?host=/cloudsql/${dbInstance.connectionName}`;
 
-// --- Secret Manager: stash the DATABASE_URL ---------------------------------
+// --- Secret Manager: stash the DATABASE_URL ----------------------------------
 const dbUrlSecret = new gcp.secretmanager.Secret("database-url", {
   secretId: "database-url",
   replication: { auto: {} },
@@ -75,7 +133,7 @@ const dbUrlSecretVersion = new gcp.secretmanager.SecretVersion(
   },
 );
 
-// --- Pub/Sub ----------------------------------------------------------------
+// --- Pub/Sub -----------------------------------------------------------------
 const jobsTopic = new gcp.pubsub.Topic("jobs", {
   name: pulumi.interpolate`jobs-${pulumi.getStack()}`,
 });
@@ -98,7 +156,7 @@ const jobsSubscription = new gcp.pubsub.Subscription("jobs-sub", {
   },
 });
 
-// --- Exports (consumed by apps stack) ---------------------------------------
+// --- Exports (consumed by apps stack) ----------------------------------------
 export const projectId = project;
 export const regionOutput = region;
 export const databaseUrl = pulumi.secret(databaseUrlInternal);
@@ -111,3 +169,8 @@ export const sqlConnectionName = dbInstance.connectionName;
 export const sqlInstanceName = dbInstance.name;
 // Re-export to silence "declared but never used" — version pins the secret.
 export const databaseUrlSecretVersion = dbUrlSecretVersion.name;
+// Network outputs — empty string when sandbox (private networking disabled).
+export const vpcConnectorId = vpcConnector ? vpcConnector.id : pulumi.output("");
+export const networkSelfLink = network ? network.selfLink : pulumi.output("");
+export const subnetSelfLink = subnet ? subnet.selfLink : pulumi.output("");
+export const privateNetworkEnabled = pulumi.output(privateNetwork ? "true" : "false");
