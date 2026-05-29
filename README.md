@@ -46,6 +46,10 @@ packages/
 tooling/            — ESLint, Prettier, Tailwind, TypeScript configs
 ```
 
+## Deploy
+
+See [infra/README.md](infra/README.md) for multi-profile deployment options (local, Vercel + Supabase, Render, GCP, AWS, Azure), startup credits, and infrastructure setup guides.
+
 ## CI
 
 GitHub Actions runs on every pull request and push to `main`:
