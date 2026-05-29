@@ -34,5 +34,5 @@ export async function enqueue<E extends EventName>(
   };
 
   const adapter = resolveAdapter();
-  return adapter.publish(keys().PGMQ_QUEUE_NAME, envelope);
+  return adapter.publish(keys().BULLMQ_QUEUE_NAME, envelope);
 }

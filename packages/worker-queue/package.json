@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./keys": "./keys.ts",
     "./events": "./src/events.ts",
-    "./adapters/pgmq": "./src/adapters/pgmq.ts"
+    "./adapters/pgmq": "./src/adapters/pgmq.ts",
+    "./adapters/bullmq": "./src/adapters/bullmq.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",
@@ -15,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "bullmq": "^5",
     "pg": "^8",
     "zod": "^4.0.0"
   },

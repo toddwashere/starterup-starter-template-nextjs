@@ -1,3 +1,4 @@
+export { createBullmqAdapter } from "./adapters/bullmq";
 export {
   createPgmqAdapter,
   PgmqAdapter,

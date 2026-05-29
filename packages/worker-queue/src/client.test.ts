@@ -14,7 +14,8 @@ describe("enqueue (sync adapter)", () => {
     syncAdapter.reset();
     vi.mocked(keys).mockReturnValue({
       WORKER_QUEUE_ADAPTER: "sync",
-      PGMQ_QUEUE_NAME: "jobs",
+      BULLMQ_QUEUE_NAME: "jobs",
+      REDIS_URL: undefined,
     });
   });
 
@@ -57,10 +58,11 @@ describe("enqueue (sync adapter)", () => {
     );
   });
 
-  it("uses PGMQ_QUEUE_NAME from keys for the queue argument", async () => {
+  it("uses BULLMQ_QUEUE_NAME from keys for the queue argument", async () => {
     vi.mocked(keys).mockReturnValue({
       WORKER_QUEUE_ADAPTER: "sync",
-      PGMQ_QUEUE_NAME: "custom-queue",
+      BULLMQ_QUEUE_NAME: "custom-queue",
+      REDIS_URL: undefined,
     });
 
     await enqueue("user.welcome-email", { userId: "u1" });
