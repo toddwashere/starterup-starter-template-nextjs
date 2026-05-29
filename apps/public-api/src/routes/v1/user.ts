@@ -12,7 +12,6 @@ const MeResponseSchema = z.object({
   name: z.string(),
   email: z.string(),
   image: z.string().nullable(),
-  activeOrganizationId: z.string().nullable(),
 });
 
 const OrganizationSchema = z.object({

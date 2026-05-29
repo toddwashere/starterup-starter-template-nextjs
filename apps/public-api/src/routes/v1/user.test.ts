@@ -40,7 +40,6 @@ describe("GET /v1/me", () => {
       name: "Test",
       email: "test@example.com",
       image: null,
-      activeOrganizationId: null,
     });
     const res = await buildApp(oauthContext).request("/v1/me");
     expect(res.status).toBe(200);
@@ -48,6 +47,7 @@ describe("GET /v1/me", () => {
     expect(body.id).toBe("user_1");
     expect(body).not.toHaveProperty("token");
     expect(body).not.toHaveProperty("refresh");
+    expect(body).not.toHaveProperty("activeOrganizationId");
   });
 
   it("returns 403 for api-key auth", async () => {
