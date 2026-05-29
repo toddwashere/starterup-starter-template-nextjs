@@ -18,6 +18,8 @@
     "eval:ai:view": "npx promptfoo@latest view",
     "eval:ai:live": "echo '⚠️  LIVE LLM CALLS — bypassing cache (--no-cache). See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/assistant-chat/promptfooconfig.yaml --no-cache",
     "validate:env": "tsx scripts/validate-env.mts",
+    "infra:init": "tsx scripts/infra-init.ts",
+    "infra:deploy": "echo 'Run profile-specific deploy — see infra/README.md' && exit 1",
     "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
