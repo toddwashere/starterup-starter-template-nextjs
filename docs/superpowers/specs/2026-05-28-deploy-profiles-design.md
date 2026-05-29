@@ -11,7 +11,7 @@ Infrastructure lives at the repo root in **`infra/`** (platform configuration â€
 
 This spec **replaces pgmq + pg_cron** with profile-appropriate queues and schedulers. Plain Postgres works on every managed database (Supabase, Render Postgres, Cloud SQL, RDS, Azure Flexible Server) without extensions.
 
-**Supersedes / updates:** [`2026-05-22-worker-queue-pgmq-design.md`](./2026-05-22-worker-queue-pgmq-design.md) and [`2026-05-22-worker-queue-pgmq-deploy.md`](./2026-05-22-worker-queue-pgmq-deploy.md) for production deploy paths. Local development migrates from extension-based Postgres to **BullMQ + Redis** (optional `sync` adapter for unit tests).
+**Supersedes / updates:** [`2026-05-22-worker-queue-pgmq-design.md`](./done/2026-05-22-worker-queue-pgmq-design.md) and [`2026-05-22-worker-queue-pgmq-deploy.md`](./done/2026-05-22-worker-queue-pgmq-deploy.md) for production deploy paths. Local development migrates from extension-based Postgres to **BullMQ + Redis** (optional `sync` adapter for unit tests).
 
 ---
 
@@ -511,4 +511,4 @@ The README is the developer entry point. Per-profile READMEs hold detail.
 - [Render Startup Program](https://render.com/startups)
 - [Supabase for Startups](https://supabase.com/solutions/startups)
 - [Cloud Run pricing](https://cloud.google.com/run/pricing)
-- Prior art (superseded for deploy): [`2026-05-22-worker-queue-pgmq-design.md`](./2026-05-22-worker-queue-pgmq-design.md)
+- Prior art (superseded for deploy): [`2026-05-22-worker-queue-pgmq-design.md`](./done/2026-05-22-worker-queue-pgmq-design.md)

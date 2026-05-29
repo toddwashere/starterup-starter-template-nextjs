@@ -331,7 +331,7 @@ stripe listen --forward-to localhost:4000/api/auth/stripe/webhook
 
 ## Worker queue integration (v2, not v1)
 
-Per [worker-queue design](./2026-05-22-worker-queue-pgmq-design.md): domain packages do not import `@workspace/worker-queue`.
+Per [worker-queue design](./done/2026-05-22-worker-queue-pgmq-design.md): domain packages do not import `@workspace/worker-queue`.
 
 **v2 pattern:** thin functions in `packages/auth` (or dashboard) wrap billing hook results:
 
@@ -479,6 +479,6 @@ Phased use of [`@better-auth/stripe`](https://better-auth.com/docs/plugins/strip
 ## References
 
 - [Better Auth Stripe plugin](https://better-auth.com/docs/plugins/stripe)
-- [Worker queue design](./2026-05-22-worker-queue-pgmq-design.md)
+- [Worker queue design](./done/2026-05-22-worker-queue-pgmq-design.md)
 - [Add data model skill](.ai/skills/add-data-model-to-database/SKILL.md)
 - SaaS template plan: `plans/saas-starter-template-plan.md` (Subscription & Billing section)

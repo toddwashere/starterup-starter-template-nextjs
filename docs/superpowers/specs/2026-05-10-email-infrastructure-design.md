@@ -30,7 +30,7 @@ Add transactional email support using React Email for templates, Resend as the d
 - In-app notification system
 - Notification preferences / unsubscribe handling
 
-> **Update:** Worker queue integration is now implemented — signup enqueues `user.welcome-email` and `apps/workers` calls these senders from job handlers. See [`2026-05-22-worker-queue-pgmq-design.md`](./2026-05-22-worker-queue-pgmq-design.md) and the [deploy guide](./2026-05-22-worker-queue-pgmq-deploy.md).
+> **Update:** Worker queue integration is now implemented — signup enqueues `user.welcome-email` and `apps/workers` calls these senders from job handlers. See [`2026-05-22-worker-queue-pgmq-design.md`](./done/2026-05-22-worker-queue-pgmq-design.md) and the [deploy guide](./done/2026-05-22-worker-queue-pgmq-deploy.md).
 
 ## Package: `packages/email`
 

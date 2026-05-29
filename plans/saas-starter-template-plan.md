@@ -117,7 +117,7 @@ Events are the universal abstraction for all background work. Cron schedules, ap
 
 **Queue: pgmq (Postgres Message Queue)**
 
-pgmq is a Postgres extension providing durable message queues with at-least-once delivery, FIFO support, message archival, and zero additional infrastructure (runs inside the existing PostgreSQL database). Handlers must be idempotent. It is a first-party Supabase integration, works through connection poolers, and is visible in the Supabase dashboard. **Design spec:** [`docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md`](../docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md).
+pgmq is a Postgres extension providing durable message queues with at-least-once delivery, FIFO support, message archival, and zero additional infrastructure (runs inside the existing PostgreSQL database). Handlers must be idempotent. It is a first-party Supabase integration, works through connection poolers, and is visible in the Supabase dashboard. **Design spec:** [`docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md`](../docs/superpowers/specs/done/2026-05-22-worker-queue-pgmq-design.md).
 
 **Scheduling: pg_cron**
 

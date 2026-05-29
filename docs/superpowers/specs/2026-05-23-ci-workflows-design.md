@@ -55,7 +55,7 @@ Add GitHub Actions CI that runs on every pull request and push to `main`. v1 run
 | Spec | Relationship |
 |------|--------------|
 | [Typed env validation](./2026-05-23-typed-env-validation-design.md) | **Required** — CI runs `pnpm validate:env` |
-| [Worker queue pgmq](./2026-05-22-worker-queue-pgmq-design.md) | Postgres image and migration requirements |
+| [Worker queue pgmq](./done/2026-05-22-worker-queue-pgmq-design.md) | Postgres image and migration requirements |
 | [test-utils](./2026-05-23-test-utils-design.md) | Independent — covered by `pnpm test` |
 | [Observability Sentry](./2026-05-23-observability-sentry-design.md) | Source map upload in CI is a follow-up |
 
