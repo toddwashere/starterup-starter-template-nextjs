@@ -1,0 +1,2 @@
+runtime: nodejs
+description: Sandbox guardrails for GCP infra (no global LB, instance count cap).
