@@ -5,6 +5,7 @@ import {
 } from "@workspace/auth/public-api";
 import type { AppEnv } from "../../lib/context";
 import { errorResponse } from "../../lib/errors";
+import { ErrorResponseSchema } from "../../lib/openapi-schemas";
 
 const RegisterRequestSchema = z.object({
   name: z.string().min(1),
@@ -38,7 +39,10 @@ const registerRoute = createRoute({
       content: { "application/json": { schema: RegisterResponseSchema } },
       description: "Account created",
     },
-    400: { description: "Validation error" },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Validation error",
+    },
   },
 });
 

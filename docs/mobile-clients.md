@@ -54,6 +54,12 @@ OpenAPI docs: run `public-api` and open `/docs` on the API base URL.
 
 Generate HTTP clients from `GET {API_BASE_URL}/openapi.json` per stack (OpenAPI Generator, etc.). No need to import `@workspace/auth` in mobile repos.
 
+Inspect the spec directly:
+
+```bash
+curl -s "$API_BASE_URL/openapi.json" | head
+```
+
 ## Local development
 
 1. Start dashboard (auth on port 4000).

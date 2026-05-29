@@ -6,6 +6,7 @@ import {
 import type { AppEnv } from "../../lib/context";
 import { getOAuthContext } from "../../lib/context";
 import { errorResponse } from "../../lib/errors";
+import { ErrorResponseSchema } from "../../lib/openapi-schemas";
 
 const MeResponseSchema = z.object({
   id: z.string(),
@@ -35,8 +36,14 @@ const meRoute = createRoute({
       content: { "application/json": { schema: MeResponseSchema } },
       description: "Authenticated user profile",
     },
-    401: { description: "Unauthorized" },
-    403: { description: "OAuth Bearer required" },
+    401: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Unauthorized",
+    },
+    403: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "OAuth Bearer required",
+    },
   },
 });
 
@@ -52,8 +59,14 @@ const organizationsRoute = createRoute({
       },
       description: "Organizations the user belongs to",
     },
-    401: { description: "Unauthorized" },
-    403: { description: "OAuth Bearer required" },
+    401: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Unauthorized",
+    },
+    403: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "OAuth Bearer required",
+    },
   },
 });
 

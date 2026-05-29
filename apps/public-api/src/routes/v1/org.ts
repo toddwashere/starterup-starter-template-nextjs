@@ -1,6 +1,7 @@
 import { createRoute, z, OpenAPIHono } from "@hono/zod-openapi";
 import type { AppEnv } from "../../lib/context";
 import { errorResponse } from "../../lib/errors";
+import { ErrorResponseSchema } from "../../lib/openapi-schemas";
 
 const PingResponseSchema = z.object({
   orgId: z.string(),
@@ -20,7 +21,18 @@ const pingRoute = createRoute({
       content: { "application/json": { schema: PingResponseSchema } },
       description: "Org context probe (stub for org-scoped routes)",
     },
-    403: { description: "Forbidden" },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Missing organization context",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Unauthorized",
+    },
+    403: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Forbidden",
+    },
   },
 });
 
