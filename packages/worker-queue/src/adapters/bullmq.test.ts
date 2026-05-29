@@ -34,6 +34,9 @@ describe("createBullmqAdapter", () => {
       WORKER_QUEUE_ADAPTER: "bullmq",
       BULLMQ_QUEUE_NAME: "jobs",
       REDIS_URL: "redis://localhost:6379",
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     });
     addMock.mockResolvedValueOnce({ id: "42" });
 
@@ -58,6 +61,9 @@ describe("createBullmqAdapter", () => {
       WORKER_QUEUE_ADAPTER: "bullmq",
       BULLMQ_QUEUE_NAME: "jobs",
       REDIS_URL: undefined,
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     });
     expect(() => createBullmqAdapter()).toThrow(/REDIS_URL/);
   });
@@ -67,6 +73,9 @@ describe("createBullmqAdapter", () => {
       WORKER_QUEUE_ADAPTER: "bullmq",
       BULLMQ_QUEUE_NAME: "custom-jobs",
       REDIS_URL: "redis://localhost:6379",
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     });
     createBullmqAdapter();
     expect(queueCtor).toHaveBeenCalledWith("custom-jobs", expect.any(Object));

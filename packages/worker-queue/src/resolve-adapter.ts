@@ -1,6 +1,7 @@
 import { keys } from "../keys";
 
 import { createBullmqAdapter } from "./adapters/bullmq";
+import { createPubsubAdapter } from "./adapters/pubsub";
 import { syncAdapter } from "./adapters/sync";
 import type { QueueAdapter } from "./types";
 
@@ -14,6 +15,8 @@ export function resolveAdapter(): QueueAdapter {
       return syncAdapter;
     case "bullmq":
       return createBullmqAdapter();
+    case "pubsub":
+      return createPubsubAdapter();
     default: {
       const exhaustive: never = adapter;
       throw new Error(`Unknown WORKER_QUEUE_ADAPTER: ${String(exhaustive)}`);

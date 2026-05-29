@@ -16,6 +16,9 @@ describe("enqueue (sync adapter)", () => {
       WORKER_QUEUE_ADAPTER: "sync",
       BULLMQ_QUEUE_NAME: "jobs",
       REDIS_URL: undefined,
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     });
   });
 
@@ -63,6 +66,9 @@ describe("enqueue (sync adapter)", () => {
       WORKER_QUEUE_ADAPTER: "sync",
       BULLMQ_QUEUE_NAME: "custom-queue",
       REDIS_URL: undefined,
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     });
 
     await enqueue("user.welcome-email", { userId: "u1" });

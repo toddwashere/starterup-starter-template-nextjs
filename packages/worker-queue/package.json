@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./keys": "./keys.ts",
     "./events": "./src/events.ts",
-    "./adapters/bullmq": "./src/adapters/bullmq.ts"
+    "./adapters/bullmq": "./src/adapters/bullmq.ts",
+    "./adapters/pubsub": "./src/adapters/pubsub.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",
@@ -15,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@google-cloud/pubsub": "^4",
     "bullmq": "^5",
     "zod": "^4.0.0"
   },
