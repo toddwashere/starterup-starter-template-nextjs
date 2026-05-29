@@ -18,6 +18,7 @@
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
     "ai": "^6.0.191",
+    "bullmq": "^5",
     "tsx": "^4",
     "zod": "^3"
   },

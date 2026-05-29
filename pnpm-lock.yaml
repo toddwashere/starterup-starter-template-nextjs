@@ -270,6 +270,9 @@ importers:
       ai:
         specifier: ^6.0.191
         version: 6.0.191(zod@3.25.76)
+      bullmq:
+        specifier: ^5
+        version: 5.77.6
       tsx:
         specifier: ^4
         version: 4.21.0
@@ -10053,7 +10056,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.59.2
       debug: 4.4.3
       minimatch: 10.2.5
-      semver: 7.7.4
+      semver: 7.8.0
       tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -10691,7 +10694,7 @@ snapshots:
       dot-prop: 10.1.0
       env-paths: 3.0.0
       json-schema-typed: 8.0.2
-      semver: 7.7.4
+      semver: 7.8.0
       uint8array-extras: 1.5.0
 
   confbox@0.2.4: {}
@@ -12822,7 +12825,8 @@ snapshots:
 
   semver@6.3.1: {}
 
-  semver@7.7.4: {}
+  semver@7.7.4:
+    optional: true
 
   semver@7.8.0: {}
 
