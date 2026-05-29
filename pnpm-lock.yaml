@@ -820,9 +820,6 @@ importers:
       bullmq:
         specifier: ^5
         version: 5.77.6
-      pg:
-        specifier: ^8
-        version: 8.20.0
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -830,9 +827,6 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.12.4
-      '@types/pg':
-        specifier: ^8
-        version: 8.20.0
       '@workspace/tooling':
         specifier: workspace:*
         version: link:../../tooling
