@@ -1,4 +1,4 @@
-# starterup-starter-template-nextjs
+# Starter-Up Starter Template w/ Nextjs
 
 A production-ready SaaS starter template built with [Superpowers](https://github.com/obra/superpowers) for agentic AI development.
 
