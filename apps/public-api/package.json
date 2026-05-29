@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke:token": "tsx scripts/obtain-dev-access-token.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {

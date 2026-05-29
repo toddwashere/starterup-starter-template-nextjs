@@ -64,8 +64,22 @@ curl -s "$API_BASE_URL/openapi.json" | head
 
 1. Start dashboard (auth on port 4000).
 2. Start public API: `pnpm --filter @apps/public-api dev` (port 4002).
-3. Obtain a test access token (OAuth flow or dev tooling).
-4. Example:
+3. Obtain a dev access token (registers the smoke user + drives a PKCE sign-in
+   against the auth server) and run the smoke checks:
+
+   ```bash
+   # obtain a dev access token and export ACCESS_TOKEN / API_BASE_URL into the shell
+   eval "$(pnpm --filter @apps/public-api smoke:token --print-env)"
+   # run the smoke checks (GET /v1/me, /v1/organizations, optional /v1/orgs/$ORG_ID/ping)
+   ./apps/public-api/scripts/smoke-mobile-auth.sh
+   ```
+
+   The helper reads `AUTH_BASE_URL`, `API_BASE_URL`, `SMOKE_EMAIL`,
+   `SMOKE_PASSWORD`, `SMOKE_NAME`, `SMOKE_OAUTH_REDIRECT_URI`, and optional
+   `SMOKE_OAUTH_CLIENT_ID` (run with `--help` for details). It is local-only and
+   commits no secrets.
+
+4. Or call the API directly with any access token:
 
    ```bash
    curl -s -H "Authorization: Bearer $TOKEN" http://localhost:4002/v1/me
