@@ -1,0 +1,6 @@
+name: starter-azure-apps
+runtime: nodejs
+description: Container Apps services for the SaaS starter template
+config:
+  azure-native:location:
+    description: Azure region

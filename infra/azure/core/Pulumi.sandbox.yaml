@@ -1,0 +1,5 @@
+config:
+  azure-native:location: "eastus"
+  starter-azure-core:resourceGroupName: "starter-sandbox-rg"
+  starter-azure-core:dbSkuName: "Standard_B1ms"
+  starter-azure-core:dbVersion: "16"

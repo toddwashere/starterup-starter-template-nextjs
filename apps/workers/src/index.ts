@@ -3,6 +3,7 @@ import { keys as queueKeys } from "@workspace/worker-queue/keys";
 
 import { startBullmqWorker } from "./bullmq-worker";
 import { startPubsubWorker } from "./pubsub-worker";
+import { startServiceBusWorker } from "./servicebus-worker";
 import { startSqsWorker } from "./sqs-worker";
 import { handlers } from "./handlers";
 import { startHealthServer, setDraining } from "./health";
@@ -33,6 +34,9 @@ if (adapterName === "bullmq") {
   stop = worker.stop;
 } else if (adapterName === "sqs") {
   const worker = startSqsWorker({ registry: handlers });
+  stop = worker.stop;
+} else if (adapterName === "servicebus") {
+  const worker = startServiceBusWorker({ registry: handlers });
   stop = worker.stop;
 } else {
   throw new Error(`Unsupported worker adapter for this app: ${adapterName}`);

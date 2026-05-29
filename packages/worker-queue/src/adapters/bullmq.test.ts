@@ -37,6 +37,10 @@ describe("createBullmqAdapter", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
     addMock.mockResolvedValueOnce({ id: "42" });
 
@@ -64,6 +68,10 @@ describe("createBullmqAdapter", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
     expect(() => createBullmqAdapter()).toThrow(/REDIS_URL/);
   });
@@ -76,6 +84,10 @@ describe("createBullmqAdapter", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
     createBullmqAdapter();
     expect(queueCtor).toHaveBeenCalledWith("custom-jobs", expect.any(Object));

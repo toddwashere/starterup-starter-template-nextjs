@@ -1,0 +1,5 @@
+config:
+  azure-native:location: "eastus"
+  starter-azure-apps:coreStackRef: "<org>/starter-azure-core/sandbox"
+  starter-azure-apps:imageRegistry: "starter.azurecr.io"
+  starter-azure-apps:imageTag: "latest"

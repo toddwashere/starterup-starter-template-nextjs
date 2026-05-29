@@ -19,6 +19,10 @@ describe("enqueue (sync adapter)", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
   });
 
@@ -69,6 +73,10 @@ describe("enqueue (sync adapter)", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
 
     await enqueue("user.welcome-email", { userId: "u1" });

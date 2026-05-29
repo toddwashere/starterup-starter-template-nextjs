@@ -44,6 +44,8 @@ beforeEach(() => {
     PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     SQS_QUEUE_URL: QUEUE_URL,
     AWS_REGION: "us-east-1",
+    SERVICEBUS_CONNECTION_STRING: undefined,
+    SERVICEBUS_QUEUE_NAME: "jobs",
   });
 });
 
@@ -76,6 +78,8 @@ describe("createSqsAdapter.publish", () => {
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
       SQS_QUEUE_URL: undefined,
       AWS_REGION: "us-east-1",
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
     expect(() => createSqsAdapter()).toThrow(/SQS_QUEUE_URL/);
   });

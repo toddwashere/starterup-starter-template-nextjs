@@ -47,6 +47,10 @@ beforeEach(() => {
     GCP_PROJECT_ID: "my-project",
     PUBSUB_TOPIC_NAME: "jobs",
     PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+    SQS_QUEUE_URL: undefined,
+    AWS_REGION: undefined,
+    SERVICEBUS_CONNECTION_STRING: undefined,
+    SERVICEBUS_QUEUE_NAME: "jobs",
   });
 });
 
@@ -76,6 +80,10 @@ describe("createPubsubAdapter.publish", () => {
       GCP_PROJECT_ID: undefined,
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: undefined,
+      AWS_REGION: undefined,
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
     });
     expect(() => createPubsubAdapter()).toThrow(/GCP_PROJECT_ID/);
   });

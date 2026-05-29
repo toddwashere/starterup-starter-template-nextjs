@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const schema = z.object({
-  WORKER_QUEUE_ADAPTER: z.enum(["bullmq", "pubsub", "sqs", "sync"]).default("bullmq"),
+  WORKER_QUEUE_ADAPTER: z.enum(["bullmq", "pubsub", "sqs", "servicebus", "sync"]).default("bullmq"),
   BULLMQ_QUEUE_NAME: z.string().default("jobs"),
   REDIS_URL: z.string().url().optional(), // required when adapter is bullmq
   // Pub/Sub
@@ -11,6 +11,9 @@ const schema = z.object({
   // SQS
   SQS_QUEUE_URL: z.string().optional(),
   AWS_REGION: z.string().optional(),
+  // Azure Service Bus
+  SERVICEBUS_CONNECTION_STRING: z.string().optional(),
+  SERVICEBUS_QUEUE_NAME: z.string().default("jobs"),
 });
 
 export function keys() {
@@ -23,5 +26,7 @@ export function keys() {
     PUBSUB_SUBSCRIPTION_NAME: process.env.PUBSUB_SUBSCRIPTION_NAME,
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
     AWS_REGION: process.env.AWS_REGION,
+    SERVICEBUS_CONNECTION_STRING: process.env.SERVICEBUS_CONNECTION_STRING,
+    SERVICEBUS_QUEUE_NAME: process.env.SERVICEBUS_QUEUE_NAME,
   });
 }

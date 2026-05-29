@@ -9,6 +9,7 @@
     "./events": "./src/events.ts",
     "./adapters/bullmq": "./src/adapters/bullmq.ts",
     "./adapters/pubsub": "./src/adapters/pubsub.ts",
+    "./adapters/servicebus": "./src/adapters/servicebus.ts",
     "./adapters/sqs": "./src/adapters/sqs.ts"
   },
   "scripts": {
@@ -18,6 +19,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3",
+    "@azure/service-bus": "^7",
     "@google-cloud/pubsub": "^4",
     "bullmq": "^5",
     "zod": "^4.0.0"

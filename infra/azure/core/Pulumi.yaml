@@ -1,0 +1,6 @@
+name: starter-azure-core
+runtime: nodejs
+description: Core Azure resources for the SaaS starter template (Flexible Postgres, Service Bus, Key Vault)
+config:
+  azure-native:location:
+    description: Azure region
