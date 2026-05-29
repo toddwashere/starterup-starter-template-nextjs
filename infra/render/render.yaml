@@ -1,0 +1,160 @@
+# Render Blueprint for the SaaS starter template.
+# Apply with: `render blueprint launch` (or via the dashboard).
+# Docs: https://docs.render.com/blueprint-spec
+#
+# Per the deploy-profiles spec (docs/superpowers/specs/2026-05-28-deploy-profiles-design.md):
+# - Queue is BullMQ + Redis (Render Key Value)
+# - Workers run in `type: worker` (poll mode), not Vercel-style drain routes
+# - Free Postgres expires after 30 days; use a paid tier for anything beyond preview
+
+previewsEnabled: false
+
+databases:
+  - name: starter-postgres
+    databaseName: starter
+    user: starter
+    plan: starter # free is 30-day; "starter" is paid (~$7/mo) — adjust to taste
+    postgresMajorVersion: "16"
+    ipAllowList: []  # private to Render services in same region
+
+services:
+  # ----- Redis (BullMQ transport) -----
+  - type: keyvalue
+    name: starter-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction  # BullMQ requires this
+
+  # ----- Web services -----
+  # All reference the shared env group to avoid per-service duplication.
+
+  - type: web
+    name: starter-dashboard
+    runtime: docker
+    dockerfilePath: infra/shared/docker/Dockerfile.dashboard
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: starter-app-env
+      - key: PORT
+        value: "4000"
+      - key: NEXT_PUBLIC_DASHBOARD_URL
+        sync: false  # set in dashboard after first deploy (Render external URL)
+
+  - type: web
+    name: starter-www
+    runtime: docker
+    dockerfilePath: infra/shared/docker/Dockerfile.www
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: starter-app-env
+      - key: PORT
+        value: "4001"
+
+  - type: web
+    name: starter-public-api
+    runtime: docker
+    dockerfilePath: infra/shared/docker/Dockerfile.public-api
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: starter-app-env
+      - key: PORT
+        value: "4002"
+
+  - type: web
+    name: starter-public-mcp
+    runtime: docker
+    dockerfilePath: infra/shared/docker/Dockerfile.public-mcp
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: starter-app-env
+      - key: PORT
+        value: "4003"
+
+  # ----- Background worker (BullMQ poll mode) -----
+  - type: worker
+    name: starter-workers
+    runtime: docker
+    dockerfilePath: apps/workers/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    envVars:
+      - fromGroup: starter-app-env
+      - key: PORT
+        value: "4300"
+
+  # ----- Cron job: nightly session cleanup -----
+  # Enqueues a cleanup job via the worker-queue package.
+  - type: cron
+    name: starter-cleanup-expired-sessions
+    runtime: docker
+    dockerfilePath: infra/shared/docker/Dockerfile.public-api
+    dockerContext: .
+    schedule: "0 3 * * *"  # daily 03:00 UTC
+    dockerCommand: >-
+      pnpm --filter @workspace/worker-queue exec node -e
+      "import('@workspace/worker-queue').then(m => m.enqueue('cleanup.expired-sessions', {}))"
+    envVars:
+      - fromGroup: starter-app-env
+
+envVarGroups:
+  - name: starter-app-env
+    envVars:
+      # --- Wired automatically by Render from the linked services ---
+      - key: DATABASE_URL
+        fromDatabase:
+          name: starter-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: starter-redis
+          property: connectionString
+
+      # --- Queue config (BullMQ) ---
+      - key: WORKER_QUEUE_ADAPTER
+        value: bullmq
+      - key: BULLMQ_QUEUE_NAME
+        value: jobs
+
+      # --- Worker process tuning ---
+      - key: WORKER_HEALTH_PORT
+        value: "4300"
+
+      # --- Better Auth ---
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false  # set in dashboard after first deploy (Render external URL)
+      - key: NEXT_PUBLIC_BETTER_AUTH_URL
+        sync: false
+      - key: NEXT_PUBLIC_DASHBOARD_URL
+        sync: false
+      - key: NEXT_PUBLIC_WWW_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_MCP_URL
+        sync: false
+
+      # --- Stripe (set in dashboard) ---
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+      # --- Sentry / PostHog (optional) ---
+      - key: SENTRY_DSN
+        sync: false
