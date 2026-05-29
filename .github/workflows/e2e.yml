@@ -51,6 +51,7 @@ jobs:
       # CI test values — NOT real secrets; safe to commit.
       # -----------------------------------------------------------------------
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/starter_dev
+      REDIS_URL: redis://localhost:6379
       TURBO_TELEMETRY_DISABLED: 1
       E2E_CI: 1
 
@@ -94,18 +95,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # -----------------------------------------------------------------------
-      # Postgres — custom docker/postgres image that includes pgmq + pg_cron,
-      # mirrored exactly from ci.yml so `prisma migrate deploy` succeeds.
+      # Postgres + Redis — stock images; no build step needed.
       # -----------------------------------------------------------------------
-      - name: Start Postgres (pgmq + pg_cron)
+      - name: Start Postgres + Redis
         run: |
-          docker build -t starter-postgres:16 docker/postgres
           docker run -d --name postgres \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=starter_dev \
             -p 5432:5432 \
-            starter-postgres:16
+            postgres:16
+          docker run -d --name redis \
+            -p 6379:6379 \
+            redis:7-alpine
           for i in $(seq 1 60); do
             if pg_isready -h localhost -U postgres; then
               echo "Postgres ready"
@@ -197,6 +199,6 @@ jobs:
           echo "=== /tmp/next-start.log (last 50 lines) ==="
           tail -50 /tmp/next-start.log || echo "(log not found)"
 
-      - name: Stop Postgres
+      - name: Stop Postgres + Redis
         if: always()
-        run: docker rm -f postgres || true
+        run: docker rm -f postgres redis || true
