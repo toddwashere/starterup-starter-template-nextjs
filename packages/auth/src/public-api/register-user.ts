@@ -20,7 +20,12 @@ const DUPLICATE_EMAIL_MESSAGE =
   "An account with this email already exists. Sign in instead.";
 
 function isDuplicateEmail(err: APIError): boolean {
-  if (err.body?.code === "USER_ALREADY_EXISTS") return true;
+  // Primary: better-auth 1.6.11 throws code
+  // "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL" on duplicate sign-up. Match the
+  // prefix so both the historical ("USER_ALREADY_EXISTS") and current codes
+  // are detected.
+  if (err.body?.code?.startsWith("USER_ALREADY_EXISTS")) return true;
+  // Secondary (defense in depth): message regex fallback.
   return /already exists/i.test(err.message ?? "");
 }
 

@@ -51,11 +51,15 @@ describe("registerUserForPublicApi", () => {
     expect(result).not.toHaveProperty("password");
   });
 
-  it("maps duplicate-email APIError (USER_ALREADY_EXISTS) to sign-in hint", async () => {
+  // better-auth 1.6.11 throws APIError.from("UNPROCESSABLE_ENTITY",
+  // BASE_ERROR_CODES.USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL) on duplicate
+  // sign-up: body.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
+  // message "User already exists. Use another email."
+  it("maps duplicate-email APIError (USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL) to sign-in hint", async () => {
     vi.mocked(auth.api.signUpEmail).mockRejectedValue(
       new APIError("UNPROCESSABLE_ENTITY", {
-        code: "USER_ALREADY_EXISTS",
-        message: "User already exists",
+        code: "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
+        message: "User already exists. Use another email.",
       }),
     );
 
@@ -72,7 +76,32 @@ describe("registerUserForPublicApi", () => {
     });
   });
 
-  it("maps duplicate-email APIError detected by message fallback", async () => {
+  // Proves the CODE path works independently of the message regex: the real
+  // better-auth code is present but the message does NOT contain "already
+  // exists", so detection must succeed on code alone.
+  it("maps duplicate-email APIError by code alone (message does not match regex)", async () => {
+    vi.mocked(auth.api.signUpEmail).mockRejectedValue(
+      new APIError("UNPROCESSABLE_ENTITY", {
+        code: "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
+        message: "Conflict",
+      }),
+    );
+
+    await expect(
+      registerUserForPublicApi({
+        name: "Test User",
+        email: "dup@example.com",
+        password: "supersecret",
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "An account with this email already exists. Sign in instead.",
+    });
+  });
+
+  // Proves the MESSAGE fallback still works independently: no/unknown code,
+  // but the message matches the /already exists/i regex.
+  it("maps duplicate-email APIError by message fallback (no code)", async () => {
     vi.mocked(auth.api.signUpEmail).mockRejectedValue(
       new APIError("UNPROCESSABLE_ENTITY", {
         message: "User with this email already exists",
