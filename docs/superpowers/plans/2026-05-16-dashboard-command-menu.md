@@ -91,7 +91,7 @@ IconForSearch.displayName = "IconForSearch";
 - [ ] **Step 3: Verify TypeScript**
 
 ```bash
-cd /Users/user/GIT/superpowers-starter-template-nextjs
+cd /Users/user/GIT/starterup-starter-template-nextjs
 pnpm --filter @workspace/ui exec tsc --noEmit
 ```
 Expected: no errors.
@@ -165,7 +165,7 @@ export type CommandProvider = (
 - [ ] **Step 2: Type-check the file**
 
 ```bash
-cd /Users/user/GIT/superpowers-starter-template-nextjs
+cd /Users/user/GIT/starterup-starter-template-nextjs
 pnpm --filter dashboard exec tsc --noEmit
 ```
 Expected: no errors.
@@ -446,7 +446,7 @@ describe("command ID uniqueness", () => {
 - [ ] **Step 2: Run tests to confirm they fail (module not found)**
 
 ```bash
-cd /Users/user/GIT/superpowers-starter-template-nextjs
+cd /Users/user/GIT/starterup-starter-template-nextjs
 pnpm --filter dashboard exec vitest run features/command-menu
 ```
 Expected: FAIL — "Cannot find module '../command-providers'"
@@ -672,7 +672,7 @@ export function buildCommands(context: CommandContext): DashboardCommand[] {
 - [ ] **Step 2: Run tests to confirm they pass**
 
 ```bash
-cd /Users/user/GIT/superpowers-starter-template-nextjs
+cd /Users/user/GIT/starterup-starter-template-nextjs
 pnpm --filter dashboard exec vitest run features/command-menu
 ```
 Expected: all tests PASS.
@@ -1226,7 +1226,7 @@ export default function OrgLayout({
 - [ ] **Step 2: Run all tests to confirm nothing broke**
 
 ```bash
-cd /Users/user/GIT/superpowers-starter-template-nextjs
+cd /Users/user/GIT/starterup-starter-template-nextjs
 pnpm --filter dashboard exec vitest run
 ```
 Expected: all tests PASS.
