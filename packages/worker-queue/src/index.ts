@@ -1,5 +1,6 @@
 export { createBullmqAdapter } from "./adapters/bullmq";
 export { createPubsubAdapter } from "./adapters/pubsub";
+export { createSqsAdapter } from "./adapters/sqs";
 export { enqueue } from "./client";
 export {
   events,

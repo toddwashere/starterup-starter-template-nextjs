@@ -1,0 +1,6 @@
+name: starter-aws-core
+runtime: nodejs
+description: Core AWS resources for the SaaS starter template (RDS, SQS, secrets)
+config:
+  aws:region:
+    description: AWS region

@@ -1,0 +1,6 @@
+name: starter-aws-apps
+runtime: nodejs
+description: ECS Fargate services for the SaaS starter template
+config:
+  aws:region:
+    description: AWS region

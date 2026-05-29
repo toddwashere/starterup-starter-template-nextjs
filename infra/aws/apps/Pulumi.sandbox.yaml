@@ -1,0 +1,5 @@
+config:
+  aws:region: "us-east-1"
+  starter-aws-apps:coreStackRef: "<org>/starter-aws-core/sandbox"
+  starter-aws-apps:imageRegistry: "<account-id>.dkr.ecr.us-east-1.amazonaws.com/starter"
+  starter-aws-apps:imageTag: "latest"
