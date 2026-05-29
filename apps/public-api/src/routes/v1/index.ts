@@ -7,6 +7,7 @@ import { orgContext } from "../../middleware/org-context";
 import { registerAccountRoute } from "./account";
 import { registerUserRoutes } from "./user";
 import { registerOrgRoutes } from "./org";
+import { registerAuthRoutes } from "./auth";
 
 export function createV1Router(): OpenAPIHono<AppEnv> {
   const v1 = new OpenAPIHono<AppEnv>();
@@ -26,9 +27,14 @@ export function createV1Router(): OpenAPIHono<AppEnv> {
   orgs.use("/v1/orgs/:orgId/*", orgContext);
   registerOrgRoutes(orgs);
 
+  // Registration is public — no resolveAuth middleware.
+  const auth = new OpenAPIHono<AppEnv>();
+  registerAuthRoutes(auth);
+
   v1.route("/", user);
   v1.route("/", account);
   v1.route("/", orgs);
+  v1.route("/", auth);
 
   return v1;
 }
