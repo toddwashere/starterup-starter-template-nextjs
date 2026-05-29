@@ -1,0 +1,5 @@
+config:
+  gcp:project: "your-sandbox-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-apps:coreStackRef: "<org>/starter-gcp-core/sandbox"
+  starter-gcp-apps:imageRegistry: "us-central1-docker.pkg.dev/<project>/starter"

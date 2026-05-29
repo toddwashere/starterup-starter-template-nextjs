@@ -1,0 +1,5 @@
+config:
+  gcp:project: "your-sandbox-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-core:dbTier: "db-f1-micro"
+  starter-gcp-core:dbVersion: "POSTGRES_16"

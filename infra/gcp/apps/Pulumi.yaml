@@ -1,0 +1,6 @@
+name: starter-gcp-apps
+runtime: nodejs
+description: Cloud Run services for the SaaS starter template
+config:
+  gcp:project:
+    description: GCP project ID
