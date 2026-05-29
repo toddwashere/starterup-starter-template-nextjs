@@ -14,8 +14,13 @@ export interface BullmqWorkerDeps {
   concurrency?: number;
 }
 
-/** Start a BullMQ Worker. Returns an async `stop()` that drains in-flight jobs. */
-export function startBullmqWorker(deps: BullmqWorkerDeps): () => Promise<void> {
+export interface RunningBullmqWorker {
+  stop: () => Promise<void>;
+  checkRedis: () => Promise<boolean>;
+}
+
+/** Start a BullMQ Worker. Returns `{ stop, checkRedis }`. */
+export function startBullmqWorker(deps: BullmqWorkerDeps): RunningBullmqWorker {
   const { REDIS_URL, BULLMQ_QUEUE_NAME } = queueKeys();
   if (!REDIS_URL) {
     throw new Error("REDIS_URL is required for the bullmq worker");
@@ -60,7 +65,17 @@ export function startBullmqWorker(deps: BullmqWorkerDeps): () => Promise<void> {
     console.log(`[workers] job ${job.id} completed (${job.name})`);
   });
 
-  return async () => {
-    await worker.close();
+  return {
+    stop: async () => {
+      await worker.close();
+    },
+    checkRedis: async () => {
+      try {
+        const client = await worker.client;
+        return client.status === "ready";
+      } catch {
+        return false;
+      }
+    },
   };
 }
