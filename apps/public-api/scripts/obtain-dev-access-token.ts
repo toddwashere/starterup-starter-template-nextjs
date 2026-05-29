@@ -8,14 +8,16 @@
  * stores or commits secrets and prints only the credentials you supply.
  *
  * What it does:
- *   1. (optionally) Registers the smoke user via POST {API_BASE_URL}/v1/auth/register.
+ *   1. Registers the smoke user via POST {API_BASE_URL}/v1/auth/register
+ *      (always attempted, best-effort; an "already exists" 400 is ignored).
  *   2. Discovers OAuth endpoints from the auth server's RFC 8414 metadata
  *      (falling back to documented defaults if discovery fails).
  *   3. Dynamically registers a public OAuth client (unless SMOKE_OAUTH_CLIENT_ID set).
  *   4. Signs in via Better Auth email/password to obtain a session cookie.
  *   5. Calls the authorize endpoint with the session cookie + PKCE params to get
  *      an authorization code, then exchanges it at the token endpoint.
- *   6. Prints the token (human summary, or `export ...` lines with --print-env).
+ *   6. Prints the token: a masked human summary by default, or machine-readable
+ *      `export ...` lines on stdout with --print-env (use that to eval the raw token).
  *
  * Environment variables (all have local defaults except credentials):
  *   AUTH_BASE_URL            Auth server base. Default: $BETTER_AUTH_URL or http://localhost:4000
@@ -27,7 +29,8 @@
  *   SMOKE_OAUTH_CLIENT_ID    Existing public client id. If absent, a client is registered dynamically.
  *
  * Flags:
- *   --register     Always attempt user registration first (a 400 "already exists" is ignored).
+ *   --register     No-op kept for compatibility: registration is always attempted
+ *                  (best-effort; an "already exists" 400 is ignored either way).
  *   --print-env    Print ONLY `export ACCESS_TOKEN=...` / `export API_BASE_URL=...` to stdout
  *                  (everything else goes to stderr), for: eval "$(... smoke:token --print-env)".
  *   --help, -h     Show usage and exit.
@@ -66,8 +69,8 @@ function printHelp(): void {
       `Usage:\n` +
       `  pnpm --filter @apps/public-api smoke:token [--register] [--print-env]\n\n` +
       `Flags:\n` +
-      `  --register    Attempt user registration first (ignores "already exists").\n` +
-      `  --print-env   Print only \`export ACCESS_TOKEN=...\` lines (for eval).\n` +
+      `  --register    No-op: registration is always attempted (best-effort; ignores "already exists").\n` +
+      `  --print-env   Print only \`export ACCESS_TOKEN=...\` lines (for eval); raw token goes to stdout here.\n` +
       `  --help, -h    Show this help.\n\n` +
       `Env (defaults shown):\n` +
       `  AUTH_BASE_URL=http://localhost:4000   (or $BETTER_AUTH_URL)\n` +
@@ -190,12 +193,31 @@ async function ensureUserRegistered(): Promise<void> {
     log(`   registered new user`);
     return;
   }
-  if (res.status === 400) {
-    // Duplicate email / already exists — fine, we'll just sign in.
-    log(`   user already exists (400) — continuing to sign-in`);
-    return;
-  }
   const body = await res.text().catch(() => "");
+  if (res.status === 400) {
+    // The register route returns 400 { error: { code, message } } both for a
+    // duplicate account (benign — we'll just sign in) and for genuine validation
+    // failures (e.g. weak password). Only swallow the "already exists" case;
+    // surface everything else so the user isn't left with a confusing
+    // downstream sign-in failure.
+    let code = "";
+    let message = "";
+    try {
+      const parsed = JSON.parse(body) as { error?: { code?: string; message?: string } };
+      code = parsed.error?.code ?? "";
+      message = parsed.error?.message ?? "";
+    } catch {
+      message = body;
+    }
+    if (/already exists/i.test(message)) {
+      log(`   user already exists (400) — continuing to sign-in`);
+      return;
+    }
+    fail(
+      `registration rejected (400${code ? ` ${code}` : ""}) at ${url}: ${message.slice(0, 300)}\n` +
+        `  This is not an "already exists" conflict — fix the input (e.g. SMOKE_PASSWORD) and retry.`,
+    );
+  }
   fail(`unexpected ${res.status} from ${url}: ${body.slice(0, 300)}`);
 }
 
@@ -358,6 +380,12 @@ async function authorize(
   const authorizeUrl = buildAuthorizeUrl(authorizeEndpoint, clientId, challenge, state);
   log(`-> requesting authorization code (headless) from ${authorizeEndpoint}`);
 
+  // Consent reality: the auth server is configured with consentPage: "/consent"
+  // and does NOT skip consent for dynamically-registered clients. So the FIRST
+  // run for a brand-new client typically redirects to the consent page and falls
+  // through to the manual-instructions path below. Reusing a previously-consented
+  // client via SMOKE_OAUTH_CLIENT_ID is what enables the fully-headless flow.
+  //
   // Follow redirects manually so we can capture the code and detect consent/login pages.
   let currentUrl = authorizeUrl;
   let jar = cookie;
@@ -465,9 +493,10 @@ async function main(): Promise<void> {
 
   log(`auth=${AUTH_BASE_URL}  api=${API_BASE_URL}  user=${SMOKE_EMAIL}`);
 
-  // Always attempt registration (best-effort): a 400 "already exists" is ignored,
-  // so the flow is idempotent/repeatable. --register just makes this explicit.
-  if (ALWAYS_REGISTER) log(`-> --register passed (registration is attempted by default)`);
+  // Registration is always attempted (best-effort): a 400 "already exists" is
+  // ignored, so the flow is idempotent/repeatable. The --register flag is a no-op
+  // kept for compatibility — registration happens regardless.
+  if (ALWAYS_REGISTER) log(`-> --register passed (no-op; registration is always attempted)`);
   await ensureUserRegistered();
 
   const endpoints = await discoverEndpoints();
@@ -487,19 +516,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Human summary (note: prints the token so you can copy it for local use).
+  // Human summary: only ever show the MASKED token here. The raw token is
+  // available via --print-env (the intended machine-readable / eval path).
   const masked = `${token.access_token.slice(0, 8)}…${token.access_token.slice(-4)}`;
   log(`\nAccess token obtained.`);
   log(`  token_type : ${token.token_type ?? "Bearer"}`);
   log(`  scope      : ${token.scope ?? SCOPE}`);
   if (token.expires_in) log(`  expires_in : ${token.expires_in}s`);
   log(`  refresh    : ${token.refresh_token ? "yes" : "no"}`);
-  log(`  access     : ${masked}`);
-  log(`\nTo use it in the smoke script:`);
+  log(`  access     : ${masked} (masked)`);
+  log(`\nTo get the raw token, re-run with --print-env and eval it:`);
   log(`  eval "$(pnpm --filter @apps/public-api smoke:token --print-env)"`);
   log(`  ./apps/public-api/scripts/smoke-mobile-auth.sh`);
-  log(`\nFull access token (local dev only):`);
-  process.stdout.write(`${token.access_token}\n`);
 }
 
 main().catch((err) => {
