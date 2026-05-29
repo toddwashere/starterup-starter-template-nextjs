@@ -15,15 +15,15 @@ import {
 // shared package is created.
 //
 // Tracking issue: extract handlers to @workspace/worker-handlers
-type JobHandler<E extends EventName> = (
+type JobHandler = (
   payload: ReturnType<typeof parseJobEnvelope>["payload"],
 ) => Promise<void>;
-type HandlerRegistry = Record<EventName, JobHandler<EventName>>;
+type HandlerRegistry = Record<EventName, JobHandler>;
 
 function getHandler(
   registry: Partial<HandlerRegistry>,
   event: EventName,
-): JobHandler<EventName> {
+): JobHandler {
   const handler = registry[event];
   if (!handler) {
     throw new Error(`No handler registered for event: ${event}`);

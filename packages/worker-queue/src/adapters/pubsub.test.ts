@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { JobEnvelope } from "../types";
 
+/** Minimal shape of `@google-cloud/pubsub` `Message` the adapter exercises. */
+interface FakePubsubMessage {
+  id: string;
+  data: Buffer;
+  deliveryAttempt?: number;
+  ack: () => void;
+  nack: () => void;
+}
+type MessageHandler = (msg: FakePubsubMessage) => void;
+type SubscriptionEventHandler = (...args: unknown[]) => void;
+
 const publishMessageMock = vi.fn();
 const onMock = vi.fn();
 const closeMock = vi.fn();
@@ -99,8 +110,8 @@ describe("createPubsubAdapter.consume", () => {
   it("acks on handler success", async () => {
     const ackMock = vi.fn();
     const nackMock = vi.fn();
-    let messageHandler: (msg: any) => void = () => {};
-    onMock.mockImplementation((event: string, handler: any) => {
+    let messageHandler: MessageHandler = () => {};
+    onMock.mockImplementation((event: string, handler: SubscriptionEventHandler) => {
       if (event === "message") messageHandler = handler;
     });
 
@@ -131,8 +142,8 @@ describe("createPubsubAdapter.consume", () => {
   it("nacks on handler return 'nack'", async () => {
     const ackMock = vi.fn();
     const nackMock = vi.fn();
-    let messageHandler: (msg: any) => void = () => {};
-    onMock.mockImplementation((event: string, handler: any) => {
+    let messageHandler: MessageHandler = () => {};
+    onMock.mockImplementation((event: string, handler: SubscriptionEventHandler) => {
       if (event === "message") messageHandler = handler;
     });
 
@@ -162,8 +173,8 @@ describe("createPubsubAdapter.consume", () => {
   it("nacks on handler throw", async () => {
     const ackMock = vi.fn();
     const nackMock = vi.fn();
-    let messageHandler: (msg: any) => void = () => {};
-    onMock.mockImplementation((event: string, handler: any) => {
+    let messageHandler: MessageHandler = () => {};
+    onMock.mockImplementation((event: string, handler: SubscriptionEventHandler) => {
       if (event === "message") messageHandler = handler;
     });
 
@@ -197,8 +208,8 @@ describe("createPubsubAdapter.consume", () => {
     const ackMock = vi.fn();
     const nackMock = vi.fn();
     const onMessageMock = vi.fn();
-    let messageHandler: (msg: any) => void = () => {};
-    onMock.mockImplementation((event: string, handler: any) => {
+    let messageHandler: MessageHandler = () => {};
+    onMock.mockImplementation((event: string, handler: SubscriptionEventHandler) => {
       if (event === "message") messageHandler = handler;
     });
 
