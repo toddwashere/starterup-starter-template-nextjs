@@ -1,5 +1,7 @@
 # Worker Queue (pgmq + pg_cron) Implementation Plan
 
+> **Status (2026-05-29):** Superseded by [`2026-05-28-deploy-profiles-design.md`](../specs/2026-05-28-deploy-profiles-design.md). Retained for historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add `packages/worker-queue` and `apps/workers` with pgmq + pg_cron as the default background job pipeline, Docker Postgres with extensions for local dev, and a swappable adapter boundary for future BullMQ/SQS.

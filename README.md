@@ -11,7 +11,7 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 
 - **Next.js 16** (App Router) + **React 19** Server Components
 - **TypeScript 5.7+** end-to-end with Zod validation
-- **Prisma 7** + PostgreSQL with pgmq & pg_cron
+- **Prisma 7** + PostgreSQL
 - **Better Auth** (email/password, OAuth, 2FA, organizations, admin)
 - **Stripe** billing & subscriptions
 - **Tailwind CSS** + **Shadcn/ui** component library
@@ -23,7 +23,7 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 - **Authentication & Authorization** — Multi-provider auth, RBAC with organization roles (`owner`/`admin`/`member`), system admin, session management
 - **Multi-Tenancy** — Organization-scoped data isolation, member invitations, per-org settings
 - **Billing & Subscriptions** — Stripe integration with multiple tiers, usage-based billing, dunning, billing portal
-- **Background Processing** — pgmq durable queue (at-least-once, idempotent handlers), pg_cron scheduled jobs, dedicated worker process ([design spec](docs/superpowers/specs/2026-05-22-worker-queue-pgmq-design.md))
+- **Background Processing** — BullMQ (Redis) queue locally and on PaaS; Pub/Sub / SQS / Service Bus on Pulumi cloud profiles. At-least-once with idempotent handlers, dedicated worker process ([deploy profiles spec](docs/superpowers/specs/2026-05-28-deploy-profiles-design.md))
 - **Public API** — RESTful API with key auth, rate limiting, OpenAPI docs, SDK generation
 - **Webhooks** — Outbound delivery with signature verification, retry/backoff, event filtering
 - **Notifications** — Email (React Email), in-app notifications, user preferences, unsubscribe
@@ -35,7 +35,7 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 ```
 apps/
   dashboard/        — Main SaaS application
-  workers/          — Background job consumer (pgmq)
+  workers/          — Background job consumer (BullMQ)
   public-api/       — REST API for integrations
   public-mcp/       — AI/MCP integrations
   www/              — Marketing site
@@ -56,7 +56,7 @@ GitHub Actions runs on every pull request and push to `main`:
 
 1. `pnpm validate:env` — validates `.env.example` against typed env schemas
 2. `pnpm lint` / `pnpm type-check` — static checks
-3. `prisma migrate deploy` against Postgres with **pgmq** and **pg_cron** (custom `docker/postgres` image)
+3. `prisma migrate deploy` against Postgres (stock `postgres:16` locally; managed Postgres in cloud profiles). No extensions required.
 4. `pnpm test` / `pnpm build`
 
 **Local simulation:**

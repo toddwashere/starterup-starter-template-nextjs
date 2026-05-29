@@ -5,9 +5,7 @@
 
 ## Overview
 
-Add GitHub Actions CI that runs on every pull request and push to `main`. v1 runs lint, type-check, test, and build across the monorepo, validates environment configuration, and applies Prisma migrations against a Postgres instance with **pgmq** and **pg_cron** extensions.
-
-Plain `postgres:16` images cannot run the worker-queue migration — CI must build and use the repo's custom `docker/postgres` image (same as local Docker Compose).
+Add GitHub Actions CI that runs on every pull request and push to `main`. v1 runs lint, type-check, test, and build across the monorepo, validates environment configuration, and applies Prisma migrations against a Postgres instance.
 
 ---
 
@@ -33,7 +31,7 @@ Plain `postgres:16` images cannot run the worker-queue migration — CI must bui
 ### In scope
 
 - `.github/workflows/ci.yml`
-- Postgres via `docker build` + `docker run` (pgmq + pg_cron)
+- Postgres via stock `postgres:16` service container
 - Steps: checkout → pnpm install → `validate:env` → lint → type-check → migrate deploy → test → build
 - pnpm store cache via `actions/setup-node`
 - Turbo local cache on `.turbo`

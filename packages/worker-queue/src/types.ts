@@ -5,7 +5,7 @@ export type JobEnvelope = {
   enqueuedAt?: string; // ISO timestamp, set by enqueue()
 };
 
-// Producer-facing adapter interface (implemented by sync/pgmq adapters in later tasks):
+// Producer-facing adapter interface (implemented by sync/bullmq/cloud adapters):
 export interface QueueAdapter {
   publish(queue: string, envelope: JobEnvelope): Promise<string>; // returns message id
 }

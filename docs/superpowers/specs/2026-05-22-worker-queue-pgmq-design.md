@@ -1,5 +1,7 @@
 # Worker Queue (pgmq + pg_cron) Design
 
+> **Status (2026-05-29):** Superseded by [`2026-05-28-deploy-profiles-design.md`](./2026-05-28-deploy-profiles-design.md). Retained for historical context.
+
 Background job processing for the SaaS starter template: durable queues in PostgreSQL, scheduled triggers via pg_cron, and a host-agnostic worker process. Producers call a single `enqueue()` API; transport is swappable later (BullMQ, SQS) without changing handlers.
 
 ## Decisions

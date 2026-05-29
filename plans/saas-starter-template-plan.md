@@ -1,5 +1,7 @@
 # SaaS Starter Template Plan
 
+> **Status (2026-05-29):** Sections referencing pgmq + pg_cron are superseded by [`docs/superpowers/specs/2026-05-28-deploy-profiles-design.md`](../docs/superpowers/specs/2026-05-28-deploy-profiles-design.md). The runtime queue is now BullMQ + Redis (local/PaaS) or cloud-native (GCP/AWS/Azure).
+
 This is a starter template that was built using the superpowers agentic skill framework
 https://github.com/obra/superpowers
 
