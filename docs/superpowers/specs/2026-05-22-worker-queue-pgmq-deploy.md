@@ -1,5 +1,7 @@
 # Worker Queue (pgmq + pg_cron) Deployment
 
+> **Status (2026-05-29): Superseded for production deploy paths by [`2026-05-28-deploy-profiles-design.md`](./2026-05-28-deploy-profiles-design.md).** The pgmq + pg_cron extension approach has been replaced with profile-specific queues (BullMQ + Redis locally and on Render/Vercel; Pub/Sub / SQS / Service Bus on cloud profiles). This document is retained for historical context. Do not implement against it for new deploys.
+
 How to deploy the background worker queue: the extension-enabled PostgreSQL, the
 database migration, and the long-lived `apps/workers` process. For the design
 rationale see [the design spec](./2026-05-22-worker-queue-pgmq-design.md); for the

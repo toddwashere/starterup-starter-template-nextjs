@@ -12,7 +12,7 @@ export interface QueueAdapter {
 
 // Consumer-facing shape (used by apps/workers later):
 export interface ReceivedMessage {
-  msgId: string; // pgmq message id (as string)
+  msgId: string; // adapter-specific message id (as string)
   readCount: number; // delivery attempt count
   envelope: JobEnvelope;
 }

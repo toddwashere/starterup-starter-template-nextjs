@@ -7,7 +7,6 @@
     ".": "./src/index.ts",
     "./keys": "./keys.ts",
     "./events": "./src/events.ts",
-    "./adapters/pgmq": "./src/adapters/pgmq.ts",
     "./adapters/bullmq": "./src/adapters/bullmq.ts"
   },
   "scripts": {
@@ -17,12 +16,10 @@
   },
   "dependencies": {
     "bullmq": "^5",
-    "pg": "^8",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^24",
-    "@types/pg": "^8",
     "@workspace/tooling": "workspace:*",
     "eslint": "^9.18",
     "typescript": "^5.7",

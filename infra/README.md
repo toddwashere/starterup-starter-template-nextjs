@@ -87,7 +87,7 @@ Includes:
 - **Redis 7** for BullMQ — `redis://localhost:6379`
 - **Workers** — `pnpm --filter @apps/workers dev` polls for jobs
 
-Migrate and seed the database:
+Migrate and seed the database (no Postgres extensions required — fresh DBs need `prisma migrate deploy` only):
 
 ```bash
 pnpm --filter @workspace/database exec prisma migrate deploy
