@@ -46,3 +46,6 @@ next-env.d.ts
 .pnp
 .pnp.js
 .claude/settings.local.json
+
+# Infra wizard output
+infra/.generated/
