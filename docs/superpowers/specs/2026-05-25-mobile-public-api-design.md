@@ -259,4 +259,4 @@ Single global auth and API host; authorization is org membership and permissions
 
 ## Implementation Handoff
 
-After this spec is reviewed, create an implementation plan via the writing-plans skill: `docs/superpowers/plans/2026-05-25-mobile-public-api.md`.
+After this spec is reviewed, create an implementation plan via the writing-plans skill: [`docs/superpowers/plans/done/2026-05-25-mobile-public-api.md`](../plans/done/2026-05-25-mobile-public-api.md) (complete). Follow-up: [`docs/superpowers/plans/2026-05-29-mobile-auth-public-api-phase-0.md`](../plans/2026-05-29-mobile-auth-public-api-phase-0.md).

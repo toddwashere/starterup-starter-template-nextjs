@@ -1,6 +1,10 @@
 # Mobile Public API (OAuth + User Routes) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status (2026-05-29):** **Complete.** Foundation shipped and verified (`pnpm type-check`, `@workspace/auth`, `@apps/public-api`, `@apps/public-mcp` tests pass). Follow-up: [`2026-05-29-mobile-auth-public-api-phase-0.md`](../2026-05-29-mobile-auth-public-api-phase-0.md) (registration, scope enforcement, client-held org, Ignite polish). Note: `/v1/me` still returns `activeOrganizationId` until Phase 0 Task 2 removes it.
+
+> **For agentic workers:** Do **not** execute this plan — it is archived. Use the Phase 0 plan above.
+
+> **Original worker note:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Extend `apps/public-api` so mobile clients (Expo/RN, Flutter, native) authenticate with OAuth Bearer tokens and call user-level routes (`GET /v1/me`, `GET /v1/organizations`) while preserving api-key-only `GET /v1/account` and laying org-scoped middleware for future `/v1/orgs/{orgId}/…` resources.
 
@@ -8,7 +12,7 @@
 
 **Tech Stack:** Better Auth OAuth Provider (`@better-auth/oauth-provider`), Hono, `@hono/zod-openapi`, Vitest, Prisma (via `@workspace/auth` / `@workspace/database`), `@workspace/common` env helpers.
 
-**Design spec:** [`docs/superpowers/specs/2026-05-25-mobile-public-api-design.md`](../specs/2026-05-25-mobile-public-api-design.md)
+**Design spec:** [`docs/superpowers/specs/2026-05-25-mobile-public-api-design.md`](../../specs/2026-05-25-mobile-public-api-design.md)
 
 ---
 
@@ -73,7 +77,7 @@
 - Create: `packages/auth/src/oauth/verify-access-token.test.ts`
 - Modify: `packages/auth/package.json`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 // packages/auth/src/oauth/verify-access-token.test.ts
@@ -122,13 +126,13 @@ describe("verifyOAuthAccessToken", () => {
 });
 ```
 
-- [ ] **Step 2: Run test (expect FAIL)**
+- [x] **Step 2: Run test (expect FAIL)**
 
 ```bash
 pnpm --filter @workspace/auth test -- src/oauth/verify-access-token.test.ts
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```typescript
 // packages/auth/src/oauth/verify-access-token.ts
@@ -172,19 +176,19 @@ export async function verifyOAuthAccessToken(
 }
 ```
 
-- [ ] **Step 4: Export in `packages/auth/package.json`**
+- [x] **Step 4: Export in `packages/auth/package.json`**
 
 ```json
 "./oauth/verify-access-token": "./src/oauth/verify-access-token.ts"
 ```
 
-- [ ] **Step 5: Run test (expect PASS)**
+- [x] **Step 5: Run test (expect PASS)**
 
 ```bash
 pnpm --filter @workspace/auth test -- src/oauth/verify-access-token.test.ts
 ```
 
-- [ ] **Step 6: Refactor `apps/public-mcp/src/middleware/mcp-auth.ts`**
+- [x] **Step 6: Refactor `apps/public-mcp/src/middleware/mcp-auth.ts`**
 
 Replace inline `resolveOAuthContext` body with:
 
@@ -206,7 +210,7 @@ async function resolveOAuthContext(token: string): Promise<AuthContext | null> {
 
 Run: `pnpm --filter @apps/public-mcp test`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/auth/src/oauth packages/auth/package.json apps/public-mcp/src/middleware/mcp-auth.ts
@@ -227,7 +231,7 @@ git commit -m "feat(auth): share OAuth access token verification for public API"
 - Create: `packages/auth/src/public-api/index.ts`
 - Modify: `packages/auth/package.json`
 
-- [ ] **Step 1: Define types**
+- [x] **Step 1: Define types**
 
 ```typescript
 // packages/auth/src/public-api/types.ts
@@ -253,7 +257,7 @@ export class PublicApiOrgError extends Error {
 }
 ```
 
-- [ ] **Step 2: Write failing org-membership tests**
+- [x] **Step 2: Write failing org-membership tests**
 
 ```typescript
 // packages/auth/src/public-api/org-membership.test.ts
@@ -305,7 +309,7 @@ describe("listOrganizationsForUser", () => {
 });
 ```
 
-- [ ] **Step 3: Implement org-membership**
+- [x] **Step 3: Implement org-membership**
 
 ```typescript
 // packages/auth/src/public-api/org-membership.ts
@@ -353,23 +357,23 @@ export async function listOrganizationsForUser(
 }
 ```
 
-- [ ] **Step 4: Implement user-profile helper + test**
+- [x] **Step 4: Implement user-profile helper + test**
 
 `getUserProfileForPublicApi(userId)` loads `prisma.user` (`id`, `name`, `email`, `image`) and latest session `activeOrganizationId` via `prisma.session.findFirst({ where: { userId }, orderBy: { updatedAt: "desc" } })`. Test with mocked prisma.
 
-- [ ] **Step 5: Barrel + package export**
+- [x] **Step 5: Barrel + package export**
 
 ```json
 "./public-api": "./src/public-api/index.ts"
 ```
 
-- [ ] **Step 6: Run auth package tests**
+- [x] **Step 6: Run auth package tests**
 
 ```bash
 pnpm --filter @workspace/auth test
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/auth/src/public-api packages/auth/package.json
@@ -387,13 +391,13 @@ git commit -m "feat(auth): add public API org membership and user profile helper
 - Create: `apps/public-api/src/middleware/resolve-auth.test.ts`
 - Modify: `apps/public-api/package.json`
 
-- [ ] **Step 1: Add dependency**
+- [x] **Step 1: Add dependency**
 
 ```bash
 cd apps/public-api && pnpm add @better-auth/oauth-provider@^1.6.11
 ```
 
-- [ ] **Step 2: Update context**
+- [x] **Step 2: Update context**
 
 ```typescript
 // apps/public-api/src/lib/context.ts
@@ -415,7 +419,7 @@ export function getAuthContext(c: Context<AppEnv>): PublicApiAuthContext {
 
 Keep `getApiKeyContext` as a narrow helper that throws if `kind !== "api-key"` (update `account.ts` imports).
 
-- [ ] **Step 3: Write failing resolve-auth test**
+- [x] **Step 3: Write failing resolve-auth test**
 
 ```typescript
 // apps/public-api/src/middleware/resolve-auth.test.ts
@@ -485,19 +489,19 @@ describe("resolveAuth", () => {
 });
 ```
 
-- [ ] **Step 4: Implement `resolve-auth.ts`**
+- [x] **Step 4: Implement `resolve-auth.ts`**
 
 Priority: if `x-api-key` present, verify key (401/429 on `ApiKeyError`). Else if `Authorization: Bearer`, call `verifyOAuthAccessToken`; 401 if null. Else 401 `Missing authentication`. Set `c.set("authContext", …)`.
 
 Do **not** accept session cookies (mobile spec).
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 pnpm --filter @apps/public-api test -- src/middleware/resolve-auth.test.ts
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/public-api/src/lib/context.ts apps/public-api/src/middleware/resolve-auth.ts apps/public-api/src/middleware/resolve-auth.test.ts apps/public-api/package.json
@@ -515,21 +519,21 @@ git commit -m "feat(public-api): add dual api-key and OAuth resolve-auth middlew
 - Create: `apps/public-api/src/routes/v1/org.ts`
 - Create: `apps/public-api/src/routes/v1/org.test.ts`
 
-- [ ] **Step 1: Write failing org-context test**
+- [x] **Step 1: Write failing org-context test**
 
 Middleware reads `c.req.param("orgId")`. Requires `authContext.kind === "oauth"` (api-key org routes can use key's `orgId` in a follow-up; for stub, oauth only). Calls `assertUserOrgMember(userId, orgId)`. Sets `orgId` + `orgRole` on context. Missing param → 400; `PublicApiOrgError` → 403.
 
-- [ ] **Step 2: Implement org-context + `GET /v1/orgs/{orgId}/ping`**
+- [x] **Step 2: Implement org-context + `GET /v1/orgs/{orgId}/ping`**
 
 Returns `{ orgId, role }` with `account:read` scope check: oauth scopes include `account:read` OR api-key has `account:read` when extended later.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 pnpm --filter @apps/public-api test -- src/middleware/org-context.test.ts src/routes/v1/org.test.ts
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/public-api/src/middleware/org-context.ts apps/public-api/src/middleware/org-context.test.ts apps/public-api/src/routes/v1/org.ts apps/public-api/src/routes/v1/org.test.ts
@@ -546,7 +550,7 @@ git commit -m "feat(public-api): org-scoped middleware and ping stub route"
 - Create: `apps/public-api/src/routes/v1/user.test.ts`
 - Create: `apps/public-api/src/middleware/require-oauth.ts` (optional: user routes require `kind === "oauth"`)
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 `me`: oauth context → 200 with `{ id, name, email, image, activeOrganizationId }`; api-key → 403 or 401 per design (user routes for mobile = oauth only — return 403 `FORBIDDEN` with message "OAuth Bearer required").
 
@@ -554,7 +558,7 @@ git commit -m "feat(public-api): org-scoped middleware and ping stub route"
 
 Assert response JSON has no fields matching `token`, `refresh`, `key`.
 
-- [ ] **Step 2: Implement routes with OpenAPI**
+- [x] **Step 2: Implement routes with OpenAPI**
 
 Register security `bearerAuth` on both routes. Handler:
 
@@ -569,9 +573,9 @@ if (ctx.kind !== "oauth") {
 
 `organizations` calls `listOrganizationsForUser(ctx.userId)`.
 
-- [ ] **Step 3: Run tests PASS**
+- [x] **Step 3: Run tests PASS**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/public-api/src/routes/v1/user.ts apps/public-api/src/routes/v1/user.test.ts apps/public-api/src/middleware/require-oauth.ts
@@ -589,11 +593,11 @@ git commit -m "feat(public-api): add /v1/me and /v1/organizations for mobile OAu
 - Modify: `apps/public-api/src/routes/v1/account.test.ts`
 - Create: `apps/public-api/src/middleware/require-api-key.ts`
 
-- [ ] **Step 1: `require-api-key` middleware**
+- [x] **Step 1: `require-api-key` middleware**
 
 If `authContext.kind !== "api-key"`, return 401 `API key required`.
 
-- [ ] **Step 2: Restructure `createV1Router`**
+- [x] **Step 2: Restructure `createV1Router`**
 
 ```typescript
 export function createV1Router(): OpenAPIHono<AppEnv> {
@@ -620,17 +624,17 @@ export function createV1Router(): OpenAPIHono<AppEnv> {
 
 Remove global `apiKeyAuth` + `orgScope` from old `index.ts`.
 
-- [ ] **Step 3: Update account.test.ts**
+- [x] **Step 3: Update account.test.ts**
 
 Add case: middleware chain with oauth-only context → 401 on `/v1/account`.
 
-- [ ] **Step 4: Run all public-api tests**
+- [x] **Step 4: Run all public-api tests**
 
 ```bash
 pnpm --filter @apps/public-api test
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/public-api/src/routes/v1 apps/public-api/src/middleware/require-api-key.ts
@@ -647,7 +651,7 @@ git commit -m "refactor(public-api): tiered v1 routers for user, account, and or
 - Create: `docs/mobile-clients.md`
 - Modify: `.env.example`
 
-- [ ] **Step 1: Register Bearer scheme in `registerDocs`**
+- [x] **Step 1: Register Bearer scheme in `registerDocs`**
 
 ```typescript
 app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
@@ -659,7 +663,7 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
 
 Tag routes: `User`, `Integration`, `Organization`.
 
-- [ ] **Step 2: Add `docs/mobile-clients.md`**
+- [x] **Step 2: Add `docs/mobile-clients.md`**
 
 Sections:
 
@@ -669,13 +673,13 @@ Sections:
 - Do not embed API keys in consumer apps
 - Link `/docs` OpenAPI on public-api
 
-- [ ] **Step 3: `.env.example`**
+- [x] **Step 3: `.env.example`**
 
 ```bash
 NEXT_PUBLIC_API_URL="http://localhost:4002"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/public-api/src/routes/docs.ts docs/mobile-clients.md .env.example
@@ -694,11 +698,11 @@ git commit -m "docs: mobile client OAuth guide and public API OpenAPI bearer sch
 
 Mirror `public-mcp.ts` pattern with `NEXT_PUBLIC_API_URL`, default `http://localhost:4002`, `getPublicApiUrl()`, `getPublicApiListenPort()` (optional, for symmetry).
 
-- [ ] **Step 1: Tests + implementation**
+- [x] **Step 1: Tests + implementation**
 
-- [ ] **Step 2: Use in dashboard api-key snippets if they hardcode API URL** (grep `localhost:4002` / `4100` and align)
+- [x] **Step 2: Use in dashboard api-key snippets if they hardcode API URL** (grep `localhost:4002` / `4100` and align)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add packages/common/src/env/public-api.ts packages/common/package.json
@@ -709,19 +713,19 @@ git commit -m "feat(common): add validated NEXT_PUBLIC_API_URL helper"
 
 ## Task 9: Final verification
 
-- [ ] **Step 1: Type-check**
+- [x] **Step 1: Type-check**
 
 ```bash
 pnpm type-check
 ```
 
-- [ ] **Step 2: Lint**
+- [x] **Step 2: Lint**
 
 ```bash
 pnpm lint
 ```
 
-- [ ] **Step 3: Targeted tests**
+- [x] **Step 3: Targeted tests**
 
 ```bash
 pnpm --filter @workspace/auth test
@@ -729,7 +733,7 @@ pnpm --filter @apps/public-api test
 pnpm --filter @apps/public-mcp test
 ```
 
-- [ ] **Step 4: Manual smoke (local)**
+- [x] **Step 4: Manual smoke (local)**
 
 1. Start dashboard (`pnpm dev` or filter) on `:4000`.
 2. Start `public-api` on `:4002`.
@@ -737,7 +741,7 @@ pnpm --filter @apps/public-mcp test
 4. Obtain access token; `curl -H "Authorization: Bearer $TOKEN" http://localhost:4002/v1/me`.
 5. `curl -H "x-api-key: sk_org_..." http://localhost:4002/v1/account` still works.
 
-- [ ] **Step 5: Commit any fixups**
+- [x] **Step 5: Commit any fixups**
 
 ---
 
@@ -766,3 +770,9 @@ pnpm --filter @apps/public-mcp test
 - Push device registration
 - CORS for web-based mobile auth flows
 - OAuth scope expansion beyond `account:read` / `offline_access`
+
+---
+
+## Completion (2026-05-29)
+
+All tasks implemented. Minor doc drift (`mobile-clients.md` org model, optional `Integration` OpenAPI tag on `/v1/account`) deferred to Phase 0.
