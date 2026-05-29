@@ -12,13 +12,16 @@ import { registerAuthRoutes } from "./auth";
 export function createV1Router(): OpenAPIHono<AppEnv> {
   const v1 = new OpenAPIHono<AppEnv>();
 
+  // Scope auth middleware to the exact authenticated paths so it does not
+  // leak onto sibling routers (e.g. the public /v1/auth/* routes) when these
+  // sub-apps are all mounted at "/".
   const user = new OpenAPIHono<AppEnv>();
-  user.use("/*", resolveAuth);
-  user.use("/*", requireScope("account:read"));
+  user.use("/v1/me", resolveAuth, requireScope("account:read"));
+  user.use("/v1/organizations", resolveAuth, requireScope("account:read"));
   registerUserRoutes(user);
 
   const account = new OpenAPIHono<AppEnv>();
-  account.use("/*", resolveAuth, requireApiKey);
+  account.use("/v1/account", resolveAuth, requireApiKey);
   registerAccountRoute(account);
 
   const orgs = new OpenAPIHono<AppEnv>();
