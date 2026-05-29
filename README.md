@@ -13,10 +13,10 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 - **TypeScript 5.7+** end-to-end with Zod validation
 - **Prisma 7** + PostgreSQL
 - **Better Auth** (email/password, OAuth, 2FA, organizations, admin)
-- **Stripe** billing & subscriptions
+- SOON: **Stripe** billing & subscriptions
 - **Tailwind CSS** + **Shadcn/ui** component library
 - **TurboRepo** monorepo with pnpm
-- **Sentry** error tracking + **PostHog** analytics
+- SOON: **Sentry** error tracking + **PostHog** analytics
 
 ## Features
 
