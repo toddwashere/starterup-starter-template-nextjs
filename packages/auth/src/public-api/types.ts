@@ -19,3 +19,13 @@ export class PublicApiOrgError extends Error {
     this.name = "PublicApiOrgError";
   }
 }
+
+export class PublicApiRegisterError extends Error {
+  constructor(
+    public readonly code: "VALIDATION_ERROR",
+    message: string,
+  ) {
+    super(message);
+    this.name = "PublicApiRegisterError";
+  }
+}

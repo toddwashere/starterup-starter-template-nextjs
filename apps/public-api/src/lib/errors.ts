@@ -8,11 +8,8 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "INTERNAL_ERROR";
 
-export function errorResponse(
-  c: Context,
-  status: 400 | 401 | 403 | 404 | 422 | 429 | 500,
-  code: ErrorCode,
-  message: string,
-) {
+export function errorResponse<
+  S extends 400 | 401 | 403 | 404 | 422 | 429 | 500,
+>(c: Context, status: S, code: ErrorCode, message: string) {
   return c.json({ error: { code, message } }, status);
 }
