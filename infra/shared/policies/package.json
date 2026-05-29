@@ -5,12 +5,17 @@
   "type": "module",
   "main": "gcp-sandbox.ts",
   "description": "Pulumi CrossGuard policies for the GCP sandbox stacks (Task 3.2). Not part of the pnpm workspace — install locally with `pnpm install` before `pulumi policy publish`.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "dependencies": {
     "@pulumi/policy": "^1",
     "@pulumi/pulumi": "^3"
   },
   "devDependencies": {
     "@types/node": "^24",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^3"
   }
 }

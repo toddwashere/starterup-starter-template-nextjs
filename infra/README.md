@@ -138,6 +138,22 @@ Runs `pulumi destroy` for the selected stack; optionally delete the entire cloud
 
 Common env wiring mistakes — coming soon. See [Architecture](#architecture) for design context.
 
+## Policy enforcement in CI
+
+Pulumi [CrossGuard](https://www.pulumi.com/docs/iac/crossguard/) policies in `infra/shared/policies/` run automatically on every PR that touches `infra/**`:
+
+- **`infra-policy.yml`** — type-checks and unit-tests the policy pack (Vitest). Runs on any PR that touches `infra/gcp/**`, `infra/aws/**`, `infra/azure/**`, or `infra/shared/policies/**`.
+- **`deploy-gcp.yml` / `deploy-aws.yml`** (preview job) — passes `policy-pack: ../../shared/policies` to `pulumi preview` so CrossGuard enforces sandbox guardrails (no GlobalForwardingRule, `maxInstanceCount <= 2`) during PR builds. Violations fail the preview step and block merge.
+- **Azure** — no CrossGuard policy ships for Azure yet; add rules to the shared policy pack when needed.
+
+### Cost estimation
+
+Infracost is **not wired** to this repository. Infracost requires Terraform plan output; Pulumi does not produce Terraform-format plans natively. A custom shim converting `pulumi preview --json` to Terraform plan format would be required and is out of scope.
+
+Recommended alternatives:
+- **Pulumi Cloud Cost Explorer** (paid feature): https://www.pulumi.com/docs/iac/concepts/options/pulumi-cost-explorer
+- **Manual estimates**: use the cost ranges in the profile table above; set up GCP/AWS/Azure budget alerts at $10, $25, and $50 USD via the init wizard.
+
 ## Architecture
 
 Full specification with queue matrix, consumer modes, deploy ordering, and migration safety:

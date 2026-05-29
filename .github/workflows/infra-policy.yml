@@ -1,0 +1,57 @@
+name: Infra policy
+
+on:
+  pull_request:
+    paths:
+      - "infra/gcp/**"
+      - "infra/aws/**"
+      - "infra/azure/**"
+      - "infra/shared/policies/**"
+      - ".github/workflows/infra-policy.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  policy-tests:
+    name: Policy unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install policy deps
+        working-directory: infra/shared/policies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check policies
+        working-directory: infra/shared/policies
+        run: pnpm exec tsc --noEmit
+
+      - name: Run policy unit tests
+        working-directory: infra/shared/policies
+        run: pnpm test
+
+  # ---------------------------------------------------------------------------
+  # Cost estimation — intentionally not wired
+  #
+  # Infracost first-class support requires Terraform plan output. Pulumi does not
+  # produce Terraform-format plans natively; a custom shim converting
+  # `pulumi preview --json` to Terraform plan format would be required and is out
+  # of scope.
+  #
+  # Recommended alternatives:
+  #   • Pulumi Cloud Cost Explorer (paid):
+  #     https://www.pulumi.com/docs/iac/concepts/options/pulumi-cost-explorer
+  #   • Manual estimates: see the cost matrix in infra/README.md
+  # ---------------------------------------------------------------------------

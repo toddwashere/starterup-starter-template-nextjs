@@ -1,5 +1,9 @@
 import { PolicyPack, validateResourceOfType } from "@pulumi/policy";
 import * as pulumi from "@pulumi/pulumi";
+import {
+  noGlobalForwardingRulesInSandbox,
+  maxInstanceCountSandboxCap,
+} from "./gcp-sandbox-validators";
 
 /**
  * Guardrails for the GCP sandbox stacks.
@@ -10,18 +14,22 @@ import * as pulumi from "@pulumi/pulumi";
  *  - Sandbox Cloud Run services must keep `maxInstanceCount <= 2`.
  *
  * Published via `pulumi policy publish` and enabled per stack in Task 7.2.
+ * CrossGuard runs during `pulumi preview` in PR builds (see .github/workflows/deploy-gcp.yml).
+ *
+ * Pure validation logic lives in `gcp-sandbox-validators.ts` and is unit-tested
+ * with Vitest in `gcp-sandbox.test.ts`.
  *
  * Note: Pulumi's CrossGuard runtime evaluates each resource individually. We
  * use `pulumi.getStack()` (works because CrossGuard runs inside the Pulumi
  * runtime that knows the active stack) to scope rules to the sandbox stack.
  */
 
-function isSandboxStack(): boolean {
+function currentStack(): string {
   try {
-    return pulumi.getStack() === "sandbox";
+    return pulumi.getStack();
   } catch {
     // pulumi.getStack() throws outside a deployment context; treat as not-sandbox.
-    return false;
+    return "";
   }
 }
 
@@ -34,11 +42,8 @@ new PolicyPack("gcp-sandbox", {
       enforcementLevel: "mandatory",
       validateResource: validateResourceOfType(
         "gcp:compute/globalForwardingRule:GlobalForwardingRule",
-        (_resource, _args, reportViolation) => {
-          if (!isSandboxStack()) return;
-          reportViolation(
-            "GlobalForwardingRule (global HTTP(S) LB) is denied in sandbox — sandbox uses default Cloud Run URLs.",
-          );
+        (_resource, args, reportViolation) => {
+          noGlobalForwardingRulesInSandbox(currentStack(), args.type, reportViolation);
         },
       ),
     },
@@ -49,15 +54,8 @@ new PolicyPack("gcp-sandbox", {
       enforcementLevel: "mandatory",
       validateResource: validateResourceOfType(
         "gcp:cloudrunv2/service:Service",
-        (resource, _args, reportViolation) => {
-          if (!isSandboxStack()) return;
-          const maxCount: unknown =
-            resource?.template?.scaling?.maxInstanceCount;
-          if (typeof maxCount === "number" && maxCount > 2) {
-            reportViolation(
-              `Sandbox Cloud Run service has maxInstanceCount=${maxCount}; cap is 2.`,
-            );
-          }
+        (resource, args, reportViolation) => {
+          maxInstanceCountSandboxCap(currentStack(), args.type, resource as Parameters<typeof maxInstanceCountSandboxCap>[2], reportViolation);
         },
       ),
     },
