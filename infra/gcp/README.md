@@ -69,10 +69,88 @@ pulumi up -s sandbox
 
 See the [deploy-profiles spec](../../docs/superpowers/specs/2026-05-28-deploy-profiles-design.md) for the full profile breakdown.
 
-## Billing alerts
+## GitHub Actions deploy
 
-Set up budget alerts at $10 / $25 / $50 to avoid surprise bills while developing.
-[GCP budget alert docs](https://cloud.google.com/billing/docs/how-to/budgets)
+The workflow at `.github/workflows/deploy-gcp.yml` automates sandbox previews and production deploys.
+**It is scaffolding** — it will not run end-to-end until you complete the one-time setup below.
+
+### Required secrets (GitHub repo → Settings → Secrets and variables → Actions)
+
+| Secret | Description |
+|--------|-------------|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full resource name of the WIF provider, e.g. `projects/123/locations/global/workloadIdentityPools/github/providers/github` |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | Service account email used for deployments, e.g. `github-deploy@your-project.iam.gserviceaccount.com` |
+| `PULUMI_ACCESS_TOKEN` | Pulumi Cloud personal/org access token |
+| `DATABASE_URL_DEPLOY` | Postgres connection string used by `prisma migrate deploy` (Cloud SQL Auth Proxy URL or direct IAM-authed connection) |
+
+### Required variables (GitHub repo → Settings → Secrets and variables → Actions → Variables)
+
+| Variable | Example |
+|----------|---------|
+| `GCP_REGION` | `us-central1` |
+| `GCP_ARTIFACT_REGISTRY` | `us-central1-docker.pkg.dev/your-project/starter` |
+
+### GitHub Environment: `production-gcp`
+
+Create the environment at **Settings → Environments → New environment** and add required reviewers.
+The `deploy` job will pause for approval before applying changes to production.
+
+### Workload Identity Federation
+
+OIDC authentication removes the need for long-lived service account keys.
+Setup guide: <https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines>
+
+Grant the WIF service account these roles on your GCP project:
+- `roles/run.admin`
+- `roles/cloudsql.client`
+- `roles/artifactregistry.writer`
+- `roles/secretmanager.admin` (or a narrower custom role)
+- `roles/iam.serviceAccountUser`
+
+### Manual sandbox deploy
+
+```sh
+gh workflow run deploy-gcp.yml -f stack=sandbox
+```
+
+### How the workflow jobs are ordered
+
+1. **preview** (PR only) — runs `pulumi preview` on sandbox and posts a comment.
+2. **build-images** (push/dispatch) — builds and pushes all 5 app images via Docker matrix.
+3. **deploy** (push/dispatch, after `build-images`, gated by `production-gcp` approval):
+   - `prisma migrate deploy` — runs before rolling new images.
+   - `pulumi up` core stack — Cloud SQL, Pub/Sub, Secret Manager.
+   - `pulumi up` apps stack — Cloud Run services pinned to `github.sha`.
+   - Smoke-tests `/health` on dashboard and public-api.
+
+---
+
+## Billing alerts (mandatory)
+
+**Before your first deploy, configure budget alerts.** Runaway Cloud Run or Cloud SQL costs can accumulate quickly.
+
+Set alerts at $10, $25, and $50 USD using the `gcloud` CLI (replace `BILLING_ACCOUNT_ID`):
+
+```sh
+# Find your billing account ID
+gcloud billing accounts list
+
+# Create budget with alert thresholds at 20 %, 50 %, and 100 % of $50
+gcloud billing budgets create \
+  --billing-account=BILLING_ACCOUNT_ID \
+  --display-name="starter-gcp-budget" \
+  --budget-amount=50USD \
+  --threshold-rule=percent=0.2 \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=1.0
+```
+
+Repeat with `--budget-amount=10USD` and `--budget-amount=25USD` for earlier warnings, or use the
+[GCP Billing console](https://console.cloud.google.com/billing) for a UI-guided setup.
+
+Docs: <https://cloud.google.com/billing/docs/how-to/budgets>
+
+---
 
 ## Startup credits
 
