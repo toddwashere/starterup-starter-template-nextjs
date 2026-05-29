@@ -3,6 +3,8 @@ import path from "path";
 import { withSentryConfig } from "@workspace/observability/next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
   transpilePackages: [
     "@workspace/common",
     "@workspace/routes",

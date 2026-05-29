@@ -6,6 +6,8 @@ import { withSentryConfig } from "@workspace/observability/next";
 assertPublicMcpEnv();
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
   transpilePackages: [
     "@workspace/common",
     "@workspace/routes",

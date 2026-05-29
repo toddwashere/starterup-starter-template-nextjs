@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-stage build for @apps/www. Uses Turborepo "prune" to bring
+# only the www package + workspace deps into the image, then builds
+# Next.js with output: "standalone" and runs the minimal server.
+#
+# Build context must be the repo root:
+#   docker build -f infra/shared/docker/Dockerfile.www -t www .
+#
+# Note: www does not use @workspace/database directly, so no Prisma generate
+# step is needed.
+
+# ---------------------------------------------------------------------------
+# Stage 1: prune the monorepo down to @apps/www + its dependencies.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS pruner
+WORKDIR /app
+RUN corepack enable
+COPY . .
+RUN npx --yes turbo@^2 prune @apps/www --docker
+
+# ---------------------------------------------------------------------------
+# Stage 2: install deps and build Next.js standalone.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS builder
+WORKDIR /app
+RUN corepack enable
+
+# Install dependencies using only the pruned lockfile + package manifests so
+# this layer is cached unless a manifest changes.
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+# Copy the pruned source.
+COPY --from=pruner /app/out/full/ .
+
+# Build Next.js with standalone output enabled.
+RUN pnpm --filter @apps/www build
+
+# ---------------------------------------------------------------------------
+# Stage 3: minimal runtime image using the Next.js standalone output.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=4001
+
+# Next standalone emits a self-contained server.js + trimmed node_modules
+# under .next/standalone/. Copy that tree plus the static assets and public
+# dir that standalone does not bundle.
+COPY --from=builder /app/apps/www/.next/standalone ./
+COPY --from=builder /app/apps/www/.next/static ./apps/www/.next/static
+COPY --from=builder /app/apps/www/public ./apps/www/public
+
+EXPOSE 4001
+CMD ["node", "apps/www/server.js"]

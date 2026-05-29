@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1
+#
+# Multi-stage build for @apps/public-mcp (Node via tsx). Uses Turborepo
+# "prune" to bring only the public-mcp package + workspace deps into the
+# image. Runs via tsx at production start.
+#
+# Build context must be the repo root:
+#   docker build -f infra/shared/docker/Dockerfile.public-mcp -t public-mcp .
+
+# ---------------------------------------------------------------------------
+# Stage 1: prune the monorepo down to @apps/public-mcp + its dependencies.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS pruner
+WORKDIR /app
+RUN corepack enable
+COPY . .
+RUN npx --yes turbo@^2 prune @apps/public-mcp --docker
+
+# ---------------------------------------------------------------------------
+# Stage 2: install deps and generate Prisma client.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS builder
+WORKDIR /app
+RUN corepack enable
+
+# Install dependencies using only the pruned lockfile + package manifests so
+# this layer is cached unless a manifest changes.
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+# Copy the pruned source.
+COPY --from=pruner /app/out/full/ .
+
+# Generate the Prisma client from the schema. No DB connection is made, but
+# prisma.config.ts resolves env("DATABASE_URL") while loading, so pass a
+# placeholder to satisfy config loading.
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" \
+    pnpm --filter @workspace/database exec prisma generate
+
+# ---------------------------------------------------------------------------
+# Stage 3: runtime image (carries node_modules + source + generated client).
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS runner
+WORKDIR /app
+RUN corepack enable
+ENV NODE_ENV=production
+
+COPY --from=builder /app/ .
+
+EXPOSE 4003
+CMD ["pnpm", "--filter", "@apps/public-mcp", "start"]
