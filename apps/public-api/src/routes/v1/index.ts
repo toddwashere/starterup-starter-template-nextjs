@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { AppEnv } from "../../lib/context";
 import { resolveAuth } from "../../middleware/resolve-auth";
 import { requireApiKey } from "../../middleware/require-api-key";
+import { requireScope } from "../../middleware/require-scope";
 import { orgContext } from "../../middleware/org-context";
 import { registerAccountRoute } from "./account";
 import { registerUserRoutes } from "./user";
@@ -12,6 +13,7 @@ export function createV1Router(): OpenAPIHono<AppEnv> {
 
   const user = new OpenAPIHono<AppEnv>();
   user.use("/*", resolveAuth);
+  user.use("/*", requireScope("account:read"));
   registerUserRoutes(user);
 
   const account = new OpenAPIHono<AppEnv>();
@@ -20,6 +22,7 @@ export function createV1Router(): OpenAPIHono<AppEnv> {
 
   const orgs = new OpenAPIHono<AppEnv>();
   orgs.use("/v1/orgs/:orgId/*", resolveAuth);
+  orgs.use("/v1/orgs/:orgId/*", requireScope("account:read"));
   orgs.use("/v1/orgs/:orgId/*", orgContext);
   registerOrgRoutes(orgs);
 
