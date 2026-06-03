@@ -8,7 +8,10 @@ import { keys as queueKeys } from "@workspace/worker-queue/keys";
 export async function registerRepeatableJobs(): Promise<void> {
   const { REDIS_URL, BULLMQ_QUEUE_NAME } = queueKeys();
   if (!REDIS_URL) {
-    throw new Error("REDIS_URL is required for repeatable job registration");
+    console.warn(
+      "[workers] REDIS_URL not set; skipping repeatable job registration",
+    );
+    return;
   }
 
   const connection = { url: REDIS_URL, maxRetriesPerRequest: null as null };

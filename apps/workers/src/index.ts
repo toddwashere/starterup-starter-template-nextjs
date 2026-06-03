@@ -8,6 +8,7 @@ import { startSqsWorker } from "./sqs-worker";
 import { handlers } from "./handlers";
 import { startHealthServer, setDraining } from "./health";
 import { registerRepeatableJobs } from "./scheduled";
+import { exitIfBullmqWithoutRedis } from "./exit-if-bullmq-without-redis";
 import { keys as workerKeys } from "../keys";
 
 const { WORKER_HEALTH_PORT } = workerKeys();
@@ -22,6 +23,7 @@ async function checkDb(): Promise<boolean> {
 }
 
 const adapterName = queueKeys().WORKER_QUEUE_ADAPTER;
+exitIfBullmqWithoutRedis(adapterName);
 let stop: () => Promise<void>;
 let checkRedis: (() => Promise<boolean>) | undefined;
 
