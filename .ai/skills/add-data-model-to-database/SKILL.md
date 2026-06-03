@@ -17,7 +17,7 @@ ESLint blocks `@workspace/database`, `@workspace/database/client`, and `@prisma/
 
 ## Before Editing
 
-1. Identify the domain that owns the model: `auth`, `contacts`, `billing`, `mcp`, or another package.
+1. Identify the domain that owns the model: `auth`, `contacts`, `billing`, `ai`, or another package.
 2. Read the relevant plan section in `plans/saas-starter-template-plan.md`, especially Data Management Patterns.
 3. Check existing schema files in `packages/database/prisma/`.
 4. Check existing repos in the owning package's `src/data-models/` folder.
@@ -32,7 +32,7 @@ Keep Prisma schema centralized in `packages/database/prisma/`. Split it into a s
 - `auth.prisma` - Everything Better Auth gives us, including core auth, organization, admin, OAuth provider tables, API keys, JWKS, and optional 2FA schema.
 - `contacts.prisma` - Contact-management reusable models such as contacts, companies, street addresses, and related records.
 - `billing.prisma` - Stripe subscriptions, products, prices, invoices, app billing state, and payment-provider integration records such as Stripe and Square.
-- `mcp.prisma` - MCP-specific app-owned records such as tool call audit logs.
+- `ai.prisma` - AI chat threads and messages, plus MCP tool call audit logs.
 - `domain.prisma` - Any other domain specific items that do not fit in the other files should go here.
 
 If none of the existing `*.prisma` schema files makes sense, put it in the `domain.prisma` file
@@ -51,7 +51,7 @@ Examples:
 - `packages/contacts/src/data-models/street-address-repo.ts`
 - `packages/billing/src/data-models/subscription-repo.ts`
 - `packages/auth/src/data-models/member-repo.ts`
-- `packages/mcp/src/data-models/mcp-tool-call-log-repo.ts`
+- `packages/ai/src/data-models/mcp-tool-call-log-repo.ts`
 
 `packages/database` should expose the Prisma client, generated types, transactions, seeds, migrations, and shared DB utilities. It should not become a catch-all business logic or repository package.
 
