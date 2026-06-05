@@ -9,6 +9,7 @@
     "./keys": "./keys.ts"
   },
   "scripts": {
+    "build": "prisma generate",
     "db:generate": "dotenv -e ../../.env -- prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:push": "dotenv -e ../../.env -- prisma db push",

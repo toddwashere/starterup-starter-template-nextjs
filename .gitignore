@@ -15,6 +15,9 @@ out/
 build/
 dist/
 
+# generated
+packages/database/src/generated/prisma/
+
 # testing
 coverage/
 playwright-report/
