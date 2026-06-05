@@ -63,8 +63,12 @@ export function registerAuthRoutes(app: OpenAPIHono<AppEnv>): void {
     },
     (result, c) => {
       if (!result.success) {
-        const message =
-          result.error.issues[0]?.message ?? "Invalid request body";
+        // Access `error` via an explicit cast rather than relying on
+        // discriminated-union narrowing: Vercel's function compiler resolves
+        // this intersection-wrapped union in a way that breaks `.success`
+        // narrowing, even though our bundler tsconfig narrows it fine.
+        const { error } = result as { error: z.ZodError };
+        const message = error.issues[0]?.message ?? "Invalid request body";
         return errorResponse(c, 400, "VALIDATION_ERROR", message);
       }
     },
