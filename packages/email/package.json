@@ -17,8 +17,11 @@
     "./templates/email-change-verification-email": "./src/templates/email-change-verification-email.tsx",
     "./templates/password-reset-email": "./src/templates/password-reset-email.tsx",
     "./templates/invitation-email": "./src/templates/invitation-email.tsx",
+    "./templates/marketing/nurture-intro-email": "./src/templates/marketing/nurture-intro-email.tsx",
     "./marketing/send-marketing-email": "./src/marketing/send-marketing-email.ts",
-    "./marketing/marketing-template-registry": "./src/marketing/marketing-template-registry.ts"
+    "./marketing/marketing-template-registry": "./src/marketing/marketing-template-registry.ts",
+    "./webhooks/resend": "./src/webhooks/resend/index.ts",
+    "./webhooks/types": "./src/webhooks/types.ts"
   },
   "scripts": {
     "type-check": "tsc --noEmit",

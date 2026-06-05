@@ -338,3 +338,10 @@ export const IconForSegment = forwardRef<SVGSVGElement, LucideProps>(
   )
 );
 IconForSegment.displayName = "IconForSegment";
+
+export const IconForCampaigns = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Mail ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForCampaigns.displayName = "IconForCampaigns";

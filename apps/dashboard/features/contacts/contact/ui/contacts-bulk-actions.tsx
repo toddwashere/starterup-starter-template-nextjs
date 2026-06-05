@@ -54,6 +54,14 @@ export function ContactsBulkActions({ table }: { table: TanStackTable<Contact> }
     });
   }
 
+  function handleStartFollowUp() {
+    const ids = getSelectedIds(table);
+    void NiceModal.show(StartFollowUpButtonModal, {
+      contactIds: ids,
+      onSuccess: () => table.resetRowSelection(),
+    });
+  }
+
   return (
     <DataTableBulkActions table={table}>
       <DropdownMenu>
@@ -71,6 +79,10 @@ export function ContactsBulkActions({ table }: { table: TanStackTable<Contact> }
           <DropdownMenuItem onClick={handleAddToSegment}>
             <IconForSegment className="mr-2" />
             Add to segment
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleStartFollowUp}>
+            <IconForCampaigns className="mr-2" />
+            Start follow-up
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

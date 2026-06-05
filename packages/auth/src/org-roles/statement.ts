@@ -10,6 +10,7 @@ export const statement = {
   contactSettings: ["read", "create", "update", "delete"],
   contactInteraction: ["read", "create", "update", "delete"],
   contactTask: ["read", "create", "update", "delete"],
+  campaign: ["read", "create", "update", "delete", "send", "manageSettings"],
 } as const;
 
 export const ac = createAccessControl(statement);

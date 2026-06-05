@@ -32,12 +32,23 @@ export type McpIdPrefix = "mcptcl";
 
 export type AiIdPrefix = "aith" | "aimsg";
 
+export type CampaignsIdPrefix =
+  | "eseq" // EmailSequence
+  | "estep" // EmailSequenceStep
+  | "ecrun" // EmailCampaignRun
+  | "eenrl" // EmailEnrollment
+  | "esend" // EmailStepSend
+  | "eclk" // EmailLinkClick
+  | "edevt" // EmailDeliveryEvent
+  | "epref"; // ContactEmailPreference
+
 export type IdPrefix =
   | AuthIdPrefix
   | ContactsIdPrefix
   | BillingIdPrefix
   | McpIdPrefix
   | AiIdPrefix
+  | CampaignsIdPrefix
   | "tmp";
 
 const temporaryIdPrefix = "tmp" satisfies IdPrefix;

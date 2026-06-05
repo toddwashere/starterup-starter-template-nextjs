@@ -45,6 +45,14 @@ describe("org-roles registry", () => {
     it("has all apiKey permissions", () => {
       expect(role.authorize({ apiKey: ["create", "read", "update", "delete"] }).success).toBe(true);
     });
+
+    it("has all campaign permissions", () => {
+      expect(
+        role.authorize({
+          campaign: ["read", "create", "update", "delete", "send", "manageSettings"],
+        }).success,
+      ).toBe(true);
+    });
   });
 
   describe("member role authorize", () => {

@@ -1,0 +1,28 @@
+{
+  "name": "@workspace/campaigns",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@workspace/common": "workspace:*",
+    "@workspace/contacts": "workspace:*",
+    "@workspace/database": "workspace:*",
+    "@workspace/email": "workspace:*",
+    "@workspace/worker-queue": "workspace:*",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@workspace/test-utils": "workspace:*",
+    "@workspace/tooling": "workspace:*",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}

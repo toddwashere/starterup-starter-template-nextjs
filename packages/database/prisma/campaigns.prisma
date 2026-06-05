@@ -1,0 +1,165 @@
+// packages/database/prisma/campaigns.prisma
+
+model EmailSequence {
+  id             String   @id
+  organizationId String
+  kind           String // "campaign" | "follow_up"
+  name           String
+  slug           String
+  status         String   @default("draft") // draft | active | paused | archived
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  steps       EmailSequenceStep[]
+  campaignRuns EmailCampaignRun[]
+  enrollments EmailEnrollment[]
+  optOuts     ContactEmailSequenceOptOut[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, kind])
+  @@index([organizationId, status])
+}
+
+model EmailSequenceStep {
+  id              String   @id
+  sequenceId      String
+  sortOrder       Int
+  delayMinutes    Int      @default(0)
+  templateKey     String
+  subjectTemplate String
+  templateProps   Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sequence  EmailSequence   @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  stepSends EmailStepSend[]
+
+  @@index([sequenceId, sortOrder])
+}
+
+model EmailCampaignRun {
+  id             String    @id
+  organizationId String
+  sequenceId     String
+  segmentId      String
+  status         String    @default("running") // running | paused | completed | cancelled
+  enrolledCount  Int       @default(0)
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sequence    EmailSequence     @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  enrollments EmailEnrollment[]
+
+  @@index([organizationId, sequenceId])
+  @@index([organizationId, status])
+}
+
+model EmailEnrollment {
+  id                String    @id
+  organizationId    String
+  sequenceId        String
+  contactId         String
+  campaignRunId     String?
+  status            String    @default("active") // active | completed | exited | paused
+  currentStepIndex  Int       @default(0)
+  nextSendAt        DateTime?
+  exitReason        String?
+  enrolledAt        DateTime  @default(now())
+  completedAt       DateTime?
+  enrolledById      String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  sequence    EmailSequence    @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  campaignRun EmailCampaignRun? @relation(fields: [campaignRunId], references: [id], onDelete: SetNull)
+  stepSends   EmailStepSend[]
+
+  @@index([organizationId, sequenceId])
+  @@index([organizationId, contactId])
+  @@index([campaignRunId])
+  @@index([contactId, sequenceId, status])
+}
+
+model EmailStepSend {
+  id                String    @id
+  enrollmentId      String
+  stepId            String
+  status            String    @default("pending") // pending | sent | delivered | failed | skipped
+  provider          String    @default("resend")
+  providerMessageId String?
+  idempotencyKey    String    @unique
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  failureReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  enrollment     EmailEnrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  step           EmailSequenceStep   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  linkClicks     EmailLinkClick[]
+  deliveryEvents EmailDeliveryEvent[]
+
+  @@index([enrollmentId])
+  @@index([stepId])
+  @@index([providerMessageId])
+}
+
+model EmailLinkClick {
+  id             String   @id
+  stepSendId     String
+  destinationUrl String
+  utmSource      String
+  utmMedium      String
+  utmCampaign    String
+  utmContent     String
+  clickedAt      DateTime @default(now())
+
+  stepSend EmailStepSend @relation(fields: [stepSendId], references: [id], onDelete: Cascade)
+
+  @@index([stepSendId])
+}
+
+model EmailDeliveryEvent {
+  id                String   @id
+  stepSendId        String?
+  provider          String
+  providerMessageId String
+  type              String // delivered | bounced | complained
+  bounceClass       String? // hard | soft
+  occurredAt        DateTime
+  rawType           String?
+  createdAt         DateTime @default(now())
+
+  stepSend EmailStepSend? @relation(fields: [stepSendId], references: [id], onDelete: SetNull)
+
+  @@index([providerMessageId])
+  @@index([stepSendId])
+}
+
+model ContactEmailPreference {
+  id             String    @id
+  contactId      String
+  organizationId String
+  status         String    @default("subscribed") // subscribed | unsubscribed
+  unsubscribedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([contactId, organizationId])
+  @@index([organizationId, status])
+}
+
+model ContactEmailSequenceOptOut {
+  contactId  String
+  sequenceId String
+  optedOutAt DateTime @default(now())
+
+  sequence EmailSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, sequenceId])
+  @@index([sequenceId])
+}

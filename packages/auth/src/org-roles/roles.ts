@@ -10,6 +10,7 @@ export const owner = ac.newRole({
   contactSettings: ["read", "create", "update", "delete"],
   contactInteraction: ["read", "create", "update", "delete"],
   contactTask: ["read", "create", "update", "delete"],
+  campaign: ["read", "create", "update", "delete", "send", "manageSettings"],
 });
 
 export const admin = ac.newRole({
@@ -22,6 +23,7 @@ export const admin = ac.newRole({
   contactSettings: ["read", "create", "update", "delete"],
   contactInteraction: ["read", "create", "update", "delete"],
   contactTask: ["read", "create", "update", "delete"],
+  campaign: ["read", "create", "update", "delete", "send", "manageSettings"],
 });
 
 export const member = ac.newRole({
@@ -34,4 +36,5 @@ export const member = ac.newRole({
   contactSettings: ["read"],
   contactInteraction: ["read", "create", "update", "delete"],
   contactTask: ["read", "create", "update", "delete"],
+  campaign: ["read"],
 });

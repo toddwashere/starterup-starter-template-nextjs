@@ -25,6 +25,15 @@ export const orgNavConfig: NavConfig = {
       ],
     },
     {
+      title: "Campaigns",
+      href: "/campaigns",
+      icon: IconForCampaigns,
+      items: [
+        { title: "Campaigns", href: "/campaigns" },
+        { title: "Follow-ups", href: "/campaigns/follow-ups" },
+      ],
+    },
+    {
       title: "AI Assistant",
       href: "/ai",
       icon: IconForAi,

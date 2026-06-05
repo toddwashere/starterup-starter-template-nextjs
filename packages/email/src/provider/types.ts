@@ -6,6 +6,8 @@ export interface EmailPayload {
   cc?: string | string[];
   replyTo?: string | string[];
   tags?: Array<{ name: string; value: string }>;
+  headers?: Record<string, string>;
+  metadata?: Record<string, string>;
 }
 
 export interface EmailProvider {
