@@ -54,14 +54,33 @@ export function CreateOrgPageContent() {
   const onSubmit = async (data: CreateOrgInput) => {
     setIsSubmitting(true);
     setError(null);
+    let apiErrorMessage: string | undefined;
     try {
       await authClient.organization.create({
         name: data.name,
         slug: data.slug,
+        fetchOptions: {
+          onError: ({ error }) => {
+            apiErrorMessage = error.message;
+          },
+        },
       });
       router.push(getPathForOrg(data.slug));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create organization");
+      const message =
+        apiErrorMessage ??
+        (err instanceof Error ? err.message : "Failed to create organization");
+      const normalized = message.toLowerCase();
+      if (
+        normalized.includes("already exists") ||
+        normalized.includes("already taken")
+      ) {
+        form.setError("slug", {
+          message:
+            "This URL slug is already taken. Choose a different slug for your organization.",
+        });
+      }
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
