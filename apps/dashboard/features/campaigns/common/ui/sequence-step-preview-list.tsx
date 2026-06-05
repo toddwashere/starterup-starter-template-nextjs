@@ -48,34 +48,27 @@ export function SequenceStepPreviewList({
         steps.map((step, index) => (
           <div
             key={step.id ?? `step-${index}`}
-            className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center"
+            className="relative grid gap-4 rounded-lg border bg-card p-4 pr-16 sm:grid-cols-[8rem_minmax(0,1fr)_180px] sm:items-center"
           >
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                  Step {index + 1}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {formatDelay(step.delayMinutes)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {step.contentSource === "editor" ? "Visual editor" : "Built-in template"}
-                </span>
-              </div>
-              <div>
-                <h4 className="truncate font-medium">{step.subjectTemplate}</h4>
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {step.composedBodyText || step.templateProps.bodyIntro}
-                </p>
-              </div>
               {step.id && (
-                <Button asChild size="sm" variant="outline">
+                <Button
+                  asChild
+                  size="icon"
+                  variant="outline"
+                  className="absolute right-4 top-4 shadow-sm"
+                >
                   <Link href={getPathForOrgFollowUpStep(orgSlug, followUpId, step.id)}>
-                    <IconForEdit className="mr-2" />
-                    Edit step
+                    <IconForEdit />
+                    <span className="sr-only">Edit step</span>
                   </Link>
                 </Button>
               )}
+            <div className="text-sm font-medium text-muted-foreground">
+              {formatDelay(step.delayMinutes)}
+            </div>
+
+            <div className="min-w-0">
+              <h4 className="truncate font-medium">{step.subjectTemplate}</h4>
             </div>
 
             <div className="h-28 overflow-hidden rounded-md border bg-background">

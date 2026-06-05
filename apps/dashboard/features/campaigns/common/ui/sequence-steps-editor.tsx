@@ -13,21 +13,19 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { IconForAdd, IconForDelete } from "@workspace/ui/components/icon-for";
-import {
-  DELAY_PRESET_MINUTES,
-  delayMinutesToPreset,
-  delayPresetToMinutes,
-  type DelayPresetKey,
-  type StepContentSource,
-} from "@workspace/campaigns/schemas/sequence-schemas";
+import { type StepContentSource } from "@workspace/campaigns/schemas/sequence-schemas";
 import { listMarketingTemplatesAction } from "../../campaign/data/campaign-actions";
 import { CampaignEmailEditor } from "./campaign-email-editor";
+import {
+  delayDaysToMinutes,
+  delayMinutesToDays,
+  getDelayDayOptions,
+} from "./sequence-delay-utils";
 
 export type SequenceStepDraft = {
   id?: string;
   sortOrder: number;
   delayMinutes: number;
-  delayPreset: DelayPresetKey | "custom";
   contentSource: StepContentSource;
   templateKey: string;
   subjectTemplate: string;
@@ -50,19 +48,10 @@ const DEFAULT_REGISTRY_PROPS = {
 const DEFAULT_STEP: SequenceStepDraft = {
   sortOrder: 0,
   delayMinutes: 0,
-  delayPreset: "immediate",
   contentSource: "editor",
   templateKey: "nurture-intro",
   subjectTemplate: "Hello {{firstName}}",
   templateProps: DEFAULT_REGISTRY_PROPS,
-};
-
-const DELAY_PRESET_LABELS: Record<DelayPresetKey | "custom", string> = {
-  immediate: "Immediately",
-  "1_day": "1 day",
-  "3_days": "3 days",
-  "1_week": "1 week",
-  custom: "Custom (minutes)",
 };
 
 export function SequenceStepsEditor({
@@ -106,12 +95,9 @@ export function SequenceStepsEditor({
     );
   }
 
-  function updateDelayPreset(index: number, preset: DelayPresetKey | "custom") {
-    const step = steps[index];
-    if (!step) return;
+  function updateDelayDays(index: number, days: number) {
     updateStep(index, {
-      delayPreset: preset,
-      delayMinutes: delayPresetToMinutes(preset, step.delayMinutes),
+      delayMinutes: delayDaysToMinutes(days),
     });
   }
 
@@ -121,8 +107,7 @@ export function SequenceStepsEditor({
       {
         ...DEFAULT_STEP,
         sortOrder: steps.length,
-        delayPreset: steps.length === 0 ? "immediate" : "1_day",
-        delayMinutes: steps.length === 0 ? 0 : DELAY_PRESET_MINUTES["1_day"],
+        delayMinutes: steps.length === 0 ? 0 : delayDaysToMinutes(1),
       },
     ]);
   }
@@ -179,44 +164,25 @@ export function SequenceStepsEditor({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Delay after previous step</Label>
+              <Label>Delay after previous step (days)</Label>
               <Select
-                value={step.delayPreset}
-                onValueChange={(value) =>
-                  updateDelayPreset(index, value as DelayPresetKey | "custom")
-                }
+                value={String(delayMinutesToDays(step.delayMinutes))}
+                onValueChange={(value) => updateDelayDays(index, Number(value))}
                 disabled={disabled}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(DELAY_PRESET_LABELS) as Array<DelayPresetKey | "custom">).map(
-                    (key) => (
-                      <SelectItem key={key} value={key}>
-                        {DELAY_PRESET_LABELS[key]}
-                      </SelectItem>
-                    ),
-                  )}
+                  {getDelayDayOptions(delayMinutesToDays(step.delayMinutes)).map((days) => (
+                    <SelectItem key={days} value={String(days)}>
+                      {days === 1 ? "1 day" : `${days} days`}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
-
-          {step.delayPreset === "custom" && (
-            <div className="space-y-1.5">
-              <Label>Custom delay (minutes)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={step.delayMinutes}
-                disabled={disabled}
-                onChange={(e) =>
-                  updateStep(index, { delayMinutes: Number(e.target.value) || 0 })
-                }
-              />
-            </div>
-          )}
 
           <div className="space-y-1.5">
             <Label>Subject</Label>
@@ -334,7 +300,6 @@ export function mapSequenceStepToDraft(step: {
     id: step.id,
     sortOrder: step.sortOrder,
     delayMinutes: step.delayMinutes,
-    delayPreset: delayMinutesToPreset(step.delayMinutes),
     contentSource: step.contentSource === "registry" ? "registry" : "editor",
     templateKey: step.templateKey,
     subjectTemplate: step.subjectTemplate,
