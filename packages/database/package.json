@@ -10,11 +10,11 @@
   },
   "scripts": {
     "build": "prisma generate",
-    "db:generate": "dotenv -e ../../.env -- prisma generate",
-    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
-    "db:push": "dotenv -e ../../.env -- prisma db push",
-    "db:seed": "dotenv -e ../../.env -- prisma db seed",
-    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
     "test": "vitest run",
     "type-check": "tsc --noEmit"
   },
@@ -31,7 +31,6 @@
   "devDependencies": {
     "@workspace/tooling": "workspace:*",
     "better-auth": "^1.6.11",
-    "dotenv": "^16",
     "tsx": "^4",
     "typescript": "^5.7",
     "vitest": "^3"
