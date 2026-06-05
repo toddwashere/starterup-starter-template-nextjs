@@ -1,5 +1,4 @@
 import { keys } from "../../keys";
-import { renderEmail } from "../render";
 import { EmailProvider } from "../provider/index";
 import { applyMergeFields, type MergeFieldData } from "./merge-fields";
 import { rewriteLinksForTracking } from "./rewrite-links";
@@ -8,13 +7,14 @@ import {
   marketingTemplateRegistry,
   type MarketingTemplateKey,
 } from "./marketing-template-registry";
-import { marketingEmailPlainTextFooter } from "../templates/marketing/_components/marketing-email-layout";
+import {
+  assembleMarketingEmail,
+  assembleMarketingEmailFromEditorHtml,
+} from "./assemble-marketing-email";
 
 export type SendMarketingEmailInput = {
   recipient: string;
   subjectTemplate: string;
-  templateKey: MarketingTemplateKey;
-  templateProps: Record<string, unknown>;
   organizationName: string;
   mergeData: MergeFieldData;
   unsubscribeUrl: string;
@@ -27,40 +27,71 @@ export type SendMarketingEmailInput = {
     organizationId: string;
   };
   physicalAddress?: string;
-};
+} & (
+  | {
+      contentSource: "registry";
+      templateKey: MarketingTemplateKey;
+      templateProps: Record<string, unknown>;
+    }
+  | {
+      contentSource: "editor";
+      previewText: string;
+      bodyHtml: string;
+      bodyText: string;
+    }
+);
 
 export async function sendMarketingEmail(
   input: SendMarketingEmailInput,
 ): Promise<{ providerMessageId?: string }> {
   const { RESEND_API_KEY } = keys();
   if (!RESEND_API_KEY) {
+    const label =
+      input.contentSource === "registry"
+        ? input.templateKey
+        : "editor";
     console.log(
-      `[Email] Marketing email for ${input.recipient} (template: ${input.templateKey})`,
+      `[Email] Marketing email for ${input.recipient} (content: ${label})`,
     );
     return {};
   }
 
-  const entry = marketingTemplateRegistry[input.templateKey];
-  const validatedProps = entry.propsSchema.parse(input.templateProps);
-
   const subject = applyMergeFields(input.subjectTemplate, input.mergeData);
 
-  const { html: rawHtml, text: rawText } = await renderEmail(
-    entry.component({
+  let rawHtml: string;
+  let rawText: string;
+
+  if (input.contentSource === "registry") {
+    const entry = marketingTemplateRegistry[input.templateKey];
+    const validatedProps = entry.propsSchema.parse(input.templateProps);
+    const preview =
+      entry.previewFromProps?.(validatedProps as never) ?? subject.slice(0, 100);
+    const body = entry.renderBody(validatedProps as never);
+    const assembled = await assembleMarketingEmail({
+      preview,
       organizationName: input.organizationName,
       unsubscribeUrl: input.unsubscribeUrl,
       physicalAddress: input.physicalAddress,
-      ...validatedProps,
-    }),
-  );
+      body,
+    });
+    rawHtml = assembled.html;
+    rawText = assembled.text;
+  } else {
+    const preview = applyMergeFields(input.previewText, input.mergeData);
+    const assembled = await assembleMarketingEmailFromEditorHtml({
+      preview,
+      organizationName: input.organizationName,
+      unsubscribeUrl: input.unsubscribeUrl,
+      physicalAddress: input.physicalAddress,
+      bodyHtml: applyMergeFields(input.bodyHtml, input.mergeData),
+      bodyText: applyMergeFields(input.bodyText, input.mergeData),
+    });
+    rawHtml = assembled.html;
+    rawText = assembled.text;
+  }
 
   const html = rewriteLinksForTracking(rawHtml, input.buildClickRedirectUrl);
-  const textBody = rewriteLinksForTracking(rawText, input.buildClickRedirectUrl);
-  const text = `${textBody}${marketingEmailPlainTextFooter(
-    input.organizationName,
-    input.unsubscribeUrl,
-    input.physicalAddress,
-  )}`;
+  const text = rewriteLinksForTracking(rawText, input.buildClickRedirectUrl);
 
   const headers = buildListUnsubscribeHeaders(input.oneClickUnsubscribeUrl);
 

@@ -172,6 +172,7 @@ export async function executeStepSend(stepSendId: string): Promise<void> {
   const parsedProps = registryEntry.propsSchema.parse(step.templateProps ?? {});
 
   const { providerMessageId } = await sendMarketingEmail({
+    contentSource: "registry",
     recipient: contact!.primaryEmail!,
     subjectTemplate: step.subjectTemplate,
     templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,

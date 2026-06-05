@@ -270,6 +270,7 @@ export async function sendCampaignTestEmailAction(
     };
 
     await sendMarketingEmail({
+      contentSource: "registry",
       recipient,
       subjectTemplate: step.subjectTemplate,
       templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,

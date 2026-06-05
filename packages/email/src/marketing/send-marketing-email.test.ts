@@ -27,6 +27,7 @@ describe("sendMarketingEmail", () => {
   });
 
   const baseInput = {
+    contentSource: "registry" as const,
     recipient: "jane@example.com",
     subjectTemplate: "Hello {{firstName}}",
     templateKey: "nurture-intro" as const,
@@ -64,6 +65,8 @@ describe("sendMarketingEmail", () => {
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     });
     expect(payload.metadata).toEqual(baseInput.metadata);
+    expect(payload.html).toContain("Unsubscribe");
+    expect(payload.html).toContain("123 Example Street");
   });
 
   describe("without RESEND_API_KEY", () => {
