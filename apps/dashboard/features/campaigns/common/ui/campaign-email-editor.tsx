@@ -2,6 +2,10 @@
 
 import { EmailEditor, type EmailEditorRef } from "@react-email/editor";
 import { useCallback, useRef } from "react";
+import { Label } from "@workspace/ui/components/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { Textarea } from "@workspace/ui/components/textarea";
+import { htmlToPlainText } from "./campaign-email-editor-utils";
 
 const DEFAULT_EDITOR_HTML = `
   <p>We wanted to reach out.</p>
@@ -88,18 +92,50 @@ export function CampaignEmailEditor({
   );
 
   const initialContent = content ?? DEFAULT_EDITOR_HTML;
+  const rawHtml = snapshot?.composedBodyHtml ?? (typeof content === "string" ? content : DEFAULT_EDITOR_HTML);
 
   return (
-    <div className="min-h-[360px] overflow-hidden rounded-md border bg-background">
-      <EmailEditor
-        ref={ref}
-        content={initialContent as string}
-        editable={!disabled}
-        onReady={syncDocumentOnly}
-        onUpdate={(editorRef) => {
-          scheduleExport(editorRef);
-        }}
-      />
-    </div>
+    <Tabs defaultValue="visual" className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>Email body</Label>
+        <TabsList>
+          <TabsTrigger value="visual">Visual</TabsTrigger>
+          <TabsTrigger value="html">HTML</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="visual">
+        <div className="min-h-[360px] overflow-hidden rounded-md border bg-background">
+          <EmailEditor
+            key={typeof initialContent === "string" ? initialContent : "json-content"}
+            ref={ref}
+            content={initialContent as string}
+            editable={!disabled}
+            onReady={syncDocumentOnly}
+            onUpdate={(editorRef) => {
+              scheduleExport(editorRef);
+            }}
+          />
+        </div>
+      </TabsContent>
+      <TabsContent value="html">
+        <Textarea
+          className="min-h-[360px] font-mono text-sm"
+          value={rawHtml}
+          disabled={disabled}
+          spellCheck={false}
+          onChange={(event) => {
+            const html = event.target.value;
+            onChange({
+              editorDocument: html,
+              composedBodyHtml: html,
+              composedBodyText: htmlToPlainText(html),
+            });
+          }}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          The compliance footer is still injected at send time and should not be added here.
+        </p>
+      </TabsContent>
+    </Tabs>
   );
 }

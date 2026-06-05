@@ -1,3 +1,34 @@
 @import "@workspace/ui/globals.css";
 @import "@react-email/editor/themes/default.css";
 @source "../../../packages/ui/src";
+
+:root {
+  --re-bg: var(--popover);
+  --re-bg-active: var(--accent);
+  --re-border: var(--border);
+  --re-text: var(--popover-foreground);
+  --re-text-muted: var(--muted-foreground);
+  --re-hover: var(--accent);
+  --re-active: var(--accent);
+  --re-pressed: var(--accent);
+  --re-separator: var(--border);
+  --re-danger: var(--destructive);
+}
+
+.dark {
+  --re-bg: var(--popover);
+  --re-bg-active: var(--accent);
+  --re-border: var(--border);
+  --re-text: var(--popover-foreground);
+  --re-text-muted: var(--muted-foreground);
+  --re-hover: var(--accent);
+  --re-active: var(--accent);
+  --re-pressed: var(--accent);
+  --re-separator: var(--border);
+  --re-danger: var(--destructive);
+}
+
+[data-re-link-bm-item],
+a[data-re-link-bm-item] {
+  color: var(--re-text);
+}
