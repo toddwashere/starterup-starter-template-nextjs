@@ -225,6 +225,14 @@ export function SequenceStepsEditor({
           {step.contentSource === "editor" ? (
             <CampaignEmailEditor
               content={step.editorDocument ?? step.composedBodyHtml}
+              snapshot={
+                step.composedBodyHtml
+                  ? {
+                      composedBodyHtml: step.composedBodyHtml,
+                      composedBodyText: step.composedBodyText ?? "",
+                    }
+                  : undefined
+              }
               disabled={disabled}
               onChange={(value) =>
                 updateStep(index, {
