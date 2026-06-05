@@ -22,6 +22,10 @@ export function getPathForVerifyEmail() {
   return "/verify-email";
 }
 
+export function getPathForStatus() {
+  return "/status";
+}
+
 export function getPathForCreateOrg() {
   return "/create-org";
 }

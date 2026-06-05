@@ -5,6 +5,7 @@ export {
   getPathForForgotPassword,
   getPathForResetPassword,
   getPathForVerifyEmail,
+  getPathForStatus,
   getPathForCreateOrg,
   getPathForOrg,
   getPathForOrgSettings,

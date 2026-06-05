@@ -53,6 +53,16 @@ describe("proxy", () => {
     expect(res.status).not.toBe(307);
   });
 
+  it("allows unauthenticated user on /status", () => {
+    const res = proxy(buildRequest("/status"));
+    expect(res.status).not.toBe(307);
+  });
+
+  it("allows unauthenticated user to call /api/ready", () => {
+    const res = proxy(buildRequest("/api/ready"));
+    expect(res.status).not.toBe(307);
+  });
+
   it("allows authenticated user on protected path", () => {
     const res = proxy(buildRequest("/create-org", true));
     expect(res.status).not.toBe(307);
