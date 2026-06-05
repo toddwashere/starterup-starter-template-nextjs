@@ -38,6 +38,8 @@ import {
 import {
   SequenceStepsEditor,
   createDefaultSteps,
+  draftToStepInput,
+  mapSequenceStepToDraft,
   type SequenceStepDraft,
 } from "../../common/ui/sequence-steps-editor";
 import {
@@ -53,22 +55,7 @@ type CampaignDetail = Extract<
 
 function mapStepsToDraft(steps: CampaignDetail["sequence"]["steps"]): SequenceStepDraft[] {
   if (steps.length === 0) return createDefaultSteps();
-  return steps.map((step) => ({
-    id: step.id,
-    sortOrder: step.sortOrder,
-    delayMinutes: step.delayMinutes,
-    templateKey: step.templateKey,
-    subjectTemplate: step.subjectTemplate,
-    templateProps: {
-      bodyIntro:
-        (step.templateProps as { bodyIntro?: string } | null)?.bodyIntro ??
-        "We wanted to reach out.",
-      ctaUrl:
-        (step.templateProps as { ctaUrl?: string } | null)?.ctaUrl ?? "https://example.com",
-      ctaLabel:
-        (step.templateProps as { ctaLabel?: string } | null)?.ctaLabel ?? "Learn more",
-    },
-  }));
+  return steps.map(mapSequenceStepToDraft);
 }
 
 export function CampaignDetailPageContent({
@@ -122,7 +109,10 @@ export function CampaignDetailPageContent({
         toast.error(nameResult.error);
         return;
       }
-      const stepsResult = await saveCampaignSequenceStepsAction(campaignId, steps);
+      const stepsResult = await saveCampaignSequenceStepsAction(
+        campaignId,
+        steps.map((step) => ({ ...draftToStepInput(step), id: step.id })),
+      );
       if (!stepsResult.success) {
         toast.error(stepsResult.error);
         return;

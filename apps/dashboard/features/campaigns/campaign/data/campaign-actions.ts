@@ -17,6 +17,7 @@ import {
   marketingTemplateRegistry,
   signMarketingToken,
   keys as campaignKeys,
+  CreateEmailSequenceStepSchema,
   type CreateEmailSequenceInput,
   type CreateEmailSequenceStepInput,
   type UpdateEmailSequenceInput,
@@ -152,11 +153,12 @@ export async function saveCampaignSequenceStepsAction(
     }
 
     for (const step of steps) {
-      if (step.id) {
-        const { id, ...data } = step;
-        await updateSequenceStep(id, sequenceId, activeOrganizationId, data);
+      const { id, ...rest } = step;
+      const parsed = CreateEmailSequenceStepSchema.parse(rest);
+      if (id) {
+        await updateSequenceStep(id, sequenceId, activeOrganizationId, parsed);
       } else {
-        await addSequenceStep(sequenceId, activeOrganizationId, step);
+        await addSequenceStep(sequenceId, activeOrganizationId, parsed);
       }
     }
 
@@ -235,14 +237,6 @@ export async function sendCampaignTestEmailAction(
     const requestHeaders = await headers();
     const org = await auth.api.getFullOrganization({ headers: requestHeaders });
     const organizationName = org?.name ?? "Our team";
-
-    const registryEntry =
-      marketingTemplateRegistry[step.templateKey as keyof typeof marketingTemplateRegistry];
-    if (!registryEntry) {
-      return { success: false, error: `Unknown template: ${step.templateKey}` };
-    }
-
-    const parsedProps = registryEntry.propsSchema.parse(step.templateProps ?? {});
     const publicBaseUrl = campaignKeys().NEXT_PUBLIC_WWW_URL.replace(/\/$/, "");
     const testContactId = `test-${session.user.id}`;
 
@@ -269,12 +263,9 @@ export async function sendCampaignTestEmailAction(
       utmContent: "step-1",
     };
 
-    await sendMarketingEmail({
-      contentSource: "registry",
+    const sendInputBase = {
       recipient,
       subjectTemplate: step.subjectTemplate,
-      templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,
-      templateProps: parsedProps as Record<string, unknown>,
       organizationName,
       mergeData: {
         displayName: session.user.name ?? "Test recipient",
@@ -295,7 +286,38 @@ export async function sendCampaignTestEmailAction(
         sequenceId: sequence.id,
         organizationId: activeOrganizationId,
       },
-    });
+    };
+
+    if (step.contentSource === "editor") {
+      if (!step.composedBodyHtml) {
+        return {
+          success: false,
+          error: "Save the visual editor content before sending a test email",
+        };
+      }
+      await sendMarketingEmail({
+        ...sendInputBase,
+        contentSource: "editor",
+        previewText: step.subjectTemplate,
+        bodyHtml: step.composedBodyHtml,
+        bodyText: step.composedBodyText ?? "",
+      });
+    } else {
+      const registryEntry =
+        marketingTemplateRegistry[step.templateKey as keyof typeof marketingTemplateRegistry];
+      if (!registryEntry) {
+        return { success: false, error: `Unknown template: ${step.templateKey}` };
+      }
+
+      const parsedProps = registryEntry.propsSchema.parse(step.templateProps ?? {});
+
+      await sendMarketingEmail({
+        ...sendInputBase,
+        contentSource: "registry",
+        templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,
+        templateProps: parsedProps as Record<string, unknown>,
+      });
+    }
 
     return { success: true, data: undefined };
   } catch (err) {

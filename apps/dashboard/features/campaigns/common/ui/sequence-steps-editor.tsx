@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import { Textarea } from "@workspace/ui/components/textarea";
 import {
   Select,
   SelectContent,
@@ -12,12 +13,22 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { IconForAdd, IconForDelete } from "@workspace/ui/components/icon-for";
+import {
+  DELAY_PRESET_MINUTES,
+  delayMinutesToPreset,
+  delayPresetToMinutes,
+  type DelayPresetKey,
+  type StepContentSource,
+} from "@workspace/campaigns";
 import { listMarketingTemplatesAction } from "../../campaign/data/campaign-actions";
+import { CampaignEmailEditor } from "./campaign-email-editor";
 
 export type SequenceStepDraft = {
   id?: string;
   sortOrder: number;
   delayMinutes: number;
+  delayPreset: DelayPresetKey | "custom";
+  contentSource: StepContentSource;
   templateKey: string;
   subjectTemplate: string;
   templateProps: {
@@ -25,18 +36,33 @@ export type SequenceStepDraft = {
     ctaUrl: string;
     ctaLabel: string;
   };
+  editorDocument?: unknown;
+  composedBodyHtml?: string;
+  composedBodyText?: string;
+};
+
+const DEFAULT_REGISTRY_PROPS = {
+  bodyIntro: "We wanted to reach out.",
+  ctaUrl: "https://example.com",
+  ctaLabel: "Learn more",
 };
 
 const DEFAULT_STEP: SequenceStepDraft = {
   sortOrder: 0,
   delayMinutes: 0,
+  delayPreset: "immediate",
+  contentSource: "editor",
   templateKey: "nurture-intro",
   subjectTemplate: "Hello {{firstName}}",
-  templateProps: {
-    bodyIntro: "We wanted to reach out.",
-    ctaUrl: "https://example.com",
-    ctaLabel: "Learn more",
-  },
+  templateProps: DEFAULT_REGISTRY_PROPS,
+};
+
+const DELAY_PRESET_LABELS: Record<DelayPresetKey | "custom", string> = {
+  immediate: "Immediately",
+  "1_day": "1 day",
+  "3_days": "3 days",
+  "1_week": "1 week",
+  custom: "Custom (minutes)",
 };
 
 export function SequenceStepsEditor({
@@ -76,13 +102,23 @@ export function SequenceStepsEditor({
     );
   }
 
+  function updateDelayPreset(index: number, preset: DelayPresetKey | "custom") {
+    const step = steps[index];
+    if (!step) return;
+    updateStep(index, {
+      delayPreset: preset,
+      delayMinutes: delayPresetToMinutes(preset, step.delayMinutes),
+    });
+  }
+
   function addStep() {
     onChange([
       ...steps,
       {
         ...DEFAULT_STEP,
         sortOrder: steps.length,
-        delayMinutes: steps.length === 0 ? 0 : 1440,
+        delayPreset: steps.length === 0 ? "immediate" : "1_day",
+        delayMinutes: steps.length === 0 ? 0 : DELAY_PRESET_MINUTES["1_day"],
       },
     ]);
   }
@@ -118,27 +154,52 @@ export function SequenceStepsEditor({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Template</Label>
+              <Label>Content type</Label>
               <Select
-                value={step.templateKey}
-                onValueChange={(value) => updateStep(index, { templateKey: value })}
+                value={step.contentSource}
+                onValueChange={(value: StepContentSource) =>
+                  updateStep(index, { contentSource: value })
+                }
                 disabled={disabled}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose template" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.key} value={template.key}>
-                      {template.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="editor">Visual editor</SelectItem>
+                  <SelectItem value="registry">Built-in template</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Delay (minutes after previous step)</Label>
+              <Label>Delay after previous step</Label>
+              <Select
+                value={step.delayPreset}
+                onValueChange={(value) =>
+                  updateDelayPreset(index, value as DelayPresetKey | "custom")
+                }
+                disabled={disabled}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DELAY_PRESET_LABELS) as Array<DelayPresetKey | "custom">).map(
+                    (key) => (
+                      <SelectItem key={key} value={key}>
+                        {DELAY_PRESET_LABELS[key]}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {step.delayPreset === "custom" && (
+            <div className="space-y-1.5">
+              <Label>Custom delay (minutes)</Label>
               <Input
                 type="number"
                 min={0}
@@ -149,7 +210,7 @@ export function SequenceStepsEditor({
                 }
               />
             </div>
-          </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Subject</Label>
@@ -157,36 +218,74 @@ export function SequenceStepsEditor({
               value={step.subjectTemplate}
               disabled={disabled}
               onChange={(e) => updateStep(index, { subjectTemplate: e.target.value })}
+              placeholder="Hello {{firstName}}"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Intro body</Label>
-            <Input
-              value={step.templateProps.bodyIntro}
+          {step.contentSource === "editor" ? (
+            <CampaignEmailEditor
+              content={step.editorDocument ?? step.composedBodyHtml}
               disabled={disabled}
-              onChange={(e) => updateStepProps(index, { bodyIntro: e.target.value })}
+              onChange={(value) =>
+                updateStep(index, {
+                  editorDocument: value.editorDocument,
+                  composedBodyHtml: value.composedBodyHtml,
+                  composedBodyText: value.composedBodyText,
+                })
+              }
             />
-          </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label>Template</Label>
+                <Select
+                  value={step.templateKey}
+                  onValueChange={(value) => updateStep(index, { templateKey: value })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((template) => (
+                      <SelectItem key={template.key} value={template.key}>
+                        {template.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>CTA label</Label>
-              <Input
-                value={step.templateProps.ctaLabel}
-                disabled={disabled}
-                onChange={(e) => updateStepProps(index, { ctaLabel: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>CTA URL</Label>
-              <Input
-                value={step.templateProps.ctaUrl}
-                disabled={disabled}
-                onChange={(e) => updateStepProps(index, { ctaUrl: e.target.value })}
-              />
-            </div>
-          </div>
+              <div className="space-y-1.5">
+                <Label>Intro body</Label>
+                <Textarea
+                  value={step.templateProps.bodyIntro}
+                  disabled={disabled}
+                  rows={3}
+                  onChange={(e) => updateStepProps(index, { bodyIntro: e.target.value })}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>CTA label</Label>
+                  <Input
+                    value={step.templateProps.ctaLabel}
+                    disabled={disabled}
+                    onChange={(e) => updateStepProps(index, { ctaLabel: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>CTA URL</Label>
+                  <Input
+                    value={step.templateProps.ctaUrl}
+                    disabled={disabled}
+                    onChange={(e) => updateStepProps(index, { ctaUrl: e.target.value })}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       ))}
 
@@ -200,4 +299,50 @@ export function SequenceStepsEditor({
 
 export function createDefaultSteps(): SequenceStepDraft[] {
   return [{ ...DEFAULT_STEP }];
+}
+
+export function mapSequenceStepToDraft(step: {
+  id: string;
+  sortOrder: number;
+  delayMinutes: number;
+  contentSource?: string;
+  templateKey: string;
+  subjectTemplate: string;
+  templateProps: unknown;
+  editorDocument?: unknown;
+  composedBodyHtml?: string | null;
+  composedBodyText?: string | null;
+}): SequenceStepDraft {
+  const props = (step.templateProps as SequenceStepDraft["templateProps"] | null) ?? DEFAULT_REGISTRY_PROPS;
+  return {
+    id: step.id,
+    sortOrder: step.sortOrder,
+    delayMinutes: step.delayMinutes,
+    delayPreset: delayMinutesToPreset(step.delayMinutes),
+    contentSource: step.contentSource === "registry" ? "registry" : "editor",
+    templateKey: step.templateKey,
+    subjectTemplate: step.subjectTemplate,
+    templateProps: {
+      bodyIntro: props.bodyIntro ?? DEFAULT_REGISTRY_PROPS.bodyIntro,
+      ctaUrl: props.ctaUrl ?? DEFAULT_REGISTRY_PROPS.ctaUrl,
+      ctaLabel: props.ctaLabel ?? DEFAULT_REGISTRY_PROPS.ctaLabel,
+    },
+    editorDocument: step.editorDocument ?? undefined,
+    composedBodyHtml: step.composedBodyHtml ?? undefined,
+    composedBodyText: step.composedBodyText ?? undefined,
+  };
+}
+
+export function draftToStepInput(step: SequenceStepDraft) {
+  return {
+    sortOrder: step.sortOrder,
+    delayMinutes: step.delayMinutes,
+    contentSource: step.contentSource,
+    templateKey: step.templateKey,
+    subjectTemplate: step.subjectTemplate,
+    templateProps: step.contentSource === "registry" ? step.templateProps : undefined,
+    editorDocument: step.contentSource === "editor" ? step.editorDocument : undefined,
+    composedBodyHtml: step.contentSource === "editor" ? step.composedBodyHtml : undefined,
+    composedBodyText: step.contentSource === "editor" ? step.composedBodyText : undefined,
+  };
 }

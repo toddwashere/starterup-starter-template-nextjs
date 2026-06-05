@@ -11,6 +11,7 @@ import {
   enrollContactsInFollowUp,
   listActiveEnrollmentsForContact,
   getSequenceReportingStats,
+  CreateEmailSequenceStepSchema,
   type CreateEmailSequenceInput,
   type CreateEmailSequenceStepInput,
   type UpdateEmailSequenceInput,
@@ -127,11 +128,12 @@ export async function saveFollowUpSequenceStepsAction(
     }
 
     for (const step of steps) {
-      if (step.id) {
-        const { id, ...data } = step;
-        await updateSequenceStep(id, sequenceId, activeOrganizationId, data);
+      const { id, ...rest } = step;
+      const parsed = CreateEmailSequenceStepSchema.parse(rest);
+      if (id) {
+        await updateSequenceStep(id, sequenceId, activeOrganizationId, parsed);
       } else {
-        await addSequenceStep(sequenceId, activeOrganizationId, step);
+        await addSequenceStep(sequenceId, activeOrganizationId, parsed);
       }
     }
 
