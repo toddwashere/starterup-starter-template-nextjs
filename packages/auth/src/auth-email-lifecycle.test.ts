@@ -30,7 +30,9 @@ import {
   createOrganizationInvitationEmailHandler,
 } from "./auth-email-lifecycle";
 
-function createResetUser(overrides: { email?: string; name?: string } = {}) {
+function createAuthUser(
+  overrides: { email?: string; name?: string; emailVerified?: boolean } = {},
+) {
   return {
     id: "user_123",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -92,11 +94,7 @@ describe("auth email lifecycle handlers", () => {
     const { sendVerificationEmail } = createEmailVerificationOptions();
 
     await sendVerificationEmail({
-      user: {
-        email: "user@example.com",
-        name: "Jane",
-        emailVerified: false,
-      },
+      user: createAuthUser(),
       url: "https://app.example.com/verify?token=abc",
       token: "abc",
     });
@@ -111,11 +109,25 @@ describe("auth email lifecycle handlers", () => {
     });
   });
 
+  it("sendVerificationEmail fails clearly when Better Auth omits user email", async () => {
+    const { sendVerificationEmail } = createEmailVerificationOptions();
+
+    await expect(
+      sendVerificationEmail({
+        user: createAuthUser({ email: undefined }),
+        url: "https://app.example.com/verify?token=abc",
+        token: "abc",
+      }),
+    ).rejects.toThrow(/missing user email/i);
+
+    expect(mockRouteVerificationEmail).not.toHaveBeenCalled();
+  });
+
   it("sendResetPassword sends password reset email", async () => {
     const { sendResetPassword } = createEmailAndPasswordOptions();
 
     await sendResetPassword({
-      user: createResetUser(),
+      user: createAuthUser(),
       url: "https://app.example.com/reset?token=xyz",
       token: "xyz",
     });
@@ -132,7 +144,7 @@ describe("auth email lifecycle handlers", () => {
 
     await expect(
       sendResetPassword({
-        user: createResetUser({ email: undefined }),
+        user: createAuthUser({ email: undefined }),
         url: "https://app.example.com/reset?token=xyz",
         token: "xyz",
       }),

@@ -3,25 +3,31 @@ import { routeVerificationEmail } from "./email-routing";
 import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
 import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
 
-type VerificationUser = {
-  email: string;
-  name: string;
-  emailVerified: boolean;
-};
-
 type SendResetPassword = NonNullable<
   NonNullable<BetterAuthOptions["emailAndPassword"]>["sendResetPassword"]
 >;
 type SendResetPasswordData = Parameters<SendResetPassword>[0];
 
+type SendVerificationEmail = NonNullable<
+  NonNullable<BetterAuthOptions["emailVerification"]>["sendVerificationEmail"]
+>;
+type SendVerificationEmailData = Parameters<SendVerificationEmail>[0];
+
 export function createEmailVerificationOptions() {
   return {
-    sendVerificationEmail: async (data: {
-      user: VerificationUser;
-      url: string;
-      token: string;
-    }) => {
-      await routeVerificationEmail({ user: data.user, url: data.url });
+    sendVerificationEmail: async (data: SendVerificationEmailData) => {
+      if (!data.user.email) {
+        throw new Error("Email verification is missing user email");
+      }
+
+      await routeVerificationEmail({
+        user: {
+          email: data.user.email,
+          name: data.user.name,
+          emailVerified: data.user.emailVerified,
+        },
+        url: data.url,
+      });
     },
   };
 }
