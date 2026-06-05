@@ -1,3 +1,4 @@
+import type { BetterAuthOptions } from "better-auth";
 import { routeVerificationEmail } from "./email-routing";
 import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
 import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
@@ -7,6 +8,11 @@ type VerificationUser = {
   name: string;
   emailVerified: boolean;
 };
+
+type SendResetPassword = NonNullable<
+  NonNullable<BetterAuthOptions["emailAndPassword"]>["sendResetPassword"]
+>;
+type SendResetPasswordData = Parameters<SendResetPassword>[0];
 
 export function createEmailVerificationOptions() {
   return {
@@ -24,11 +30,11 @@ export function createEmailAndPasswordOptions() {
   return {
     enabled: true as const,
     requireEmailVerification: false as const,
-    sendResetPassword: async (data: {
-      user: { email: string; name: string };
-      url: string;
-      token: string;
-    }) => {
+    sendResetPassword: async (data: SendResetPasswordData) => {
+      if (!data.user.email) {
+        throw new Error("Password reset is missing user email");
+      }
+
       await sendPasswordResetEmail({
         recipient: data.user.email,
         name: data.user.name,

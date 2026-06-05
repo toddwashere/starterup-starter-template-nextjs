@@ -62,6 +62,15 @@ describe("POST /webhooks/email/resend", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(resendWebhookAdapter.verifyRequest).toHaveBeenCalledWith(
+      JSON.stringify({ type: "email.delivered" }),
+      expect.objectContaining({
+        "content-type": "application/json",
+        "svix-id": "msg_1",
+        "svix-timestamp": "1710000000",
+        "svix-signature": expect.stringMatching(/^v1,/),
+      }),
+    );
     expect(enqueue).toHaveBeenCalledWith("email.process-delivery-events", {
       provider: "resend",
       events: [

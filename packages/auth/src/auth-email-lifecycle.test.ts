@@ -30,6 +30,18 @@ import {
   createOrganizationInvitationEmailHandler,
 } from "./auth-email-lifecycle";
 
+function createResetUser(overrides: { email?: string; name?: string } = {}) {
+  return {
+    id: "user_123",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    email: "user@example.com",
+    emailVerified: false,
+    name: "Jane",
+    ...overrides,
+  };
+}
+
 describe("assertBetterAuthEmailLifecycleConfigured", () => {
   it("passes when Better Auth 1.6+ email hooks are wired", () => {
     expect(() =>
@@ -103,7 +115,7 @@ describe("auth email lifecycle handlers", () => {
     const { sendResetPassword } = createEmailAndPasswordOptions();
 
     await sendResetPassword({
-      user: { email: "user@example.com", name: "Jane" },
+      user: createResetUser(),
       url: "https://app.example.com/reset?token=xyz",
       token: "xyz",
     });
@@ -113,6 +125,20 @@ describe("auth email lifecycle handlers", () => {
       name: "Jane",
       resetUrl: "https://app.example.com/reset?token=xyz",
     });
+  });
+
+  it("sendResetPassword fails clearly when Better Auth omits user email", async () => {
+    const { sendResetPassword } = createEmailAndPasswordOptions();
+
+    await expect(
+      sendResetPassword({
+        user: createResetUser({ email: undefined }),
+        url: "https://app.example.com/reset?token=xyz",
+        token: "xyz",
+      }),
+    ).rejects.toThrow(/missing user email/i);
+
+    expect(mockSendPasswordResetEmail).not.toHaveBeenCalled();
   });
 
   it("sendInvitationEmail sends org invitation email", async () => {

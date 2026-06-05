@@ -1,12 +1,18 @@
 import Stripe from "stripe";
 import { keys } from "../keys";
 
-let client: Stripe | null = null;
+function createStripeClient() {
+  const { STRIPE_SECRET_KEY } = keys();
+  return new Stripe(STRIPE_SECRET_KEY);
+}
 
-export function getStripeClient(): Stripe {
+export type StripeClient = InstanceType<typeof Stripe>;
+
+let client: StripeClient | null = null;
+
+export function getStripeClient(): StripeClient {
   if (!client) {
-    const { STRIPE_SECRET_KEY } = keys();
-    client = new Stripe(STRIPE_SECRET_KEY);
+    client = createStripeClient();
   }
   return client;
 }

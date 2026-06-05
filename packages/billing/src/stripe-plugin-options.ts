@@ -1,5 +1,5 @@
-import type Stripe from "stripe";
 import { keys } from "../keys";
+import type { StripeClient } from "./stripe-client";
 import { loadPlansForStripePlugin } from "./plans/load-plans-for-stripe-plugin";
 import { authorizeOrgBilling } from "./authorize-org-billing";
 import {
@@ -18,7 +18,7 @@ import { onStripeEvent } from "./hooks/on-stripe-event";
  * inferred type; type-compatibility with the plugin's options type is verified
  * at the `packages/auth` call site.
  */
-export function stripePluginOptions(stripeClient: Stripe) {
+export function stripePluginOptions(stripeClient: StripeClient) {
   return {
     stripeClient,
     stripeWebhookSecret: keys().STRIPE_WEBHOOK_SECRET,

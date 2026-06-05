@@ -7,7 +7,7 @@ import type { AppEnv } from "../../lib/context";
 export function registerEmailResendWebhookRoute(app: OpenAPIHono<AppEnv>) {
   app.post("/webhooks/email/resend", async (c) => {
     const rawBody = await c.req.text();
-    const headers = Object.fromEntries(c.req.raw.headers.entries());
+    const headers = c.req.header();
 
     if (!resendWebhookAdapter.verifyRequest(rawBody, headers)) {
       return c.text("Invalid signature", 401);

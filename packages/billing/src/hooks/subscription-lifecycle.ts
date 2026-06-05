@@ -1,4 +1,4 @@
-import type Stripe from "stripe";
+import type { StripeOptions } from "@better-auth/stripe";
 import { prisma } from "@workspace/database";
 import { formatDate, parseOrgRoles } from "@workspace/common";
 import {
@@ -12,6 +12,14 @@ interface OrgBillingContact {
   recipient: string;
   organizationName: string;
 }
+
+type StripeWebhookEvent = Parameters<NonNullable<StripeOptions["onEvent"]>>[0];
+type StripeInvoicePaymentFailedEvent = Extract<
+  StripeWebhookEvent,
+  { type: "invoice.payment_failed" }
+>;
+export type StripeInvoiceForBilling =
+  StripeInvoicePaymentFailedEvent["data"]["object"];
 
 /**
  * Resolve the email recipient (org owner) and org name for billing
@@ -159,7 +167,7 @@ export async function handleSubscriptionDeleted(data: {
  * Invoice payment failed — notify the org owner with a link to update payment.
  */
 export async function handleInvoicePaymentFailed(
-  invoice: Stripe.Invoice,
+  invoice: StripeInvoiceForBilling,
 ): Promise<void> {
   try {
     const customerId =
