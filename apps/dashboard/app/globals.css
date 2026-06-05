@@ -1,2 +1,3 @@
 @import "@workspace/ui/globals.css";
+@import "@react-email/editor/themes/default.css";
 @source "../../../packages/ui/src";
