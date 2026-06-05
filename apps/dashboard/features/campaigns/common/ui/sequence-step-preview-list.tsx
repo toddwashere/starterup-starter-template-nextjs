@@ -5,7 +5,10 @@ import { Button } from "@workspace/ui/components/button";
 import { IconForAdd, IconForEdit } from "@workspace/ui/components/icon-for";
 import { getPathForOrgFollowUpStep } from "@workspace/routes";
 import type { SequenceStepDraft } from "./sequence-steps-editor";
-import { createInertEmailPreviewHtml } from "./sequence-step-preview-list-utils";
+import {
+  createInertEmailPreviewHtml,
+  sortStepsByDelay,
+} from "./sequence-step-preview-list-utils";
 
 function formatDelay(minutes: number) {
   if (minutes === 0) return "Immediately";
@@ -45,7 +48,7 @@ export function SequenceStepPreviewList({
           No steps yet. Add the first email step to this follow-up.
         </div>
       ) : (
-        steps.map((step, index) => (
+        sortStepsByDelay(steps).map((step, index) => (
           <div
             key={step.id ?? `step-${index}`}
             className="relative grid gap-4 rounded-lg border bg-card p-4 pr-16 sm:grid-cols-[8rem_minmax(0,1fr)_180px] sm:items-center"

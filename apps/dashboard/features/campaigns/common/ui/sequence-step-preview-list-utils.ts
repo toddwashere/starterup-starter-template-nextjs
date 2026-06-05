@@ -30,3 +30,13 @@ export function createInertEmailPreviewHtml(bodyHtml: string) {
   <body>${inertBody}</body>
 </html>`;
 }
+
+export function sortStepsByDelay<T extends { delayMinutes: number }>(steps: T[]) {
+  return steps
+    .map((step, originalIndex) => ({ step, originalIndex }))
+    .sort((a, b) => {
+      const delayDiff = a.step.delayMinutes - b.step.delayMinutes;
+      return delayDiff === 0 ? a.originalIndex - b.originalIndex : delayDiff;
+    })
+    .map(({ step }) => step);
+}

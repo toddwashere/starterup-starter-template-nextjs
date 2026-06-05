@@ -19,7 +19,6 @@ import { CampaignEmailEditor } from "./campaign-email-editor";
 import {
   delayDaysToMinutes,
   delayMinutesToDays,
-  getDelayDayOptions,
 } from "./sequence-delay-utils";
 
 export type SequenceStepDraft = {
@@ -165,22 +164,16 @@ export function SequenceStepsEditor({
 
             <div className="space-y-1.5">
               <Label>Delay after previous step (days)</Label>
-              <Select
-                value={String(delayMinutesToDays(step.delayMinutes))}
-                onValueChange={(value) => updateDelayDays(index, Number(value))}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {getDelayDayOptions(delayMinutesToDays(step.delayMinutes)).map((days) => (
-                    <SelectItem key={days} value={String(days)}>
-                      {days === 1 ? "1 day" : `${days} days`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  value={delayMinutesToDays(step.delayMinutes)}
+                  disabled={disabled}
+                  onChange={(event) => updateDelayDays(index, Number(event.target.value) || 0)}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
             </div>
           </div>
 
