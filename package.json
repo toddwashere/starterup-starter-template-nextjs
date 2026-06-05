@@ -5,7 +5,7 @@
     "node": ">=24.16.0"
   },
   "scripts": {
-    "dev": "dotenv -- turbo run dev",
+    "dev": "node scripts/ensure-next-dev-cache.mjs && dotenv -- turbo run dev",
     "build": "dotenv -- turbo run build",
     "lint": "dotenv -- turbo run lint",
     "type-check": "dotenv -- turbo run type-check",

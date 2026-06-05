@@ -17,7 +17,16 @@ export function withSentryConfig(
     },
   };
 
-  return sentryWithSentryConfig(configWithEnv, {
-    silent: !process.env.CI,
-  });
+  return {
+    ...sentryWithSentryConfig(configWithEnv, {
+      silent: !process.env.CI,
+    }),
+    // Sentry's wrapper can drop monorepo Turbopack settings; re-apply them so
+    // `[project]/apps/<app>/instrumentation.ts` resolves under the repo root.
+    outputFileTracingRoot:
+      nextConfig.outputFileTracingRoot ?? configWithEnv.outputFileTracingRoot,
+    turbopack: {
+      ...nextConfig.turbopack,
+    },
+  };
 }
