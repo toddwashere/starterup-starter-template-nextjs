@@ -163,32 +163,23 @@ export async function executeStepSend(stepSendId: string): Promise<void> {
     scope: "all",
   });
 
-  const registryEntry =
-    marketingTemplateRegistry[step.templateKey as keyof typeof marketingTemplateRegistry];
-  if (!registryEntry) {
-    throw new Error(`Unknown template key: ${step.templateKey}`);
-  }
+  const mergeData = {
+    displayName: contact!.displayName,
+    firstName: contact!.firstName,
+    lastName: contact!.lastName,
+    companyName: contact!.companyName,
+    primaryEmail: contact!.primaryEmail,
+    organizationName,
+  };
 
-  const parsedProps = registryEntry.propsSchema.parse(step.templateProps ?? {});
-
-  const { providerMessageId } = await sendMarketingEmail({
-    contentSource: "registry",
+  const sendInputBase = {
     recipient: contact!.primaryEmail!,
     subjectTemplate: step.subjectTemplate,
-    templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,
-    templateProps: parsedProps as Record<string, unknown>,
     organizationName,
-    mergeData: {
-      displayName: contact!.displayName,
-      firstName: contact!.firstName,
-      lastName: contact!.lastName,
-      companyName: contact!.companyName,
-      primaryEmail: contact!.primaryEmail,
-      organizationName,
-    },
+    mergeData,
     unsubscribeUrl: buildPreferenceUrl(preferenceToken),
     oneClickUnsubscribeUrl: buildOneClickUnsubscribeUrl(allToken),
-    buildClickRedirectUrl: (destinationUrl) =>
+    buildClickRedirectUrl: (destinationUrl: string) =>
       buildClickRedirectUrl(tokenBase, destinationUrl),
     metadata: {
       stepSendId: stepSend.id,
@@ -196,7 +187,37 @@ export async function executeStepSend(stepSendId: string): Promise<void> {
       sequenceId: sequence.id,
       organizationId: enrollment.organizationId,
     },
-  });
+  };
+
+  let providerMessageId: string | undefined;
+
+  if (step.contentSource === "editor") {
+    if (!step.composedBodyHtml) {
+      throw new Error("Editor step is missing composedBodyHtml");
+    }
+    ({ providerMessageId } = await sendMarketingEmail({
+      ...sendInputBase,
+      contentSource: "editor",
+      previewText: step.subjectTemplate,
+      bodyHtml: step.composedBodyHtml,
+      bodyText: step.composedBodyText ?? "",
+    }));
+  } else {
+    const registryEntry =
+      marketingTemplateRegistry[step.templateKey as keyof typeof marketingTemplateRegistry];
+    if (!registryEntry) {
+      throw new Error(`Unknown template key: ${step.templateKey}`);
+    }
+
+    const parsedProps = registryEntry.propsSchema.parse(step.templateProps ?? {});
+
+    ({ providerMessageId } = await sendMarketingEmail({
+      ...sendInputBase,
+      contentSource: "registry",
+      templateKey: step.templateKey as keyof typeof marketingTemplateRegistry,
+      templateProps: parsedProps as Record<string, unknown>,
+    }));
+  }
 
   await markEmailStepSendSent(stepSendId, providerMessageId ?? "");
 

@@ -80,10 +80,20 @@ export async function createEmailSequenceStep(
       sequenceId,
       sortOrder: data.sortOrder,
       delayMinutes: data.delayMinutes ?? 0,
+      contentSource: data.contentSource ?? "registry",
       templateKey: data.templateKey,
       subjectTemplate: data.subjectTemplate,
       ...(data.templateProps !== undefined
         ? { templateProps: data.templateProps as object }
+        : {}),
+      ...(data.editorDocument !== undefined
+        ? { editorDocument: data.editorDocument as object }
+        : {}),
+      ...(data.composedBodyHtml !== undefined
+        ? { composedBodyHtml: data.composedBodyHtml }
+        : {}),
+      ...(data.composedBodyText !== undefined
+        ? { composedBodyText: data.composedBodyText }
         : {}),
     },
   });
@@ -100,12 +110,13 @@ export async function updateEmailSequenceStep(
     throw new Error("Sequence not found in this organization");
   }
 
-  const { templateProps, ...rest } = data;
+  const { templateProps, editorDocument, ...rest } = data;
   return prisma.emailSequenceStep.update({
     where: { id: stepId, sequenceId },
     data: {
       ...rest,
       ...(templateProps !== undefined ? { templateProps: templateProps as object } : {}),
+      ...(editorDocument !== undefined ? { editorDocument: editorDocument as object } : {}),
     },
   });
 }
