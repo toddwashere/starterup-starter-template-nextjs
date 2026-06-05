@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@sentry/nextjs": "^10.0.0",
+    "@workspace/campaigns": "workspace:*",
     "@workspace/common": "workspace:*",
     "@workspace/observability": "workspace:*",
     "@workspace/routes": "workspace:*",

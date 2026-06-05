@@ -3,6 +3,7 @@ import {
   IconForSettings,
   IconForAi,
   IconForContacts,
+  IconForCampaigns,
 } from "@workspace/ui/components/icon-for";
 import type { NavConfig } from "@/types/nav";
 
