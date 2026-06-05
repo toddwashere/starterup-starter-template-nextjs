@@ -1,3 +1,4 @@
+-- CreateTable
 CREATE TABLE "EmailSequence" (
     "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
@@ -131,6 +132,9 @@ CREATE TABLE "ContactEmailSequenceOptOut" (
     "optedOutAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ContactEmailSequenceOptOut_pkey" PRIMARY KEY ("contactId","sequenceId")
+);
+
+-- CreateIndex
 CREATE INDEX "EmailSequence_organizationId_kind_idx" ON "EmailSequence"("organizationId", "kind");
 
 -- CreateIndex
@@ -189,6 +193,8 @@ CREATE UNIQUE INDEX "ContactEmailPreference_contactId_organizationId_key" ON "Co
 
 -- CreateIndex
 CREATE INDEX "ContactEmailSequenceOptOut_sequenceId_idx" ON "ContactEmailSequenceOptOut"("sequenceId");
+
+-- AddForeignKey
 ALTER TABLE "EmailSequenceStep" ADD CONSTRAINT "EmailSequenceStep_sequenceId_fkey" FOREIGN KEY ("sequenceId") REFERENCES "EmailSequence"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
