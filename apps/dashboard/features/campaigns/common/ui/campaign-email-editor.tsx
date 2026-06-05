@@ -5,7 +5,7 @@ import { useCallback, useRef } from "react";
 import { Label } from "@workspace/ui/components/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { Textarea } from "@workspace/ui/components/textarea";
-import { htmlToPlainText } from "./campaign-email-editor-utils";
+import { getEditorBodyHtml, htmlToPlainText, toPlainJson } from "./campaign-email-editor-utils";
 
 const DEFAULT_EDITOR_HTML = `
   <p>We wanted to reach out.</p>
@@ -54,12 +54,12 @@ export function CampaignEmailEditor({
   const exportContent = useCallback(
     async (editorRef: EmailEditorRef) => {
       await withSuppressedReactEmailKeyWarning(async () => {
-        const json = editorRef.getJSON();
-        const email = await editorRef.getEmail();
+        const json = toPlainJson(editorRef.getJSON());
+        const bodyHtml = getEditorBodyHtml(editorRef.editor?.getHTML() ?? "");
         onChange({
           editorDocument: json,
-          composedBodyHtml: email.html,
-          composedBodyText: email.text,
+          composedBodyHtml: bodyHtml,
+          composedBodyText: htmlToPlainText(bodyHtml),
         });
       });
     },
@@ -73,8 +73,8 @@ export function CampaignEmailEditor({
         return;
       }
       onChange({
-        editorDocument: editorRef.getJSON(),
-        composedBodyHtml: snapshot.composedBodyHtml,
+        editorDocument: toPlainJson(editorRef.getJSON()),
+        composedBodyHtml: getEditorBodyHtml(snapshot.composedBodyHtml),
         composedBodyText: snapshot.composedBodyText ?? "",
       });
     },
@@ -91,8 +91,11 @@ export function CampaignEmailEditor({
     [exportContent],
   );
 
-  const initialContent = content ?? DEFAULT_EDITOR_HTML;
-  const rawHtml = snapshot?.composedBodyHtml ?? (typeof content === "string" ? content : DEFAULT_EDITOR_HTML);
+  const initialContent =
+    typeof content === "string" ? getEditorBodyHtml(content) : (content ?? DEFAULT_EDITOR_HTML);
+  const rawHtml = getEditorBodyHtml(
+    snapshot?.composedBodyHtml ?? (typeof content === "string" ? content : DEFAULT_EDITOR_HTML),
+  );
 
   return (
     <Tabs defaultValue="visual" className="space-y-2">
@@ -127,7 +130,7 @@ export function CampaignEmailEditor({
             const html = event.target.value;
             onChange({
               editorDocument: html,
-              composedBodyHtml: html,
+              composedBodyHtml: getEditorBodyHtml(html),
               composedBodyText: htmlToPlainText(html),
             });
           }}

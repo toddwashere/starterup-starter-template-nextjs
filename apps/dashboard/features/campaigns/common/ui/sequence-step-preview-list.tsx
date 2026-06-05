@@ -5,6 +5,7 @@ import { Button } from "@workspace/ui/components/button";
 import { IconForAdd, IconForEdit } from "@workspace/ui/components/icon-for";
 import { getPathForOrgFollowUpStep } from "@workspace/routes";
 import type { SequenceStepDraft } from "./sequence-steps-editor";
+import { createInertEmailPreviewHtml } from "./sequence-step-preview-list-utils";
 
 function formatDelay(minutes: number) {
   if (minutes === 0) return "Immediately";
@@ -80,9 +81,11 @@ export function SequenceStepPreviewList({
             <div className="h-28 overflow-hidden rounded-md border bg-background">
               <iframe
                 title={`Step ${index + 1} email preview`}
-                className="h-[224px] w-[360px] origin-top-left scale-50 bg-white"
+                className="pointer-events-none h-[224px] w-[360px] origin-top-left scale-50 overflow-hidden bg-white"
                 sandbox=""
-                srcDoc={getPreviewHtml(step)}
+                scrolling="no"
+                tabIndex={-1}
+                srcDoc={createInertEmailPreviewHtml(getPreviewHtml(step))}
               />
             </div>
           </div>

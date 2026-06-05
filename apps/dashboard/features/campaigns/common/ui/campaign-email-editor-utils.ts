@@ -16,3 +16,19 @@ export function htmlToPlainText(html: string) {
     .filter(Boolean)
     .join("\n");
 }
+
+export function getEditorBodyHtml(html: string) {
+  if (!/<html[\s>]/i.test(html)) return html;
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return doc.body.innerHTML || html;
+  }
+
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match?.[1] ?? html;
+}
+
+export function toPlainJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
