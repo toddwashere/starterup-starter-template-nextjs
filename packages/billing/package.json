@@ -17,7 +17,7 @@
     "@workspace/common": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
-    "stripe": "^22",
+    "stripe": "^22.2.0",
     "zod": "^3"
   },
   "devDependencies": {

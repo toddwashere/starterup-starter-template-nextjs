@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@workspace/tooling": "workspace:*",
-    "better-auth": "^1.6.11",
+    "better-auth": "^1.6.14",
     "tsx": "^4",
     "typescript": "^5.7",
     "vitest": "^3"
