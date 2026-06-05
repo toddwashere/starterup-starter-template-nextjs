@@ -1,0 +1,18 @@
+# Local secrets and credentials should never be read by AI agents.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+*credentials*.json
+*secret*.json
+secrets/
+**/secrets/

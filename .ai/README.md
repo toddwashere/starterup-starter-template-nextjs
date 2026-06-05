@@ -24,3 +24,4 @@ Entry points for agents: [../AGENTS.md](../AGENTS.md) and [`.cursor/rules/shared
 - [`conventions/colocated-tests.md`](./conventions/colocated-tests.md) - Place unit tests beside implementation files; never use `__tests__` folders.
 - [`conventions/plan-archival.md`](./conventions/plan-archival.md) - Move completed plans and specs to `done/` subdirectories.
 - [`conventions/format-date.md`](./conventions/format-date.md) - Always use `formatDate()` from `@workspace/common`; never call `.toLocaleString()` directly in UI code.
+- [`conventions/secrets-files.md`](./conventions/secrets-files.md) - Never read local secret files; use `.env.example` for environment variable references.
