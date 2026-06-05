@@ -56,8 +56,8 @@ export const CreateEmailSequenceStepSchema = EmailSequenceStepBaseSchema.superRe
 
 export const UpdateEmailSequenceStepSchema = EmailSequenceStepBaseSchema.partial();
 
-export type CreateEmailSequenceStepInput = z.infer<typeof CreateEmailSequenceStepSchema>;
-export type UpdateEmailSequenceStepInput = z.infer<typeof UpdateEmailSequenceStepSchema>;
+export type CreateEmailSequenceStepInput = z.input<typeof CreateEmailSequenceStepSchema>;
+export type UpdateEmailSequenceStepInput = z.input<typeof UpdateEmailSequenceStepSchema>;
 
 export const CampaignRunStatusSchema = z.enum(["running", "paused", "completed", "cancelled"]);
 export type CampaignRunStatus = z.infer<typeof CampaignRunStatusSchema>;
