@@ -22,6 +22,7 @@ describe("sendWelcomeAndVerifyEmail", () => {
     vi.mocked(keys).mockReturnValue({
       RESEND_API_KEY: "re_test_key",
       EMAIL_FROM: "Test <noreply@test.com>",
+      EMAIL_PROVIDER: "resend",
     });
   });
 
@@ -50,6 +51,7 @@ describe("sendWelcomeAndVerifyEmail", () => {
       vi.mocked(keys).mockReturnValue({
         RESEND_API_KEY: undefined,
         EMAIL_FROM: "App <noreply@example.com>",
+      EMAIL_PROVIDER: "resend",
       });
       consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     });

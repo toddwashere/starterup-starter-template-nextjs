@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 
 import { keys } from "../../keys";
-import type { JobEnvelope, QueueAdapter } from "../types";
+import type { JobEnvelope, PublishOptions, QueueAdapter } from "../types";
 
 export function createBullmqAdapter(): QueueAdapter {
   const { REDIS_URL } = keys();
@@ -15,8 +15,10 @@ export function createBullmqAdapter(): QueueAdapter {
   const queue = new Queue(queueName, { connection });
 
   return {
-    async publish(_queue, envelope: JobEnvelope) {
+    async publish(_queue, envelope: JobEnvelope, options?: PublishOptions) {
       const job = await queue.add(envelope.event, envelope, {
+        jobId: options?.jobId,
+        delay: options?.delayMs,
         removeOnComplete: true,
         removeOnFail: false,
         attempts: 5,

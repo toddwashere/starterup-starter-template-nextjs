@@ -4,6 +4,10 @@ import { handleAiExample } from "./ai-example";
 import { handleCleanupExpiredSessions } from "./cleanup-expired-sessions";
 import { handleUserWelcomeEmail } from "./user-welcome-email";
 import { handleWebhookDeliver } from "./webhook-deliver";
+import { handleCampaignEnrollSegment } from "./campaigns/enroll-segment";
+import { handleCampaignSendStep } from "./campaigns/send-step";
+import { handleCampaignScheduleNextStep } from "./campaigns/schedule-next-step";
+import { handleEmailProcessDeliveryEvents } from "./campaigns/process-delivery-events";
 
 /**
  * The concrete handler registry. The `HandlerRegistry` mapped type gives a
@@ -18,4 +22,8 @@ export const handlers: HandlerRegistry = {
   "cleanup.expired-sessions": handleCleanupExpiredSessions,
   "webhook.deliver": handleWebhookDeliver,
   "ai.example": handleAiExample,
+  "campaign.enroll-segment": handleCampaignEnrollSegment,
+  "campaign.send-step": handleCampaignSendStep,
+  "campaign.schedule-next-step": handleCampaignScheduleNextStep,
+  "email.process-delivery-events": handleEmailProcessDeliveryEvents,
 };

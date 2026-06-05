@@ -15,4 +15,8 @@ export {
   getPathForAcceptInvitation,
   getPathForAccountSettings,
   getPathForConsent,
+  getPathForOrgCampaigns,
+  getPathForOrgCampaign,
+  getPathForOrgFollowUps,
+  getPathForOrgFollowUp,
 } from "./getPathFor";

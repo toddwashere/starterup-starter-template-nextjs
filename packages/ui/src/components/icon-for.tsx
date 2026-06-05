@@ -276,6 +276,13 @@ export const IconForContacts = forwardRef<SVGSVGElement, LucideProps>(
 );
 IconForContacts.displayName = "IconForContacts";
 
+export const IconForCampaigns = forwardRef<SVGSVGElement, LucideProps>(
+  (props, ref) => (
+    <Mail ref={ref} {...props} className={cn("size-4", props.className)} />
+  )
+);
+IconForCampaigns.displayName = "IconForCampaigns";
+
 export const IconForPhone = forwardRef<SVGSVGElement, LucideProps>(
   (props, ref) => (
     <Phone ref={ref} {...props} className={cn("size-4", props.className)} />

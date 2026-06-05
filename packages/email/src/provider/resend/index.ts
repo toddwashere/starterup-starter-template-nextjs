@@ -3,6 +3,13 @@ import { keys } from "../../../keys";
 import { getResendFrom } from "./resend-options";
 import type { EmailPayload, EmailProvider } from "../types";
 
+function metadataToTags(metadata?: Record<string, string>) {
+  if (!metadata) {
+    return undefined;
+  }
+  return Object.entries(metadata).map(([name, value]) => ({ name, value }));
+}
+
 let resend: Resend | null = null;
 
 function getResend(): Resend {
@@ -17,6 +24,7 @@ function getResend(): Resend {
 
 const provider: EmailProvider = {
   async sendEmail(payload: EmailPayload): Promise<{ id?: string }> {
+    const tags = payload.tags ?? metadataToTags(payload.metadata);
     const { data, error } = await getResend().emails.send({
       from: getResendFrom(),
       to: payload.recipient,
@@ -25,7 +33,8 @@ const provider: EmailProvider = {
       text: payload.text,
       cc: payload.cc,
       replyTo: payload.replyTo,
-      tags: payload.tags,
+      tags,
+      headers: payload.headers,
     });
 
     if (error) {

@@ -498,6 +498,11 @@ export function ContactDetailPageContent({
                       </Avatar>
                       <span className="text-sm font-medium">{contact.displayName}</span>
                       <span className="text-xs text-muted-foreground">• {formatDate(i.happenedAt, { relative: true })}</span>
+                      {i.type === "email" && (
+                        <Badge variant="outline" className="text-xs">
+                          Email
+                        </Badge>
+                      )}
                       <div className="ml-auto">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

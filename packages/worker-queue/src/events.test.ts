@@ -9,12 +9,18 @@ import {
 
 describe("events registry", () => {
   it("contains exactly the expected event names", () => {
-    expect(Object.keys(events).sort()).toEqual([
-      "ai.example",
-      "cleanup.expired-sessions",
-      "user.welcome-email",
-      "webhook.deliver",
-    ]);
+    expect(Object.keys(events).sort()).toEqual(
+      [
+        "ai.example",
+        "campaign.enroll-segment",
+        "campaign.schedule-next-step",
+        "campaign.send-step",
+        "cleanup.expired-sessions",
+        "email.process-delivery-events",
+        "user.welcome-email",
+        "webhook.deliver",
+      ].sort(),
+    );
   });
 });
 

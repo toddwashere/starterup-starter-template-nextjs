@@ -57,6 +57,19 @@ describe("enqueue (sync adapter)", () => {
     expect(syncAdapter.published[0]!.envelope.idempotencyKey).toBe("key-1");
   });
 
+  it("forwards delayMs to the adapter", async () => {
+    await enqueue(
+      "campaign.send-step",
+      { stepSendId: "esend_1" },
+      { delayMs: 60_000, idempotencyKey: "enrl:step" },
+    );
+
+    expect(syncAdapter.published[0]!.options).toEqual({
+      delayMs: 60_000,
+      jobId: "enrl:step",
+    });
+  });
+
   it("omits idempotencyKey from the envelope when not provided", async () => {
     await enqueue("user.welcome-email", { userId: "u1" });
 

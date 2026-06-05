@@ -11,6 +11,22 @@ export const events = {
   "cleanup.expired-sessions": z.object({}),
   "webhook.deliver": z.object({ deliveryId: z.string() }),
   "ai.example": z.object({ text: z.string() }),
+  "campaign.enroll-segment": z.object({ campaignRunId: z.string() }),
+  "campaign.send-step": z.object({ stepSendId: z.string() }),
+  "campaign.schedule-next-step": z.object({ enrollmentId: z.string() }),
+  "email.process-delivery-events": z.object({
+    provider: z.literal("resend"),
+    events: z.array(
+      z.object({
+        type: z.enum(["delivered", "bounced", "complained"]),
+        providerMessageId: z.string(),
+        occurredAt: z.string(),
+        recipient: z.string().optional(),
+        bounceClass: z.enum(["hard", "soft"]).optional(),
+        rawType: z.string().optional(),
+      }),
+    ),
+  }),
 } as const;
 
 /** Union of the literal event-name strings in the registry. */

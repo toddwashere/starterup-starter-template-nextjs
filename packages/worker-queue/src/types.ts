@@ -5,9 +5,18 @@ export type JobEnvelope = {
   enqueuedAt?: string; // ISO timestamp, set by enqueue()
 };
 
+export type PublishOptions = {
+  delayMs?: number;
+  jobId?: string;
+};
+
 // Producer-facing adapter interface (implemented by sync/bullmq/cloud adapters):
 export interface QueueAdapter {
-  publish(queue: string, envelope: JobEnvelope): Promise<string>; // returns message id
+  publish(
+    queue: string,
+    envelope: JobEnvelope,
+    options?: PublishOptions,
+  ): Promise<string>; // returns message id
 }
 
 // Consumer-facing shape (used by apps/workers later):

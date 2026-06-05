@@ -20,7 +20,7 @@ import type { JobEnvelope } from "./types";
 export async function enqueue<E extends EventName>(
   event: E,
   payload: EventPayload<E>,
-  options?: { idempotencyKey?: string },
+  options?: { idempotencyKey?: string; delayMs?: number },
 ): Promise<string> {
   const validated = parseEventPayload(event, payload);
 
@@ -34,5 +34,8 @@ export async function enqueue<E extends EventName>(
   };
 
   const adapter = resolveAdapter();
-  return adapter.publish(keys().BULLMQ_QUEUE_NAME, envelope);
+  return adapter.publish(keys().BULLMQ_QUEUE_NAME, envelope, {
+    delayMs: options?.delayMs,
+    jobId: options?.idempotencyKey,
+  });
 }

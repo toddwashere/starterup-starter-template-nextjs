@@ -1,4 +1,4 @@
-import type { JobEnvelope, QueueAdapter } from "../types";
+import type { JobEnvelope, PublishOptions, QueueAdapter } from "../types";
 
 /**
  * In-memory queue adapter for tests and local development.
@@ -9,12 +9,20 @@ import type { JobEnvelope, QueueAdapter } from "../types";
  */
 export class SyncAdapter implements QueueAdapter {
   /** Every published message, in publish order. */
-  readonly published: Array<{ queue: string; envelope: JobEnvelope }> = [];
+  readonly published: Array<{
+    queue: string;
+    envelope: JobEnvelope;
+    options?: PublishOptions;
+  }> = [];
 
   private nextId = 1;
 
-  async publish(queue: string, envelope: JobEnvelope): Promise<string> {
-    this.published.push({ queue, envelope });
+  async publish(
+    queue: string,
+    envelope: JobEnvelope,
+    options?: PublishOptions,
+  ): Promise<string> {
+    this.published.push({ queue, envelope, options });
     return String(this.nextId++);
   }
 

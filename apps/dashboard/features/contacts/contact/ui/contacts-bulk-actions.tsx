@@ -14,10 +14,12 @@ import {
   IconForExport,
   IconForMore,
   IconForSegment,
+  IconForCampaigns,
 } from "@workspace/ui/components/icon-for";
 import { toast } from "@workspace/ui/components/sonner";
 import { exportContactsByIdsAction } from "../data/contact-csv-actions";
 import { AddContactsToSegmentButtonModal } from "../../contact-segment/ui/add-contacts-to-segment-button-modal";
+import { StartFollowUpButtonModal } from "@/features/campaigns/contact-integration/ui/start-follow-up-button-modal";
 import type { Contact } from "./contacts-data-table";
 
 function getSelectedIds<TData>(table: TanStackTable<TData>): string[] {
@@ -52,6 +54,14 @@ export function ContactsBulkActions({ table }: { table: TanStackTable<Contact> }
     });
   }
 
+  function handleStartFollowUp() {
+    const ids = getSelectedIds(table);
+    void NiceModal.show(StartFollowUpButtonModal, {
+      contactIds: ids,
+      onSuccess: () => table.resetRowSelection(),
+    });
+  }
+
   return (
     <DataTableBulkActions table={table}>
       <DropdownMenu>
@@ -69,6 +79,10 @@ export function ContactsBulkActions({ table }: { table: TanStackTable<Contact> }
           <DropdownMenuItem onClick={handleAddToSegment}>
             <IconForSegment className="mr-2" />
             Add to segment
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleStartFollowUp}>
+            <IconForCampaigns className="mr-2" />
+            Start follow-up
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -3,6 +3,7 @@ import {
   IconForSettings,
   IconForAi,
   IconForContacts,
+  IconForCampaigns,
 } from "@workspace/ui/components/icon-for";
 import type { NavConfig } from "@/types/nav";
 
@@ -21,6 +22,15 @@ export const orgNavConfig: NavConfig = {
       items: [
         { title: "All contacts", href: "/contacts" },
         { title: "Tasks", href: "/contacts/tasks" },
+      ],
+    },
+    {
+      title: "Campaigns",
+      href: "/campaigns",
+      icon: IconForCampaigns,
+      items: [
+        { title: "Campaigns", href: "/campaigns" },
+        { title: "Follow-ups", href: "/campaigns/follow-ups" },
       ],
     },
     {

@@ -61,3 +61,19 @@ export function getPathForAccountSettings() {
 export function getPathForConsent() {
   return "/consent";
 }
+
+export function getPathForOrgCampaigns(orgSlug: string) {
+  return `/${orgSlug}/campaigns`;
+}
+
+export function getPathForOrgCampaign(orgSlug: string, campaignId: string) {
+  return `/${orgSlug}/campaigns/${campaignId}`;
+}
+
+export function getPathForOrgFollowUps(orgSlug: string) {
+  return `/${orgSlug}/campaigns/follow-ups`;
+}
+
+export function getPathForOrgFollowUp(orgSlug: string, followUpId: string) {
+  return `/${orgSlug}/campaigns/follow-ups/${followUpId}`;
+}

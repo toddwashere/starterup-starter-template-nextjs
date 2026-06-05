@@ -13,6 +13,10 @@ describe("getHandler", () => {
       "cleanup.expired-sessions": cleanup,
       "webhook.deliver": webhook,
       "ai.example": vi.fn(async () => {}),
+      "campaign.enroll-segment": vi.fn(async () => {}),
+      "campaign.send-step": vi.fn(async () => {}),
+      "campaign.schedule-next-step": vi.fn(async () => {}),
+      "email.process-delivery-events": vi.fn(async () => {}),
     };
 
     const handler = getHandler(registry, "user.welcome-email");
@@ -23,7 +27,6 @@ describe("getHandler", () => {
   });
 
   it("throws for an unregistered event", () => {
-    // A partial registry missing webhook.deliver, cast to satisfy the type.
     const partial = {
       "user.welcome-email": vi.fn(async () => {}),
       "cleanup.expired-sessions": vi.fn(async () => {}),
@@ -42,14 +45,16 @@ describe("getHandler", () => {
     );
   });
 
-  it("documents the event-name contract Task 9's registry must satisfy", () => {
-    // The set of EventNames is exactly the three known events. Task 9's real
-    // registry must provide a handler for each of these.
+  it("documents the event-name contract the registry must satisfy", () => {
     const eventNames = Object.keys(events) as EventName[];
     expect(eventNames.sort()).toEqual(
       [
         "ai.example",
+        "campaign.enroll-segment",
+        "campaign.schedule-next-step",
+        "campaign.send-step",
         "cleanup.expired-sessions",
+        "email.process-delivery-events",
         "user.welcome-email",
         "webhook.deliver",
       ].sort(),
