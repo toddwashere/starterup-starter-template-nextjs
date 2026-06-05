@@ -9,9 +9,12 @@ import { prisma } from "@workspace/database";
 import { getStripeClient } from "@workspace/billing/stripe-client";
 import { stripePluginOptions } from "@workspace/billing/stripe-plugin-options";
 import { ac, orgRoles } from "./org-roles";
-import { routeVerificationEmail } from "./email-routing";
-import { sendPasswordResetEmail } from "@workspace/email/send-password-reset-email";
-import { sendInvitationEmail } from "@workspace/email/send-invitation-email";
+import {
+  assertBetterAuthEmailLifecycleConfigured,
+  createEmailAndPasswordOptions,
+  createEmailVerificationOptions,
+  createOrganizationInvitationEmailHandler,
+} from "./auth-email-lifecycle";
 import { createBetterAuthId } from "./better-auth-id";
 import { enqueueWelcomeEmail } from "./welcome-email-hook";
 import { keys as authKeys } from "../keys";
@@ -77,32 +80,8 @@ export const auth = betterAuth({
       },
     },
   },
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-    sendVerificationEmail: async ({
-      user,
-      url,
-    }: {
-      user: { email: string; name: string; emailVerified: boolean };
-      url: string;
-    }) => {
-      await routeVerificationEmail({ user, url });
-    },
-    sendResetPasswordEmail: async ({
-      user,
-      url,
-    }: {
-      user: { email: string; name: string };
-      url: string;
-    }) => {
-      await sendPasswordResetEmail({
-        recipient: user.email,
-        name: user.name,
-        resetUrl: url,
-      });
-    },
-  },
+  emailVerification: createEmailVerificationOptions(),
+  emailAndPassword: createEmailAndPasswordOptions(),
   socialProviders: {
     ...(GOOGLE_CLIENT_ID && {
       google: {
@@ -133,14 +112,9 @@ export const auth = betterAuth({
     organization({
       ac,
       roles: orgRoles,
-      async sendInvitationEmail(data) {
-        await sendInvitationEmail({
-          recipient: data.email,
-          organizationName: data.organization.name,
-          inviterName: data.inviter.user.name,
-          acceptUrl: `${BETTER_AUTH_URL}/accept-invitation/${data.id}`,
-        });
-      },
+      sendInvitationEmail: createOrganizationInvitationEmailHandler(
+        BETTER_AUTH_URL,
+      ),
     }),
     admin(),
     apiKey([
@@ -170,5 +144,7 @@ export const auth = betterAuth({
     stripe(stripePluginOptions(getStripeClient())),
   ],
 });
+
+assertBetterAuthEmailLifecycleConfigured(auth.options);
 
 export type Auth = typeof auth;
