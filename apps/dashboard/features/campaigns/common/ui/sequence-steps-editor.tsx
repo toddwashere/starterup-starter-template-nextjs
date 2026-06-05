@@ -19,7 +19,7 @@ import {
   delayPresetToMinutes,
   type DelayPresetKey,
   type StepContentSource,
-} from "@workspace/campaigns";
+} from "@workspace/campaigns/schemas/sequence-schemas";
 import { listMarketingTemplatesAction } from "../../campaign/data/campaign-actions";
 import { CampaignEmailEditor } from "./campaign-email-editor";
 
