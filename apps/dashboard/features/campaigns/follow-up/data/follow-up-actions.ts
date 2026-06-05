@@ -9,6 +9,7 @@ import {
   addSequenceStep,
   updateSequenceStep,
   getSequenceStep,
+  deleteSequenceStep,
   enrollContactsInFollowUp,
   listActiveEnrollmentsForContact,
   getSequenceReportingStats,
@@ -230,6 +231,29 @@ export async function updateFollowUpStepAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to update follow-up step",
+    };
+  }
+}
+
+export async function deleteFollowUpStepAction(
+  sequenceId: string,
+  stepId: string,
+): Promise<ActionResult> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["delete"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "follow_up") {
+      return { success: false, error: "Follow-up step not found" };
+    }
+
+    await deleteSequenceStep(stepId, sequenceId, activeOrganizationId);
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete follow-up step",
     };
   }
 }

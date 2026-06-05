@@ -17,6 +17,7 @@ export {
   getPathForConsent,
   getPathForOrgCampaigns,
   getPathForOrgCampaign,
+  getPathForOrgCampaignStep,
   getPathForOrgFollowUps,
   getPathForOrgFollowUp,
   getPathForOrgFollowUpStep,

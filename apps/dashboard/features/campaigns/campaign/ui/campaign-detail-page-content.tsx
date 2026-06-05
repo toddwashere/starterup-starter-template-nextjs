@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import NiceModal from "@ebay/nice-modal-react";
 import { formatDate } from "@workspace/common";
-import { getPathForOrgCampaigns } from "@workspace/routes";
+import {
+  getPathForOrgCampaignStep,
+  getPathForOrgCampaigns,
+} from "@workspace/routes";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -28,25 +33,25 @@ import {
 } from "@workspace/ui/components/breadcrumb";
 import { listContactSegmentsAction } from "@/features/contacts/contact-segment/data/contact-segment-actions";
 import {
+  createCampaignStepAction,
+  deleteCampaignSequenceAction,
   getCampaignSequenceAction,
   pauseCampaignSequenceAction,
-  saveCampaignSequenceStepsAction,
   sendCampaignTestEmailAction,
   startCampaignRunAction,
   updateCampaignSequenceAction,
 } from "../data/campaign-actions";
 import {
-  SequenceStepsEditor,
-  createDefaultSteps,
-  draftToStepInput,
   mapSequenceStepToDraft,
   type SequenceStepDraft,
 } from "../../common/ui/sequence-steps-editor";
+import { SequenceStepPreviewList } from "../../common/ui/sequence-step-preview-list";
 import {
   CampaignRunStatusBadge,
   SequenceStatsPanel,
   SequenceStatusBadge,
 } from "../../common/ui/sequence-stats-panel";
+import { DeleteCampaignConfirmDialog } from "./delete-campaign-confirm-dialog";
 
 type CampaignDetail = Extract<
   Awaited<ReturnType<typeof getCampaignSequenceAction>>,
@@ -54,7 +59,6 @@ type CampaignDetail = Extract<
 >["data"];
 
 function mapStepsToDraft(steps: CampaignDetail["sequence"]["steps"]): SequenceStepDraft[] {
-  if (steps.length === 0) return createDefaultSteps();
   return steps.map(mapSequenceStepToDraft);
 }
 
@@ -65,15 +69,17 @@ export function CampaignDetailPageContent({
   orgSlug: string;
   campaignId: string;
 }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [name, setName] = useState("");
-  const [steps, setSteps] = useState<SequenceStepDraft[]>(createDefaultSteps());
+  const [steps, setSteps] = useState<SequenceStepDraft[]>([]);
   const [segments, setSegments] = useState<{ id: string; name: string }[]>([]);
   const [segmentId, setSegmentId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  const [creatingStep, setCreatingStep] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,18 +115,25 @@ export function CampaignDetailPageContent({
         toast.error(nameResult.error);
         return;
       }
-      const stepsResult = await saveCampaignSequenceStepsAction(
-        campaignId,
-        steps.map((step) => ({ ...draftToStepInput(step), id: step.id })),
-      );
-      if (!stepsResult.success) {
-        toast.error(stepsResult.error);
-        return;
-      }
       toast.success("Campaign saved");
       await load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleAddStep() {
+    if (creatingStep) return;
+    setCreatingStep(true);
+    try {
+      const result = await createCampaignStepAction(campaignId);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      router.push(getPathForOrgCampaignStep(orgSlug, campaignId, result.data.id));
+    } finally {
+      setCreatingStep(false);
     }
   }
 
@@ -162,6 +175,27 @@ export function CampaignDetailPageContent({
       toast.success("Test email sent to your account email");
     } finally {
       setSendingTest(false);
+    }
+  }
+
+  async function handleDeleteCampaign() {
+    if (!detail || saving) return;
+    const confirmed = await NiceModal.show(DeleteCampaignConfirmDialog, {
+      campaignName: detail.sequence.name,
+    });
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      const result = await deleteCampaignSequenceAction(campaignId);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Campaign deleted");
+      router.push(getPathForOrgCampaigns(orgSlug));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -214,6 +248,13 @@ export function CampaignDetailPageContent({
             <Button variant="outline" onClick={() => void handlePause()}>
               Pause
             </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeleteCampaign()}
+              disabled={saving}
+            >
+              Delete
+            </Button>
             <Button onClick={() => void handleSave()} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </Button>
@@ -248,7 +289,13 @@ export function CampaignDetailPageContent({
 
             <div className="space-y-3">
               <h3 className="font-semibold">Steps</h3>
-              <SequenceStepsEditor steps={steps} onChange={setSteps} disabled={saving} />
+              <SequenceStepPreviewList
+                steps={steps}
+                disabled={creatingStep}
+                onAddStep={() => void handleAddStep()}
+                getStepHref={(step) => getPathForOrgCampaignStep(orgSlug, campaignId, step.id ?? "")}
+                emptyMessage="No steps yet. Add the first email step to this campaign."
+              />
             </div>
           </div>
 

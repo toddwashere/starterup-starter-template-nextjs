@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Button } from "@workspace/ui/components/button";
 import { IconForAdd, IconForEdit } from "@workspace/ui/components/icon-for";
-import { getPathForOrgFollowUpStep } from "@workspace/routes";
 import type { SequenceStepDraft } from "./sequence-steps-editor";
 import {
   createInertEmailPreviewHtml,
@@ -29,23 +28,23 @@ function getPreviewHtml(step: SequenceStepDraft) {
 }
 
 export function SequenceStepPreviewList({
-  orgSlug,
-  followUpId,
   steps,
   disabled,
   onAddStep,
+  getStepHref,
+  emptyMessage = "No steps yet. Add the first email step.",
 }: {
-  orgSlug: string;
-  followUpId: string;
   steps: SequenceStepDraft[];
   disabled?: boolean;
   onAddStep: () => void;
+  getStepHref: (step: SequenceStepDraft) => string;
+  emptyMessage?: string;
 }) {
   return (
     <div className="space-y-3">
       {steps.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          No steps yet. Add the first email step to this follow-up.
+          {emptyMessage}
         </div>
       ) : (
         sortStepsByDelay(steps).map((step, index) => (
@@ -60,7 +59,7 @@ export function SequenceStepPreviewList({
                   variant="outline"
                   className="absolute right-4 top-4 shadow-sm"
                 >
-                  <Link href={getPathForOrgFollowUpStep(orgSlug, followUpId, step.id)}>
+                  <Link href={getStepHref(step)}>
                     <IconForEdit />
                     <span className="sr-only">Edit step</span>
                   </Link>

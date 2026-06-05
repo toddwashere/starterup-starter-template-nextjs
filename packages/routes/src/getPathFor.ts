@@ -70,6 +70,14 @@ export function getPathForOrgCampaign(orgSlug: string, campaignId: string) {
   return `/${orgSlug}/campaigns/${campaignId}`;
 }
 
+export function getPathForOrgCampaignStep(
+  orgSlug: string,
+  campaignId: string,
+  stepId: string,
+) {
+  return `/${orgSlug}/campaigns/${campaignId}/steps/${stepId}`;
+}
+
 export function getPathForOrgFollowUps(orgSlug: string) {
   return `/${orgSlug}/campaigns/follow-ups`;
 }

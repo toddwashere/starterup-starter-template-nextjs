@@ -7,11 +7,13 @@ vi.mock("@workspace/database", () => ({
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     emailSequenceStep: {
       create: vi.fn(),
       update: vi.fn(),
       findFirst: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }));
@@ -22,6 +24,8 @@ import {
   getEmailSequenceById,
   createEmailSequence,
   createEmailSequenceStep,
+  deleteEmailSequence,
+  deleteEmailSequenceStep,
 } from "./email-sequence-repo";
 
 beforeEach(() => vi.clearAllMocks());
@@ -93,5 +97,33 @@ describe("createEmailSequenceStep", () => {
         subjectTemplate: "Hi",
       }),
     ).rejects.toThrow("Sequence not found");
+  });
+});
+
+describe("deleteEmailSequence", () => {
+  it("deletes only within the organization", async () => {
+    vi.mocked(prisma.emailSequence.delete).mockResolvedValue({ id: "eseq_1" } as never);
+    await deleteEmailSequence("eseq_1", "org_1");
+    expect(prisma.emailSequence.delete).toHaveBeenCalledWith({
+      where: { id: "eseq_1", organizationId: "org_1" },
+    });
+  });
+});
+
+describe("deleteEmailSequenceStep", () => {
+  it("throws when sequence is not in org", async () => {
+    vi.mocked(prisma.emailSequence.findFirst).mockResolvedValue(null as never);
+    await expect(deleteEmailSequenceStep("estep_1", "eseq_1", "org_1")).rejects.toThrow(
+      "Sequence not found",
+    );
+  });
+
+  it("deletes the step from the scoped sequence", async () => {
+    vi.mocked(prisma.emailSequence.findFirst).mockResolvedValue({ id: "eseq_1" } as never);
+    vi.mocked(prisma.emailSequenceStep.delete).mockResolvedValue({ id: "estep_1" } as never);
+    await deleteEmailSequenceStep("estep_1", "eseq_1", "org_1");
+    expect(prisma.emailSequenceStep.delete).toHaveBeenCalledWith({
+      where: { id: "estep_1", sequenceId: "eseq_1" },
+    });
   });
 });

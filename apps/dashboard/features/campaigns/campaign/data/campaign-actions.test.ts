@@ -25,10 +25,13 @@ vi.mock("@workspace/campaigns", () => ({
     { id: "eseq_1", name: "Welcome", kind: "campaign", status: "draft", steps: [] },
   ]),
   getSequence: vi.fn(),
+  getSequenceStep: vi.fn(),
   createSequence: vi.fn().mockResolvedValue({ id: "eseq_new" }),
   updateSequence: vi.fn().mockResolvedValue({ id: "eseq_1" }),
-  addSequenceStep: vi.fn(),
-  updateSequenceStep: vi.fn(),
+  addSequenceStep: vi.fn().mockResolvedValue({ id: "estep_new" }),
+  updateSequenceStep: vi.fn().mockResolvedValue({ id: "estep_1" }),
+  deleteSequence: vi.fn(),
+  deleteSequenceStep: vi.fn(),
   startCampaignRun: vi.fn().mockResolvedValue({ id: "ecrun_1" }),
   pauseCampaignSequence: vi.fn(),
   getLatestCampaignRunForSequence: vi.fn().mockResolvedValue(null),
@@ -42,6 +45,9 @@ vi.mock("@workspace/campaigns", () => ({
   },
   signMarketingToken: vi.fn().mockReturnValue("signed-token"),
   keys: vi.fn().mockReturnValue({ NEXT_PUBLIC_WWW_URL: "http://localhost:4001" }),
+  CreateEmailSequenceStepSchema: {
+    parse: vi.fn((value) => value),
+  },
 }));
 
 vi.mock("@workspace/email/marketing/send-marketing-email", () => ({
@@ -53,14 +59,23 @@ import {
   startCampaignRun,
   createSequence,
   getSequence,
+  getSequenceStep,
+  addSequenceStep,
+  updateSequenceStep,
+  deleteSequence,
+  deleteSequenceStep,
 } from "@workspace/campaigns";
 import { sendMarketingEmail } from "@workspace/email/marketing/send-marketing-email";
 import {
   createCampaignSequenceAction,
+  createCampaignStepAction,
+  deleteCampaignSequenceAction,
+  deleteCampaignStepAction,
   listCampaignSequencesAction,
   pauseCampaignSequenceAction,
   sendCampaignTestEmailAction,
   startCampaignRunAction,
+  updateCampaignStepAction,
 } from "./campaign-actions";
 
 describe("listCampaignSequencesAction", () => {
@@ -70,6 +85,23 @@ describe("listCampaignSequencesAction", () => {
     await listCampaignSequencesAction();
     expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["read"] });
     expect(listSequences).toHaveBeenCalledWith("org_1", "campaign");
+  });
+});
+
+describe("deleteCampaignSequenceAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("requires campaign delete permission and deletes only campaigns", async () => {
+    vi.mocked(getSequence).mockResolvedValue({
+      id: "eseq_1",
+      kind: "campaign",
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getSequence>>>);
+
+    const result = await deleteCampaignSequenceAction("eseq_1");
+
+    expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["delete"] });
+    expect(deleteSequence).toHaveBeenCalledWith("eseq_1", "org_1");
+    expect(result).toEqual({ success: true, data: undefined });
   });
 });
 
@@ -157,5 +189,83 @@ describe("sendCampaignTestEmailAction", () => {
     const result = await sendCampaignTestEmailAction("eseq_1");
     expect(result.success).toBe(false);
     expect(sendMarketingEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("createCampaignStepAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("creates a default editor step and returns its id", async () => {
+    vi.mocked(getSequence).mockResolvedValue({
+      id: "eseq_1",
+      kind: "campaign",
+      steps: [{ id: "estep_1" }, { id: "estep_2" }],
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getSequence>>>);
+
+    const result = await createCampaignStepAction("eseq_1");
+
+    expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["update"] });
+    expect(addSequenceStep).toHaveBeenCalledWith(
+      "eseq_1",
+      "org_1",
+      expect.objectContaining({
+        sortOrder: 2,
+        delayMinutes: 1440,
+        contentSource: "editor",
+        subjectTemplate: "Hello {{firstName}}",
+        composedBodyHtml: expect.stringContaining("We wanted to reach out."),
+      }),
+    );
+    expect(result).toEqual({ success: true, data: { id: "estep_new" } });
+  });
+});
+
+describe("updateCampaignStepAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("updates only a step that belongs to the campaign", async () => {
+    vi.mocked(getSequenceStep).mockResolvedValue({
+      id: "estep_1",
+      sequenceId: "eseq_1",
+      sequence: { kind: "campaign" },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getSequenceStep>>>);
+
+    const result = await updateCampaignStepAction("eseq_1", "estep_1", {
+      sortOrder: 0,
+      delayMinutes: 0,
+      contentSource: "editor",
+      templateKey: "nurture-intro",
+      subjectTemplate: "Updated subject",
+      editorDocument: "<p>Hi</p>",
+      composedBodyHtml: "<p>Hi</p>",
+      composedBodyText: "Hi",
+    });
+
+    expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["update"] });
+    expect(updateSequenceStep).toHaveBeenCalledWith(
+      "estep_1",
+      "eseq_1",
+      "org_1",
+      expect.objectContaining({ subjectTemplate: "Updated subject" }),
+    );
+    expect(result).toEqual({ success: true, data: { id: "estep_1" } });
+  });
+});
+
+describe("deleteCampaignStepAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("requires campaign delete permission and deletes only campaign steps", async () => {
+    vi.mocked(getSequenceStep).mockResolvedValue({
+      id: "estep_1",
+      sequenceId: "eseq_1",
+      sequence: { kind: "campaign" },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getSequenceStep>>>);
+
+    const result = await deleteCampaignStepAction("eseq_1", "estep_1");
+
+    expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["delete"] });
+    expect(deleteSequenceStep).toHaveBeenCalledWith("estep_1", "eseq_1", "org_1");
+    expect(result).toEqual({ success: true, data: undefined });
   });
 });

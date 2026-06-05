@@ -173,11 +173,11 @@ export function FollowUpDetailPageContent({
             <div className="space-y-3">
               <h3 className="font-semibold">Steps</h3>
               <SequenceStepPreviewList
-                orgSlug={orgSlug}
-                followUpId={followUpId}
                 steps={steps}
                 disabled={creatingStep}
                 onAddStep={() => void handleAddStep()}
+                getStepHref={(step) => getPathForOrgFollowUpStep(orgSlug, followUpId, step.id ?? "")}
+                emptyMessage="No steps yet. Add the first email step to this follow-up."
               />
             </div>
           </div>

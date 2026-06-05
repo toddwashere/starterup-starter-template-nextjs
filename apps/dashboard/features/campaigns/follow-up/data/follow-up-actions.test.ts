@@ -16,6 +16,7 @@ vi.mock("@workspace/campaigns", () => ({
   updateSequence: vi.fn(),
   addSequenceStep: vi.fn().mockResolvedValue({ id: "estep_new" }),
   updateSequenceStep: vi.fn().mockResolvedValue({ id: "estep_1" }),
+  deleteSequenceStep: vi.fn(),
   enrollContactsInFollowUp: vi.fn(),
   listActiveEnrollmentsForContact: vi.fn(),
   getSequenceReportingStats: vi.fn(),
@@ -29,9 +30,11 @@ import {
   getSequence,
   getSequenceStep,
   updateSequenceStep,
+  deleteSequenceStep,
 } from "@workspace/campaigns";
 import {
   createFollowUpStepAction,
+  deleteFollowUpStepAction,
   updateFollowUpStepAction,
 } from "./follow-up-actions";
 
@@ -60,6 +63,24 @@ describe("createFollowUpStepAction", () => {
       }),
     );
     expect(result).toEqual({ success: true, data: { id: "estep_new" } });
+  });
+});
+
+describe("deleteFollowUpStepAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("requires campaign delete permission and deletes only follow-up steps", async () => {
+    vi.mocked(getSequenceStep).mockResolvedValue({
+      id: "estep_1",
+      sequenceId: "eseq_1",
+      sequence: { kind: "follow_up" },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getSequenceStep>>>);
+
+    const result = await deleteFollowUpStepAction("eseq_1", "estep_1");
+
+    expect(requireOrgPermissionWithActiveOrg).toHaveBeenCalledWith({ campaign: ["delete"] });
+    expect(deleteSequenceStep).toHaveBeenCalledWith("estep_1", "eseq_1", "org_1");
+    expect(result).toEqual({ success: true, data: undefined });
   });
 });
 

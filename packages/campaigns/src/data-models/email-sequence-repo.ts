@@ -131,6 +131,27 @@ export async function getEmailSequenceStepById(stepId: string, organizationId: s
   });
 }
 
+export async function deleteEmailSequence(sequenceId: string, organizationId: string) {
+  return prisma.emailSequence.delete({
+    where: { id: sequenceId, organizationId },
+  });
+}
+
+export async function deleteEmailSequenceStep(
+  stepId: string,
+  sequenceId: string,
+  organizationId: string,
+) {
+  const sequence = await getEmailSequenceById(sequenceId, organizationId);
+  if (!sequence) {
+    throw new Error("Sequence not found in this organization");
+  }
+
+  return prisma.emailSequenceStep.delete({
+    where: { id: stepId, sequenceId },
+  });
+}
+
 export async function listStepsForSequence(sequenceId: string, organizationId: string) {
   const sequence = await getEmailSequenceById(sequenceId, organizationId);
   if (!sequence) {

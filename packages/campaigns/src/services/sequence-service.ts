@@ -6,6 +6,8 @@ import {
   createEmailSequenceStep,
   updateEmailSequenceStep,
   getEmailSequenceStepById,
+  deleteEmailSequence,
+  deleteEmailSequenceStep,
 } from "../data-models/email-sequence-repo";
 import type {
   CreateEmailSequenceInput,
@@ -58,4 +60,16 @@ export async function updateSequenceStep(
 
 export async function getSequenceStep(stepId: string, organizationId: string) {
   return getEmailSequenceStepById(stepId, organizationId);
+}
+
+export async function deleteSequence(sequenceId: string, organizationId: string) {
+  return deleteEmailSequence(sequenceId, organizationId);
+}
+
+export async function deleteSequenceStep(
+  stepId: string,
+  sequenceId: string,
+  organizationId: string,
+) {
+  return deleteEmailSequenceStep(stepId, sequenceId, organizationId);
 }

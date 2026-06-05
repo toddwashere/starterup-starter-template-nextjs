@@ -10,6 +10,9 @@ import {
   updateSequence,
   addSequenceStep,
   updateSequenceStep,
+  getSequenceStep,
+  deleteSequence,
+  deleteSequenceStep,
   startCampaignRun,
   pauseCampaignSequence,
   getLatestCampaignRunForSequence,
@@ -25,6 +28,13 @@ import {
 } from "@workspace/campaigns";
 import { sendMarketingEmail } from "@workspace/email/marketing/send-marketing-email";
 import type { ActionResult } from "@/common/data/action-result";
+
+const DEFAULT_EDITOR_HTML = `
+  <p>We wanted to reach out.</p>
+  <p><a href="https://example.com">Learn more</a></p>
+`;
+
+const DEFAULT_EDITOR_TEXT = "We wanted to reach out.\nLearn more";
 
 export type CampaignSequenceListItem = Awaited<
   ReturnType<typeof listSequences>
@@ -136,6 +146,25 @@ export async function updateCampaignSequenceAction(
   }
 }
 
+export async function deleteCampaignSequenceAction(sequenceId: string): Promise<ActionResult> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["delete"],
+    });
+    const existing = await getSequence(sequenceId, activeOrganizationId);
+    if (!existing || existing.kind !== "campaign") {
+      return { success: false, error: "Campaign not found" };
+    }
+    await deleteSequence(sequenceId, activeOrganizationId);
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete campaign",
+    };
+  }
+}
+
 export async function saveCampaignSequenceStepsAction(
   sequenceId: string,
   steps: Array<
@@ -167,6 +196,109 @@ export async function saveCampaignSequenceStepsAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to save campaign steps",
+    };
+  }
+}
+
+export async function createCampaignStepAction(
+  sequenceId: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["update"],
+    });
+    const sequence = await getSequence(sequenceId, activeOrganizationId);
+    if (!sequence || sequence.kind !== "campaign") {
+      return { success: false, error: "Campaign not found" };
+    }
+
+    const step = await addSequenceStep(sequenceId, activeOrganizationId, {
+      sortOrder: sequence.steps.length,
+      delayMinutes: sequence.steps.length === 0 ? 0 : 1440,
+      contentSource: "editor",
+      templateKey: "nurture-intro",
+      subjectTemplate: "Hello {{firstName}}",
+      editorDocument: DEFAULT_EDITOR_HTML,
+      composedBodyHtml: DEFAULT_EDITOR_HTML,
+      composedBodyText: DEFAULT_EDITOR_TEXT,
+    });
+
+    return { success: true, data: { id: step.id } };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create campaign step",
+    };
+  }
+}
+
+export async function getCampaignStepAction(
+  sequenceId: string,
+  stepId: string,
+): Promise<
+  ActionResult<NonNullable<Awaited<ReturnType<typeof getSequenceStep>>>>
+> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["read"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "campaign") {
+      return { success: false, error: "Campaign step not found" };
+    }
+    return { success: true, data: step };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load campaign step",
+    };
+  }
+}
+
+export async function updateCampaignStepAction(
+  sequenceId: string,
+  stepId: string,
+  data: CreateEmailSequenceStepInput,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["update"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "campaign") {
+      return { success: false, error: "Campaign step not found" };
+    }
+
+    const parsed = CreateEmailSequenceStepSchema.parse(data);
+    const updated = await updateSequenceStep(stepId, sequenceId, activeOrganizationId, parsed);
+    return { success: true, data: { id: updated.id } };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update campaign step",
+    };
+  }
+}
+
+export async function deleteCampaignStepAction(
+  sequenceId: string,
+  stepId: string,
+): Promise<ActionResult> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["delete"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "campaign") {
+      return { success: false, error: "Campaign step not found" };
+    }
+
+    await deleteSequenceStep(stepId, sequenceId, activeOrganizationId);
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete campaign step",
     };
   }
 }
