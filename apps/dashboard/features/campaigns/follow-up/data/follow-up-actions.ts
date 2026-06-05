@@ -8,6 +8,7 @@ import {
   updateSequence,
   addSequenceStep,
   updateSequenceStep,
+  getSequenceStep,
   enrollContactsInFollowUp,
   listActiveEnrollmentsForContact,
   getSequenceReportingStats,
@@ -18,6 +19,13 @@ import {
   type UpdateEmailSequenceStepInput,
 } from "@workspace/campaigns";
 import type { ActionResult } from "@/common/data/action-result";
+
+const DEFAULT_EDITOR_HTML = `
+  <p>We wanted to reach out.</p>
+  <p><a href="https://example.com">Learn more</a></p>
+`;
+
+const DEFAULT_EDITOR_TEXT = "We wanted to reach out.\nLearn more";
 
 export async function listFollowUpSequencesAction(): Promise<
   ActionResult<Awaited<ReturnType<typeof listSequences>>>
@@ -142,6 +150,86 @@ export async function saveFollowUpSequenceStepsAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to save follow-up steps",
+    };
+  }
+}
+
+export async function createFollowUpStepAction(
+  sequenceId: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["update"],
+    });
+    const sequence = await getSequence(sequenceId, activeOrganizationId);
+    if (!sequence || sequence.kind !== "follow_up") {
+      return { success: false, error: "Follow-up not found" };
+    }
+
+    const step = await addSequenceStep(sequenceId, activeOrganizationId, {
+      sortOrder: sequence.steps.length,
+      delayMinutes: sequence.steps.length === 0 ? 0 : 1440,
+      contentSource: "editor",
+      templateKey: "nurture-intro",
+      subjectTemplate: "Hello {{firstName}}",
+      editorDocument: DEFAULT_EDITOR_HTML,
+      composedBodyHtml: DEFAULT_EDITOR_HTML,
+      composedBodyText: DEFAULT_EDITOR_TEXT,
+    });
+
+    return { success: true, data: { id: step.id } };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create follow-up step",
+    };
+  }
+}
+
+export async function getFollowUpStepAction(
+  sequenceId: string,
+  stepId: string,
+): Promise<
+  ActionResult<NonNullable<Awaited<ReturnType<typeof getSequenceStep>>>>
+> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["read"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "follow_up") {
+      return { success: false, error: "Follow-up step not found" };
+    }
+    return { success: true, data: step };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to load follow-up step",
+    };
+  }
+}
+
+export async function updateFollowUpStepAction(
+  sequenceId: string,
+  stepId: string,
+  data: CreateEmailSequenceStepInput,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { activeOrganizationId } = await requireOrgPermissionWithActiveOrg({
+      campaign: ["update"],
+    });
+    const step = await getSequenceStep(stepId, activeOrganizationId);
+    if (!step || step.sequenceId !== sequenceId || step.sequence.kind !== "follow_up") {
+      return { success: false, error: "Follow-up step not found" };
+    }
+
+    const parsed = CreateEmailSequenceStepSchema.parse(data);
+    const updated = await updateSequenceStep(stepId, sequenceId, activeOrganizationId, parsed);
+    return { success: true, data: { id: updated.id } };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to update follow-up step",
     };
   }
 }

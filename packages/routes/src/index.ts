@@ -19,4 +19,5 @@ export {
   getPathForOrgCampaign,
   getPathForOrgFollowUps,
   getPathForOrgFollowUp,
+  getPathForOrgFollowUpStep,
 } from "./getPathFor";

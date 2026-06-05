@@ -69,10 +69,14 @@ export function SequenceStepsEditor({
   steps,
   onChange,
   disabled,
+  allowAdd = true,
+  allowRemove = true,
 }: {
   steps: SequenceStepDraft[];
   onChange: (steps: SequenceStepDraft[]) => void;
   disabled?: boolean;
+  allowAdd?: boolean;
+  allowRemove?: boolean;
 }) {
   const [templates, setTemplates] = useState<
     Array<{ key: string; label: string; description: string }>
@@ -141,15 +145,17 @@ export function SequenceStepsEditor({
         <div key={step.id ?? `new-${index}`} className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between gap-2">
             <h4 className="font-medium">Step {index + 1}</h4>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => removeStep(index)}
-            >
-              <IconForDelete />
-            </Button>
+            {allowRemove && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                onClick={() => removeStep(index)}
+              >
+                <IconForDelete />
+              </Button>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -297,10 +303,12 @@ export function SequenceStepsEditor({
         </div>
       ))}
 
-      <Button type="button" variant="outline" disabled={disabled} onClick={addStep}>
-        <IconForAdd className="mr-2" />
-        Add step
-      </Button>
+      {allowAdd && (
+        <Button type="button" variant="outline" disabled={disabled} onClick={addStep}>
+          <IconForAdd className="mr-2" />
+          Add step
+        </Button>
+      )}
     </div>
   );
 }

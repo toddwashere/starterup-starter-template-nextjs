@@ -77,3 +77,11 @@ export function getPathForOrgFollowUps(orgSlug: string) {
 export function getPathForOrgFollowUp(orgSlug: string, followUpId: string) {
   return `/${orgSlug}/campaigns/follow-ups/${followUpId}`;
 }
+
+export function getPathForOrgFollowUpStep(
+  orgSlug: string,
+  followUpId: string,
+  stepId: string,
+) {
+  return `/${orgSlug}/campaigns/follow-ups/${followUpId}/steps/${stepId}`;
+}
