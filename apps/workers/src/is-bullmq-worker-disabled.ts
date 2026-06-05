@@ -1,14 +1,17 @@
 import { keys as queueKeys } from "@workspace/worker-queue/keys";
 
-/** Exit cleanly when BullMQ is configured but Redis is unavailable. */
-export function exitIfBullmqWithoutRedis(adapterName: string): void {
+/**
+ * True when BullMQ is configured but Redis is unavailable.
+ * In production this is a fatal misconfiguration; in dev the worker stays idle.
+ */
+export function isBullmqWorkerDisabled(adapterName: string): boolean {
   if (adapterName !== "bullmq") {
-    return;
+    return false;
   }
 
   const { REDIS_URL } = queueKeys();
   if (REDIS_URL) {
-    return;
+    return false;
   }
 
   console.warn(
@@ -19,5 +22,5 @@ export function exitIfBullmqWithoutRedis(adapterName: string): void {
     process.exit(1);
   }
 
-  process.exit(0);
+  return true;
 }
