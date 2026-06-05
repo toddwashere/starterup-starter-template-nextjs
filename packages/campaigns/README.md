@@ -1,6 +1,6 @@
 # @workspace/campaigns
 
-Optional **Campaigns** bounded context for multi-step email sequences: segment-snapshot **Campaigns**, explicit **Follow-ups**, dev-authored React Email templates, click tracking, binary unsubscribe, and Resend delivery webhooks.
+Optional **Campaigns** bounded context for multi-step email sequences: segment-snapshot **Campaigns**, explicit **Follow-ups**, visual or dev-authored email content, click tracking, binary unsubscribe, and Resend delivery webhooks.
 
 Built on `@workspace/contacts`, `@workspace/email`, and `@workspace/worker-queue`.
 
@@ -16,13 +16,28 @@ Built on `@workspace/contacts`, `@workspace/email`, and `@workspace/worker-queue
 
 3. Start dashboard, www, workers, and public-api. Create a campaign sequence in the dashboard, start a run against a test segment, and confirm email delivery.
 
-## Template authoring
+## Email content (v2)
 
-1. Add a React Email component under `packages/email/src/templates/marketing/`.
-2. Register it in `packages/email/src/marketing/marketing-template-registry.ts`.
-3. Preview locally via `apps/email-preview`.
+Each sequence step has a `contentSource`:
 
-Dashboard step editor selects `templateKey` from the registry; subjects support merge fields (`{{firstName}}`, etc.).
+| Mode | Dashboard | Send pipeline |
+|------|-----------|---------------|
+| **editor** (default) | [@react-email/editor](https://react.email/docs/editor/overview) WYSIWYG | Stored `composedBodyHtml` wrapped in developer shell |
+| **registry** | Built-in template fields | React Email body component from code registry |
+
+**Compliance footer (developer-owned, not user-editable):**
+
+- `MarketingEmailComplianceFooter` in `packages/email/src/templates/marketing/_components/`
+- Injected for **all** marketing sends via `assembleMarketingEmail()` / `assembleMarketingEmailFromEditorHtml()`
+- Includes physical address line, unsubscribe link, and plain-text footer
+
+## Code template authoring (registry mode)
+
+1. Add a **body-only** React Email component under `packages/email/src/templates/marketing/`.
+2. Register `renderBody` in `packages/email/src/marketing/marketing-template-registry.tsx`.
+3. Preview full email (with footer) via `NurtureIntroEmail` wrapper or `apps/email-preview`.
+
+Subjects support merge fields (`{{firstName}}`, etc.) in both modes.
 
 ## Deletion checklist
 
