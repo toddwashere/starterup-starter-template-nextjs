@@ -1,0 +1,8 @@
+config:
+  gcp:project: "your-sandbox-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-bootstrap:privateNetwork: "false"
+  starter-gcp-bootstrap:vpcCidr: "10.10.0.0/24"
+  starter-gcp-bootstrap:complianceMode: "none"
+  starter-gcp-bootstrap:budgetAmount: "50"
+  # starter-gcp-bootstrap:billingAccountId: "XXXXXX-XXXXXX-XXXXXX"  # required to create budget

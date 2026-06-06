@@ -1,0 +1,8 @@
+config:
+  gcp:project: "your-staging-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-bootstrap:privateNetwork: "true"
+  starter-gcp-bootstrap:vpcCidr: "10.10.0.0/24"
+  starter-gcp-bootstrap:complianceMode: "none"
+  starter-gcp-bootstrap:budgetAmount: "100"
+  # starter-gcp-bootstrap:billingAccountId: "XXXXXX-XXXXXX-XXXXXX"
