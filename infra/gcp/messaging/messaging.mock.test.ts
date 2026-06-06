@@ -115,13 +115,15 @@ describe("messaging layer (mocked, sandbox, enableRedis off)", () => {
 //
 // Then assert:
 //   - exactly one "gcp:redis/instance:Instance" is recorded
-//   - its inputs.authorizedNetwork is non-empty
-//   - its inputs.connectMode === "PRIVATE_SERVICE_ACCESS"
+//   - its inputs.authorizedNetwork resolves to the non-empty network ID
+//     (passed as an Input via .apply, not constructed inside .apply)
+//   - its inputs.connectMode resolves to "PRIVATE_SERVICE_ACCESS"
 //   - its inputs.tier === "BASIC" and inputs.memorySizeGb === 1
 //   - redisHost resolves to "10.0.0.3" (mock value) and redisPort to 6379
 //
 // No-network flag-on case (networkId ""):
-//   - one Redis instance recorded WITHOUT authorizedNetwork / connectMode
+//   - one Redis instance recorded with authorizedNetwork resolving to undefined
+//     and connectMode resolving to "DIRECT_PEERING"
 //
 // (A second always-running import of ./index in the same file is unreliable
 //  due to module-level Pulumi runtime state; run as a separate process.)

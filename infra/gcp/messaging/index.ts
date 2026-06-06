@@ -46,24 +46,23 @@ const jobsSubscription = new gcp.pubsub.Subscription("jobs-sub", {
 // Off = not created (GCP can't cheaply pause Redis). When a private network is
 // present, attach to it via PRIVATE_SERVICE_ACCESS; otherwise create a basic
 // instance with default (DIRECT_PEERING) connectivity.
+// networkId flows through resource INPUTS (not a resource constructed inside
+// .apply) so that pulumi preview is deterministic and the dependency edge is
+// visible in the resource graph.
 const redis = enableRedis
-  ? networkId.apply((net) =>
-      net
-        ? new gcp.redis.Instance("starter-redis", {
-            name: pulumi.interpolate`starter-cache-${pulumi.getStack()}`,
-            tier: redisTier,
-            memorySizeGb: redisMemorySizeGb,
-            region,
-            authorizedNetwork: net,
-            connectMode: "PRIVATE_SERVICE_ACCESS",
-          })
-        : new gcp.redis.Instance("starter-redis", {
-            name: pulumi.interpolate`starter-cache-${pulumi.getStack()}`,
-            tier: redisTier,
-            memorySizeGb: redisMemorySizeGb,
-            region,
-          }),
-    )
+  ? new gcp.redis.Instance("starter-redis", {
+      name: pulumi.interpolate`starter-cache-${pulumi.getStack()}`,
+      tier: redisTier,
+      memorySizeGb: redisMemorySizeGb,
+      region,
+      // Attach to the VPC when bootstrap provides a private network; otherwise
+      // GCP uses default (DIRECT_PEERING) connectivity. networkId flows through
+      // resource INPUTS (not a resource constructed inside .apply).
+      authorizedNetwork: networkId.apply((net) => net || ""),
+      connectMode: networkId.apply((net) =>
+        net ? "PRIVATE_SERVICE_ACCESS" : "DIRECT_PEERING",
+      ),
+    })
   : undefined;
 
 // --- Exports (locked contract — consumed by apps/P6). -------------------------
@@ -73,12 +72,8 @@ export const pubsubDlqTopicName = dlqTopic.name;
 
 // Redis disabled → empty/zero outputs (downstream tolerates the empty-output
 // pattern, same as bootstrap/core network outputs).
-export const redisHost: pulumi.Output<string> = redis
-  ? redis.apply((r) => r.host)
-  : pulumi.output("");
-export const redisPort: pulumi.Output<number> = redis
-  ? redis.apply((r) => r.port)
-  : pulumi.output(0);
+export const redisHost: pulumi.Output<string> = redis ? redis.host : pulumi.output("");
+export const redisPort: pulumi.Output<number> = redis ? redis.port : pulumi.output(0);
 
 // Pin `project` to silence potential "declared but never used" under strict TS.
 export const projectId = project;
