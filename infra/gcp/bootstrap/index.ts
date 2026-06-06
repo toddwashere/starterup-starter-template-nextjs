@@ -1,6 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 import { enableApis } from "./apis";
+import { resolveCompliance, type ComplianceMode } from "../../shared/compliance";
+import { buildComplianceResources } from "./compliance-resources";
 
 const config = new pulumi.Config();
 const gcpConfig = new pulumi.Config("gcp");
@@ -9,7 +11,12 @@ const region = gcpConfig.require("region");
 
 const privateNetwork = config.getBoolean("privateNetwork") ?? false;
 const vpcCidr = config.get("vpcCidr") ?? "10.10.0.0/24";
-const complianceMode = config.get("complianceMode") ?? "none";
+const complianceMode = (config.get("complianceMode") as ComplianceMode) ?? "none";
+const compliance = resolveCompliance(complianceMode, {
+  logRetentionDays: config.getNumber("logRetentionDays") ?? undefined,
+  vpcServiceControls: config.getBoolean("vpcServiceControls") ?? undefined,
+});
+const securityContactEmail = config.get("securityContactEmail");
 const budgetAmount = config.get("budgetAmount");
 const billingAccountId = config.get("billingAccountId");
 // Format: "owner/repo". Without this, the WIF provider is created but cannot
@@ -18,6 +25,15 @@ const githubRepo = config.get("githubRepo");
 
 // --- 1. Enable all APIs first; everything else dependsOn these. ---------------
 const apis = enableApis(project);
+
+// --- Compliance bundle (gated; no-op when complianceMode is "none"). ----------
+const complianceResources = buildComplianceResources({
+  project,
+  region,
+  compliance,
+  securityContactEmail,
+  dependsOn: apis,
+});
 
 // --- 2. VPC + connector + private services access (when privateNetwork). ------
 const network = privateNetwork
@@ -156,3 +172,6 @@ export const artifactRegistryRepo = pulumi.interpolate`${region}-docker.pkg.dev/
 export const deployServiceAccountEmail = deploySa.email;
 export const workloadIdentityProvider = wifProvider.name;
 export const complianceModeOut = complianceMode;
+// --- Compliance exports (new locked contract addition). -----------------------
+export const kmsCryptoKeyId = complianceResources.kmsCryptoKeyId;
+export const logSinkBucketName = complianceResources.logSinkBucketName;
