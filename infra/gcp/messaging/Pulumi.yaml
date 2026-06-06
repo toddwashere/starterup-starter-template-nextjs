@@ -1,0 +1,6 @@
+name: starter-gcp-messaging
+runtime: nodejs
+description: Pub/Sub jobs topic + DLQ + subscription, and flag-gated Memorystore (Redis) cache
+config:
+  gcp:project:
+    description: GCP project ID

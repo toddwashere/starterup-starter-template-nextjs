@@ -1,0 +1,20 @@
+{
+  "name": "starter-gcp-messaging",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@pulumi/gcp": "^8",
+    "@pulumi/pulumi": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
