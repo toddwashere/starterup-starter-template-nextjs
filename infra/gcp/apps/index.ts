@@ -161,9 +161,40 @@ for (const app of APPS) {
   });
 }
 
+// --- Migration runner: executed by the app release pipeline (P7), not Pulumi. -
+// `gcloud run jobs execute starter-migrate --wait` runs prisma migrate deploy
+// as a gate before traffic shifts to new revisions.
+const migrateJob = new gcp.cloudrunv2.Job("migrate", {
+  name: "starter-migrate",
+  location: region,
+  template: {
+    template: {
+      serviceAccount: serviceAccounts.dashboard.email,
+      containers: [
+        {
+          image: pulumi.interpolate`${imageRegistry}/dashboard:${imageTag}`,
+          commands: ["pnpm"],
+          args: ["--filter", "@workspace/database", "exec", "prisma", "migrate", "deploy"],
+          envs: [
+            {
+              name: "DATABASE_URL",
+              valueSource: {
+                secretKeyRef: { secret: databaseUrlSecretName, version: "latest" },
+              },
+            },
+          ],
+          volumeMounts: [{ name: "cloudsql", mountPath: "/cloudsql" }],
+        },
+      ],
+      volumes: [{ name: "cloudsql", cloudSqlInstance: { instances: [dbConnectionName] } }],
+    },
+  },
+});
+
 // --- Exports -----------------------------------------------------------------
 export const dashboardUrl = services.dashboard.uri;
 export const wwwUrl = services.www.uri;
 export const publicApiUrl = services["public-api"].uri;
 export const publicMcpUrl = services["public-mcp"].uri;
 export const workersUrl = services.workers.uri;
+export const migrateJobName = migrateJob.name;
