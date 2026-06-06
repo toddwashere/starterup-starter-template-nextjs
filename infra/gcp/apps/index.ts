@@ -191,6 +191,114 @@ const migrateJob = new gcp.cloudrunv2.Job("migrate", {
   },
 });
 
+// --- Optional: global HTTPS LB + Cloud Armor + Certificate Manager -----------
+const enableHttpsLb = config.getBoolean("enableHttpsLb") ?? false;
+let lbIpAddressOut: pulumi.Output<string> = pulumi.output("");
+let dnsAuthorizationRecordsOut: pulumi.Output<unknown> = pulumi.output([]);
+
+if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
+  const baseDomain = config.require("lbDomain");
+  // host -> app routing
+  const hosts: { host: string; app: string }[] = [
+    { host: `app.${baseDomain}`, app: "dashboard" },
+    { host: `api.${baseDomain}`, app: "public-api" },
+    { host: `mcp.${baseDomain}`, app: "public-mcp" },
+    { host: baseDomain, app: "www" },
+  ];
+
+  // Cloud Armor security policy (rate limit + deny known-bad).
+  const armor = new gcp.compute.SecurityPolicy("starter-armor", {
+    rules: [
+      {
+        action: "allow",
+        priority: 2147483647,
+        match: { versionedExpr: "SRC_IPS_V1", config: { srcIpRanges: ["*"] } },
+        description: "default allow",
+      },
+      {
+        action: "rate_based_ban",
+        priority: 1000,
+        match: { versionedExpr: "SRC_IPS_V1", config: { srcIpRanges: ["*"] } },
+        rateLimitOptions: {
+          conformAction: "allow",
+          exceedAction: "deny(429)",
+          enforceOnKey: "IP",
+          rateLimitThreshold: { count: 600, intervalSec: 60 },
+        },
+        description: "rate limit per IP",
+      },
+    ],
+  });
+
+  // One serverless NEG + backend per public app.
+  const backends: Record<string, gcp.compute.BackendService> = {};
+  for (const { app } of hosts) {
+    const neg = new gcp.compute.RegionNetworkEndpointGroup(`${app}-neg`, {
+      region,
+      networkEndpointType: "SERVERLESS",
+      cloudRun: { service: services[app].name },
+    });
+    backends[app] = new gcp.compute.BackendService(`${app}-backend`, {
+      protocol: "HTTP",
+      loadBalancingScheme: "EXTERNAL_MANAGED",
+      securityPolicy: armor.id,
+      backends: [{ group: neg.id }],
+    });
+  }
+
+  // URL map with host rules.
+  const urlMap = new gcp.compute.URLMap("starter-url-map", {
+    defaultService: backends.www.id,
+    hostRules: hosts.map(({ host, app }) => ({ hosts: [host], pathMatcher: app })),
+    pathMatchers: hosts.map(({ app }) => ({
+      name: app,
+      defaultService: backends[app].id,
+    })),
+  });
+
+  // Certificate Manager: DNS authorization (one per host) + managed cert.
+  const dnsAuths = hosts.map(
+    ({ host }) =>
+      new gcp.certificatemanager.DnsAuthorization(`dnsauth-${host.replace(/\./g, "-")}`, {
+        domain: host,
+      }),
+  );
+  const cert = new gcp.certificatemanager.Certificate("starter-cert", {
+    managed: {
+      domains: hosts.map((h) => h.host),
+      dnsAuthorizations: dnsAuths.map((d) => d.id),
+    },
+  });
+  const certMap = new gcp.certificatemanager.CertificateMap("starter-cert-map", {});
+  hosts.forEach(({ host }, i) => {
+    new gcp.certificatemanager.CertificateMapEntry(`cme-${i}`, {
+      map: certMap.name,
+      hostname: host,
+      certificates: [cert.id],
+    });
+  });
+
+  const lbIp = new gcp.compute.GlobalAddress("starter-lb-ip", {});
+  const httpsProxy = new gcp.compute.TargetHttpsProxy("starter-https-proxy", {
+    urlMap: urlMap.id,
+    certificateMap: pulumi.interpolate`//certificatemanager.googleapis.com/${certMap.id}`,
+  });
+  new gcp.compute.GlobalForwardingRule("starter-lb", {
+    target: httpsProxy.id,
+    ipAddress: lbIp.address,
+    portRange: "443",
+    loadBalancingScheme: "EXTERNAL_MANAGED",
+  });
+
+  lbIpAddressOut = lbIp.address;
+  // DNS records the operator must add at the external registrar:
+  // (a) A records: each host -> lbIp.address
+  // (b) the DNS-authorization CNAMEs below (provision certs independently).
+  dnsAuthorizationRecordsOut = pulumi
+    .all(dnsAuths.map((d) => d.dnsResourceRecords))
+    .apply((recs) => recs.flat());
+}
+
 // --- Exports -----------------------------------------------------------------
 export const dashboardUrl = services.dashboard.uri;
 export const wwwUrl = services.www.uri;
@@ -198,3 +306,5 @@ export const publicApiUrl = services["public-api"].uri;
 export const publicMcpUrl = services["public-mcp"].uri;
 export const workersUrl = services.workers.uri;
 export const migrateJobName = migrateJob.name;
+export const lbIpAddress = lbIpAddressOut;
+export const dnsAuthorizationRecords = dnsAuthorizationRecordsOut;
