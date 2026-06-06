@@ -1,0 +1,6 @@
+config:
+  gcp:project: "your-staging-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-storage:bootstrapStackRef: "your-org/starter-gcp-bootstrap/staging"
+  starter-gcp-storage:forceDestroy: "false"
+  # starter-gcp-storage:kmsKeyName: ""  # supplied by P8 (compliance) when complianceMode != none

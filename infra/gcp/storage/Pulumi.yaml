@@ -1,0 +1,6 @@
+name: starter-gcp-storage
+runtime: nodejs
+description: GCS object-storage buckets (uniform bucket-level access, public-access prevention, versioning, optional CMEK)
+config:
+  gcp:project:
+    description: GCP project ID
