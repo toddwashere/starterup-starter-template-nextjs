@@ -4,6 +4,12 @@ export interface AppDescriptor {
   port: number;
   healthPath: string;
   dockerfile: string;
+  public: boolean;
+  worker: boolean;
+  needsDb: boolean;
+  needsPubsub: boolean;
+  needsStorage: boolean;
+  usesRedis: boolean;
 }
 
 export const APPS: readonly AppDescriptor[] = [
@@ -13,6 +19,12 @@ export const APPS: readonly AppDescriptor[] = [
     port: 4000,
     healthPath: "/api/health",
     dockerfile: "infra/shared/docker/Dockerfile.dashboard",
+    public: true,
+    worker: false,
+    needsDb: true,
+    needsPubsub: false,
+    needsStorage: true,
+    usesRedis: true,
   },
   {
     name: "www",
@@ -20,6 +32,12 @@ export const APPS: readonly AppDescriptor[] = [
     port: 4001,
     healthPath: "/api/health",
     dockerfile: "infra/shared/docker/Dockerfile.www",
+    public: true,
+    worker: false,
+    needsDb: false,
+    needsPubsub: false,
+    needsStorage: false,
+    usesRedis: false,
   },
   {
     name: "public-api",
@@ -27,6 +45,12 @@ export const APPS: readonly AppDescriptor[] = [
     port: 4002,
     healthPath: "/health",
     dockerfile: "infra/shared/docker/Dockerfile.public-api",
+    public: true,
+    worker: false,
+    needsDb: true,
+    needsPubsub: true,
+    needsStorage: true,
+    usesRedis: false,
   },
   {
     name: "public-mcp",
@@ -34,6 +58,12 @@ export const APPS: readonly AppDescriptor[] = [
     port: 4003,
     healthPath: "/health",
     dockerfile: "infra/shared/docker/Dockerfile.public-mcp",
+    public: true,
+    worker: false,
+    needsDb: true,
+    needsPubsub: false,
+    needsStorage: false,
+    usesRedis: false,
   },
   {
     name: "workers",
@@ -41,6 +71,12 @@ export const APPS: readonly AppDescriptor[] = [
     port: 4300,
     healthPath: "/health",
     dockerfile: "apps/workers/Dockerfile",
+    public: false,
+    worker: true,
+    needsDb: true,
+    needsPubsub: true,
+    needsStorage: true,
+    usesRedis: false,
   },
 ] as const;
 
