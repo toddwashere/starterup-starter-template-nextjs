@@ -39,7 +39,6 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([token])
 }
 
 model Account {
@@ -111,7 +110,6 @@ model Member {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
-  @@index([organizationId])
   @@index([userId])
 }
 
@@ -129,6 +127,7 @@ model Invitation {
 
   @@index([organizationId])
   @@index([email])
+  @@index([inviterId])
 }
 
 /// Better Auth Wants This Table Name to be lowercase "key"
@@ -156,9 +155,7 @@ model Apikey {
   permissions         String?
   metadata            String?
 
-  @@index([configId])
   @@index([referenceId])
-  @@index([key])
   @@map("apikey")
 }
 
@@ -185,6 +182,7 @@ model OauthApplication {
   refreshTokens OauthRefreshToken[]
   consents      OauthConsent[]
 
+  @@index([userId])
   @@map("oauthApplication")
 }
 
@@ -201,6 +199,8 @@ model OauthAccessToken {
   application OauthApplication @relation(fields: [clientId], references: [clientId])
   user        User             @relation(fields: [userId], references: [id])
 
+  @@index([clientId])
+  @@index([userId])
   @@map("oauthAccessToken")
 }
 
@@ -219,6 +219,8 @@ model OauthRefreshToken {
   application OauthApplication @relation(fields: [clientId], references: [clientId])
   user        User             @relation(fields: [userId], references: [id])
 
+  @@index([clientId])
+  @@index([userId])
   @@map("oauthRefreshToken")
 }
 
@@ -233,5 +235,7 @@ model OauthConsent {
   application OauthApplication @relation(fields: [clientId], references: [clientId])
   user        User             @relation(fields: [userId], references: [id])
 
+  @@index([clientId])
+  @@index([userId])
   @@map("oauthConsent")
 }
