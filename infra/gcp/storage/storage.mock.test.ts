@@ -13,7 +13,14 @@ type BucketState = {
 
 const capturedBuckets: BucketState[] = [];
 
-function installMocks() {
+function installMocks(bootstrapOutputs: Record<string, string> = {}) {
+  const defaultBootstrapOutputs = {
+    projectId: "test-project",
+    regionOut: "us-central1",
+    complianceModeOut: "none",
+    kmsCryptoKeyId: "",
+    ...bootstrapOutputs,
+  };
   pulumi.runtime.setMocks(
     {
       newResource: (args) => {
@@ -31,11 +38,7 @@ function installMocks() {
           return {
             id: `${args.name}-id`,
             state: {
-              outputs: {
-                projectId: "test-project",
-                regionOut: "us-central1",
-                complianceModeOut: "none",
-              },
+              outputs: defaultBootstrapOutputs,
             },
           };
         }
@@ -46,11 +49,7 @@ function installMocks() {
       },
       // StackReference outputs come back through the call handler.
       call: () => ({
-        outputs: {
-          projectId: "test-project",
-          regionOut: "us-central1",
-          complianceModeOut: "none",
-        },
+        outputs: defaultBootstrapOutputs,
       }),
     },
     "starter-gcp-storage",
@@ -58,7 +57,10 @@ function installMocks() {
   );
 }
 
-async function importInfra(extraConfig: Record<string, string>) {
+async function importInfra(
+  extraConfig: Record<string, string> = {},
+  bootstrapOutputs: Record<string, string> = {},
+) {
   vi.resetModules();
   capturedBuckets.length = 0;
   const cfg = {
@@ -70,7 +72,7 @@ async function importInfra(extraConfig: Record<string, string>) {
     ...extraConfig,
   };
   process.env.PULUMI_CONFIG = JSON.stringify(cfg);
-  installMocks();
+  installMocks(bootstrapOutputs);
   pulumi.runtime.setAllConfig(cfg);
   const mod = await import("./index");
   // Pulumi registers resources asynchronously in microtasks after the module
@@ -88,7 +90,7 @@ describe("storage layer (mocked) — no CMEK", () => {
   let infra: typeof import("./index");
 
   beforeAll(async () => {
-    infra = await importInfra({});
+    infra = await importInfra({}, {});
   }, 10000);
 
   afterAll(() => {
@@ -131,21 +133,28 @@ describe("storage layer (mocked) — no CMEK", () => {
   });
 });
 
-describe("storage layer (mocked) — with CMEK", () => {
+describe("storage layer (mocked) — with CMEK (compliance-driven)", () => {
+  const kmsKeyId =
+    "projects/test-project/locations/us-central1/keyRings/r/cryptoKeys/cmek";
+
   beforeAll(async () => {
-    await importInfra({
-      "starter-gcp-storage:kmsKeyName":
-        "projects/test-project/locations/us-central1/keyRings/r/cryptoKeys/uploads",
-    });
+    await importInfra(
+      { "starter-gcp-storage:complianceMode": "soc2" },
+      { kmsCryptoKeyId: kmsKeyId },
+    );
   }, 10000);
 
   afterAll(() => {
     delete process.env.PULUMI_CONFIG;
   });
 
-  it("sets the default KMS key when kmsKeyName is present", () => {
-    expect(capturedBuckets[0].encryption?.defaultKmsKeyName).toBe(
-      "projects/test-project/locations/us-central1/keyRings/r/cryptoKeys/uploads",
-    );
+  it("sets the default KMS key when complianceMode enables CMEK", async () => {
+    // The encryption.defaultKmsKeyName is an Output<string>; resolve it.
+    const kmsName = await new Promise<string | undefined>((res) => {
+      const enc = capturedBuckets[0].encryption;
+      if (!enc?.defaultKmsKeyName) return res(undefined);
+      (pulumi.output(enc.defaultKmsKeyName) as pulumi.Output<string>).apply(res);
+    });
+    expect(kmsName).toBe(kmsKeyId);
   });
 });

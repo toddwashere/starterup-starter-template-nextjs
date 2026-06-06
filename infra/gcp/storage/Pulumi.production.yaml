@@ -3,4 +3,5 @@ config:
   gcp:region: "us-central1"
   starter-gcp-storage:bootstrapStackRef: "your-org/starter-gcp-bootstrap/production"
   starter-gcp-storage:forceDestroy: "false"
-  # starter-gcp-storage:kmsKeyName: ""  # supplied by P8 (compliance) when complianceMode != none
+  starter-gcp-storage:complianceMode: "soc2"
+  # kmsKeyName config is superseded by P8 compliance-gated wiring via kmsCryptoKeyId bootstrap output.
