@@ -1,0 +1,12 @@
+config:
+  gcp:project: "your-staging-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-apps:bootstrapStackRef: "organization/starter-gcp-bootstrap/staging"
+  starter-gcp-apps:databaseStackRef: "organization/starter-gcp-database/staging"
+  starter-gcp-apps:storageStackRef: "organization/starter-gcp-storage/staging"
+  starter-gcp-apps:messagingStackRef: "organization/starter-gcp-messaging/staging"
+  starter-gcp-apps:secretsStackRef: "organization/starter-gcp-secrets/staging"
+  starter-gcp-apps:imageTag: "v0.1.0"
+  starter-gcp-apps:enableHttpsLb: "false"
+  starter-gcp-apps:enableMonitoring: "true"
+  starter-gcp-apps:alertEmail: "alerts@example.com"
