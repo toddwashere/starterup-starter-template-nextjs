@@ -1,7 +1,7 @@
 config:
   gcp:project: "your-prod-project-id"
   gcp:region: "us-central1"
-  starter-gcp-messaging:bootstrapStackRef: "your-org/starter-gcp-bootstrap/production"
+  starter-gcp-messaging:bootstrapStackRef: "organization/starter-gcp-bootstrap/production"
   starter-gcp-messaging:enableRedis: "false"
   starter-gcp-messaging:redisTier: "STANDARD_HA"
   starter-gcp-messaging:redisMemorySizeGb: "1"
