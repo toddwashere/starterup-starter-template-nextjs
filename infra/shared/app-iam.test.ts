@@ -9,10 +9,13 @@ describe("planAppIam", () => {
     expect(planAppIam(APPS_BY_NAME.www).roles).not.toContain("roles/cloudsql.client");
   });
 
-  it("grants pubsub publisher+subscriber to workers only", () => {
+  it("grants pubsub publisher+subscriber to workers and needsPubsub apps", () => {
     const workers = planAppIam(APPS_BY_NAME.workers).roles;
     expect(workers).toContain("roles/pubsub.publisher");
     expect(workers).toContain("roles/pubsub.subscriber");
+    const publicApi = planAppIam(APPS_BY_NAME["public-api"]).roles;
+    expect(publicApi).toContain("roles/pubsub.publisher");
+    expect(publicApi).toContain("roles/pubsub.subscriber");
     expect(planAppIam(APPS_BY_NAME.www).roles).not.toContain("roles/pubsub.subscriber");
   });
 

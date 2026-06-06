@@ -30,7 +30,10 @@ describe("resolveCompliance", () => {
   });
 
   it("hipaa+soc2 takes the longer retention", () => {
-    expect(resolveCompliance("hipaa+soc2").logRetentionDays).toBe(2190);
+    const c = resolveCompliance("hipaa+soc2");
+    expect(c.logRetentionDays).toBe(2190);
+    expect(c.binaryAuthorization).toBe(true);
+    expect(c.cloudArmor).toBe(true);
   });
 
   it("overrides.logRetentionDays wins", () => {

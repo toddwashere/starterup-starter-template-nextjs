@@ -44,6 +44,7 @@ describe("bootstrap layer (mocked)", () => {
 
   it("exports a deploy service account email", async () => {
     const email = await new Promise<string>((res) => infra.deployServiceAccountEmail.apply(res));
-    expect(email).toBeDefined();
+    expect(email).toContain("github-deploy");
+    expect(email).toContain("test-project.iam.gserviceaccount.com");
   });
 });

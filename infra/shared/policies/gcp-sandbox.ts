@@ -6,6 +6,9 @@ import {
   noAllUsersOnNonPublicService,
   noPrimitiveRolesOnRuntimeSa,
 } from "./gcp-sandbox-validators";
+import { APPS } from "../apps.manifest";
+
+const NON_PUBLIC_SERVICE_NAMES = APPS.filter((a) => !a.public).map((a) => `starter-${a.name}`);
 
 /**
  * Guardrails for the GCP sandbox stacks.
@@ -71,7 +74,7 @@ new PolicyPack("gcp-sandbox", {
           noAllUsersOnNonPublicService(
             args.type,
             resource as { name?: string; member?: string },
-            ["starter-workers"],
+            NON_PUBLIC_SERVICE_NAMES,
             reportViolation,
           );
         },
@@ -83,6 +86,24 @@ new PolicyPack("gcp-sandbox", {
       enforcementLevel: "mandatory",
       validateResource: validateResourceOfType(
         "gcp:projects/iAMMember:IAMMember",
+        (resource, args, reportViolation) => {
+          noPrimitiveRolesOnRuntimeSa(
+            args.type,
+            resource as { role?: string; member?: string },
+            reportViolation,
+          );
+        },
+      ),
+    },
+    {
+      // IAMPolicy (gcp:projects/iAMPolicy:IAMPolicy) is not covered here — it is
+      // rarely used in this codebase and its nested bindings structure requires a
+      // different traversal strategy.
+      name: "no-primitive-roles-binding",
+      description: "Primitive owner/editor/viewer roles are denied on IAMBinding resources.",
+      enforcementLevel: "mandatory",
+      validateResource: validateResourceOfType(
+        "gcp:projects/iAMBinding:IAMBinding",
         (resource, args, reportViolation) => {
           noPrimitiveRolesOnRuntimeSa(
             args.type,

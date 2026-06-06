@@ -68,13 +68,17 @@ export function noAllUsersOnNonPublicService(
 /**
  * Flags primitive owner/editor/viewer roles bound to any member — runtime and
  * deploy SAs must use least-privilege predefined roles, never primitives.
+ *
+ * Accepts both IAMMember (single `member` + `role`) and IAMBinding (single `role`
+ * with multiple members). IAMPolicy is not covered here; see gcp-sandbox.ts comment.
  */
 export function noPrimitiveRolesOnRuntimeSa(
   resourceType: string,
-  resource: { role?: string; member?: string },
+  resource: { role?: string; member?: string; roles?: string[] },
   reportViolation: (msg: string) => void,
 ): void {
-  if (!resourceType.toLowerCase().includes("iammember")) return;
+  const lower = resourceType.toLowerCase();
+  if (!lower.includes("iammember") && !lower.includes("iambinding")) return;
   const primitive = ["roles/owner", "roles/editor", "roles/viewer"];
   if (resource.role && primitive.includes(resource.role)) {
     reportViolation(

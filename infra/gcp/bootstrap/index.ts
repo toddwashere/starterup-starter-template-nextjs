@@ -12,6 +12,9 @@ const vpcCidr = config.get("vpcCidr") ?? "10.10.0.0/24";
 const complianceMode = config.get("complianceMode") ?? "none";
 const budgetAmount = config.get("budgetAmount");
 const billingAccountId = config.get("billingAccountId");
+// Format: "owner/repo". Without this, the WIF provider is created but cannot
+// impersonate the deploy SA until configured — CI in P7 must set it.
+const githubRepo = config.get("githubRepo");
 
 // --- 1. Enable all APIs first; everything else dependsOn these. ---------------
 const apis = enableApis(project);
@@ -110,8 +113,17 @@ const wifProvider = new gcp.iam.WorkloadIdentityPoolProvider("github-provider", 
     "google.subject": "assertion.sub",
     "attribute.repository": "assertion.repository",
   },
+  attributeCondition: githubRepo ? `assertion.repository == "${githubRepo}"` : undefined,
   oidc: { issuerUri: "https://token.actions.githubusercontent.com" },
 });
+
+if (githubRepo) {
+  new gcp.serviceaccount.IAMMember("wif-deploy-binding", {
+    serviceAccountId: deploySa.name,
+    role: "roles/iam.workloadIdentityUser",
+    member: pulumi.interpolate`principalSet://iam.googleapis.com/${wifPool.name}/attribute.repository/${githubRepo}`,
+  });
+}
 
 // --- 5. Billing budget (only when a billing account id is provided). ----------
 if (billingAccountId && budgetAmount) {

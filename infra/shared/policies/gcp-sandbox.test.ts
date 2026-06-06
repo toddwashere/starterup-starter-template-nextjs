@@ -148,4 +148,24 @@ describe("noPrimitiveRolesOnRuntimeSa", () => {
     );
     expect(report).not.toHaveBeenCalled();
   });
+
+  it("flags roles/owner on an IAMBinding resource type", () => {
+    const report = vi.fn();
+    noPrimitiveRolesOnRuntimeSa(
+      "gcp:projects/iAMBinding:IAMBinding",
+      { role: "roles/owner" },
+      report,
+    );
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a scoped role on IAMBinding", () => {
+    const report = vi.fn();
+    noPrimitiveRolesOnRuntimeSa(
+      "gcp:projects/iAMBinding:IAMBinding",
+      { role: "roles/run.invoker" },
+      report,
+    );
+    expect(report).not.toHaveBeenCalled();
+  });
 });

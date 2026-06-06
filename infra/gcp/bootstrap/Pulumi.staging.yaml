@@ -6,3 +6,4 @@ config:
   starter-gcp-bootstrap:complianceMode: "none"
   starter-gcp-bootstrap:budgetAmount: "100"
   # starter-gcp-bootstrap:billingAccountId: "XXXXXX-XXXXXX-XXXXXX"
+  # starter-gcp-bootstrap:githubRepo: "your-org/your-repo"  # required for GitHub Actions WIF (P7 CI)
