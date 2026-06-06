@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required for OIDC
+  id-token: write   # required for WIF/OIDC
   pull-requests: write  # for posting preview comments
 
 env:
@@ -39,12 +39,7 @@ jobs:
           node-version: 24.16.0
           cache: pnpm
 
-      - name: Install deps (core stack)
-        working-directory: infra/gcp/core
-        run: pnpm install --frozen-lockfile
-
-      - name: Install deps (apps stack)
-        working-directory: infra/gcp/apps
+      - name: Install root deps (tsx)
         run: pnpm install --frozen-lockfile
 
       - id: gcp-auth
@@ -53,24 +48,21 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Pulumi preview (core)
-        uses: pulumi/actions@v6
-        with:
-          command: preview
-          stack-name: sandbox
-          work-dir: infra/gcp/core
-          comment-on-pr: true
-          policy-pack: ../../shared/policies
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+      - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Pulumi preview (apps)
-        uses: pulumi/actions@v6
-        with:
-          command: preview
-          stack-name: sandbox
-          work-dir: infra/gcp/apps
-          comment-on-pr: true
-          policy-pack: ../../shared/policies
+      - name: Install Pulumi CLI
+        run: |
+          curl -fsSL https://get.pulumi.com | sh
+          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: Install Pulumi layer deps
+        run: |
+          for d in bootstrap database storage messaging secrets apps; do
+            (cd "infra/gcp/$d" && pnpm install)
+          done
+
+      - name: Run infra:preview
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        run: pnpm infra:preview --env sandbox
