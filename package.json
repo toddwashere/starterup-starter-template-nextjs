@@ -23,6 +23,7 @@
     "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
+    "@types/node": "^24.12.4",
     "dotenv": "^16",
     "dotenv-cli": "^11.0.0",
     "prettier": "^3.4",
