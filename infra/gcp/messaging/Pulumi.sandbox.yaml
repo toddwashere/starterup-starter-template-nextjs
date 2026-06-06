@@ -5,3 +5,4 @@ config:
   starter-gcp-messaging:enableRedis: "false"
   starter-gcp-messaging:redisTier: "BASIC"
   starter-gcp-messaging:redisMemorySizeGb: "1"
+  starter-gcp-messaging:complianceMode: "none"

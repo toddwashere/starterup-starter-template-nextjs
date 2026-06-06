@@ -1,10 +1,15 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
+import { resolveCompliance, type ComplianceMode } from "../../shared/compliance";
 
 const config = new pulumi.Config();
 const gcpConfig = new pulumi.Config("gcp");
 const project = gcpConfig.require("project");
 const region = gcpConfig.require("region");
+
+const compliance = resolveCompliance(
+  (config.get("complianceMode") as ComplianceMode) ?? "none",
+);
 
 // --- Read foundational outputs from the bootstrap layer. ----------------------
 const bootstrapStackRef = config.require("bootstrapStackRef");
@@ -12,17 +17,40 @@ const bootstrap = new pulumi.StackReference(bootstrapStackRef);
 
 // networkId is "" when bootstrap provisioned no private network (e.g. sandbox).
 const networkId = bootstrap.getOutput("networkId").apply((v) => (v as string) ?? "");
+// kmsCryptoKeyId is "" when bootstrap created no key (CMEK disabled).
+const kmsCryptoKeyId = bootstrap
+  .getOutput("kmsCryptoKeyId")
+  .apply((v) => (v as string) ?? "");
 
 // --- Feature flag + per-stack Redis tuning. -----------------------------------
 const enableRedis = config.getBoolean("enableRedis") ?? false;
 const redisTier = config.get("redisTier") ?? "BASIC";
 const redisMemorySizeGb = config.getNumber("redisMemorySizeGb") ?? 1;
 
+// --- CMEK for Pub/Sub (gated). -----------------------------------------------
+let topicKmsKeyName: pulumi.Input<string> | undefined;
+let pubsubKmsDeps: pulumi.Resource[] = [];
+if (compliance.cmek) {
+  const projectInfo = gcp.organizations.getProjectOutput({ projectId: project });
+  // Pub/Sub service agent: service-<projectNumber>@gcp-sa-pubsub.iam.gserviceaccount.com
+  const pubsubServiceAgent = projectInfo.number.apply(
+    (n) => `serviceAccount:service-${n}@gcp-sa-pubsub.iam.gserviceaccount.com`,
+  );
+  const pubsubKmsBinding = new gcp.kms.CryptoKeyIAMMember("pubsub-cmek-binding", {
+    cryptoKeyId: kmsCryptoKeyId,
+    role: "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+    member: pubsubServiceAgent,
+  });
+  topicKmsKeyName = kmsCryptoKeyId;
+  pubsubKmsDeps = [pubsubKmsBinding];
+}
+
 // --- Pub/Sub (always created — queue backend for the GCP profile). ------------
 // Mirrors infra/gcp/core/index.ts exactly.
 const jobsTopic = new gcp.pubsub.Topic("jobs", {
   name: pulumi.interpolate`jobs-${pulumi.getStack()}`,
-});
+  kmsKeyName: topicKmsKeyName,
+}, { dependsOn: pubsubKmsDeps });
 
 const dlqTopic = new gcp.pubsub.Topic("jobs-dlq", {
   name: pulumi.interpolate`jobs-dlq-${pulumi.getStack()}`,
