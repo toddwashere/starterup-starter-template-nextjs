@@ -6,3 +6,4 @@ config:
   starter-gcp-database:dbVersion: "POSTGRES_16"
   starter-gcp-database:dbAvailability: "ZONAL"
   starter-gcp-database:dbPointInTime: "false"
+  starter-gcp-database:complianceMode: "none"

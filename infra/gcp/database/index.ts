@@ -1,10 +1,16 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 import * as random from "@pulumi/random";
+import { resolveCompliance, type ComplianceMode } from "../../shared/compliance";
 
 const config = new pulumi.Config();
 const gcpConfig = new pulumi.Config("gcp");
+const project = gcpConfig.require("project");
 const region = gcpConfig.require("region");
+
+const compliance = resolveCompliance(
+  (config.get("complianceMode") as ComplianceMode) ?? "none",
+);
 
 // --- Read foundational outputs from the bootstrap layer. ---------------------
 const bootstrap = new pulumi.StackReference(config.require("bootstrapStackRef"));
@@ -12,6 +18,10 @@ const bootstrap = new pulumi.StackReference(config.require("bootstrapStackRef"))
 const networkId = bootstrap.getOutput("networkId");
 // Created in bootstrap; documents the ordering dependency for private IP.
 const privateServicesConnection = bootstrap.getOutput("privateServicesConnection");
+// kmsCryptoKeyId is "" when bootstrap created no key (CMEK disabled).
+const kmsCryptoKeyId = bootstrap
+  .getOutput("kmsCryptoKeyId")
+  .apply((v) => (v as string) ?? "");
 
 // --- Per-stack tuning (sandbox uses smallest tier, public IP, no PITR). ------
 const dbTier = config.get("dbTier") ?? "db-f1-micro";
@@ -25,6 +35,24 @@ const dbPassword = new random.RandomPassword("db-password", {
   special: false,
 });
 
+// --- CMEK for Cloud SQL (gated). ---------------------------------------------
+let sqlEncryptionKeyName: pulumi.Input<string> | undefined;
+let sqlKmsDeps: pulumi.Resource[] = [];
+if (compliance.cmek) {
+  const projectInfo = gcp.organizations.getProjectOutput({ projectId: project });
+  // Cloud SQL service agent: service-<projectNumber>@gcp-sa-cloud-sql.iam.gserviceaccount.com
+  const sqlServiceAgent = projectInfo.number.apply(
+    (n) => `serviceAccount:service-${n}@gcp-sa-cloud-sql.iam.gserviceaccount.com`,
+  );
+  const sqlKmsBinding = new gcp.kms.CryptoKeyIAMMember("sql-cmek-binding", {
+    cryptoKeyId: kmsCryptoKeyId,
+    role: "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+    member: sqlServiceAgent,
+  });
+  sqlEncryptionKeyName = kmsCryptoKeyId;
+  sqlKmsDeps = [sqlKmsBinding];
+}
+
 // --- Cloud SQL Postgres instance. --------------------------------------------
 // Private vs public is derived from bootstrap.networkId: when a network is
 // present we disable public IPv4 and route through the VPC; otherwise we keep a
@@ -36,6 +64,7 @@ const dbInstance = new gcp.sql.DatabaseInstance(
     databaseVersion: dbVersion,
     region,
     deletionProtection: true,
+    encryptionKeyName: sqlEncryptionKeyName,
     settings: {
       tier: dbTier,
       availabilityType: dbAvailability,
@@ -53,6 +82,7 @@ const dbInstance = new gcp.sql.DatabaseInstance(
   {
     protect: true,
     deleteBeforeReplace: false,
+    dependsOn: sqlKmsDeps,
   },
 );
 
