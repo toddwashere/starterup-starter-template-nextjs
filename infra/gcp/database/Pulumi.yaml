@@ -1,0 +1,6 @@
+name: starter-gcp-database
+runtime: nodejs
+description: Cloud SQL Postgres instance, database, user, and generated password
+config:
+  gcp:project:
+    description: GCP project ID

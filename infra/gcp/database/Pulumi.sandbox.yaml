@@ -1,0 +1,8 @@
+config:
+  gcp:project: "your-sandbox-project-id"
+  gcp:region: "us-central1"
+  starter-gcp-database:bootstrapStackRef: "organization/starter-gcp-bootstrap/sandbox"
+  starter-gcp-database:dbTier: "db-f1-micro"
+  starter-gcp-database:dbVersion: "POSTGRES_16"
+  starter-gcp-database:dbAvailability: "ZONAL"
+  starter-gcp-database:dbPointInTime: "false"
