@@ -4,14 +4,14 @@ Choose a hosting platform, run an init wizard, and deploy the full monorepo stac
 
 ## Choose a profile
 
-| Profile | Sandbox | Production (floor) | Perpetual 100% free? | Complexity |
-|---------|---------|-----------|-----|-----------|
-| **local** | $0 | $0 | Yes | Low |
-| **vercel + supabase** | $0* | ~$45–90/mo | Sandbox only | Medium |
-| **render** | $0* | ~$35–75/mo | No | Medium |
-| **gcp** | ~$0–30/mo | ~$80–150/mo | No | High |
-| **aws** | ~$0–45/mo | ~$90–160/mo | No | High |
-| **azure** | ~$15–40/mo | ~$85–155/mo | No | High |
+| Profile               | Sandbox    | Production (floor) | Perpetual 100% free? | Complexity |
+| --------------------- | ---------- | ------------------ | -------------------- | ---------- |
+| **local**             | $0         | $0                 | Yes                  | Low        |
+| **vercel + supabase** | $0\*       | ~$45–90/mo         | Sandbox only         | Medium     |
+| **render**            | $0\*       | ~$35–75/mo         | No                   | Medium     |
+| **gcp**               | ~$0–30/mo  | ~$80–150/mo        | No                   | High       |
+| **aws**               | ~$0–45/mo  | ~$90–160/mo        | No                   | High       |
+| **azure**             | ~$15–40/mo | ~$85–155/mo        | No                   | High       |
 
 \* Hobby limits, pauses, expiry — not production-ready.
 
@@ -21,49 +21,80 @@ Before deploying to any profile:
 
 - **Accounts:** Cloud provider account (GCP/AWS/Azure) or PaaS account (Render, Vercel, Supabase, Upstash)
 - **CLI tools:** `gcloud`, `aws`, `az` (for Pulumi clouds); `render`, `vercel` (for PaaS)
-- **Billing alerts:** Set up budget alerts at $10, $25, and $50 USD on your cloud account *before* deploy
+- **Billing alerts:** Set up budget alerts at $10, $25, and $50 USD on your cloud account _before_ deploy
 - **Optional:** Separate cloud project/account for sandbox (easy kill switch via project deletion)
 
 ## Startup credits
 
-Platforms offer free credit programs for new startups. Apply *before* your first paid deploy to maximize runway.
+Platforms offer free credit programs for new startups. Apply _before_ your first paid deploy to maximize runway.
 
 ### Cloud platforms
 
-| Platform | Program | Bootstrapped | Funded | Apply |
-|----------|---------|--------------|--------|-------|
-| **GCP** | Google for Startups Cloud | ~$2,000 | Up to ~$200K (~$350K AI) | https://startup.google.com/cloud/ |
-| **AWS** | AWS Activate | $1,000 (Founders) | Up to $100K (Portfolio) | https://aws.amazon.com/startups/credits/ |
-| **Azure** | Microsoft for Startups Founders Hub | ~$1,000 | Up to ~$150K (tiered) | https://www.microsoft.com/en-us/startups |
-| **Vercel** | Vercel for Startups | Up to $30K | AI Accelerator (cohort) | https://vercel.com/startups/credits |
-| **Render** | Render Startup Program | $500 | $2.5K–$100K via partners | https://render.com/startups |
+| Platform   | Program                             | Bootstrapped      | Funded                   | Apply                                    |
+| ---------- | ----------------------------------- | ----------------- | ------------------------ | ---------------------------------------- |
+| **GCP**    | Google for Startups Cloud           | ~$2,000           | Up to ~$200K (~$350K AI) | https://startup.google.com/cloud/        |
+| **AWS**    | AWS Activate                        | $1,000 (Founders) | Up to $100K (Portfolio)  | https://aws.amazon.com/startups/credits/ |
+| **Azure**  | Microsoft for Startups Founders Hub | ~$1,000           | Up to ~$150K (tiered)    | https://www.microsoft.com/en-us/startups |
+| **Vercel** | Vercel for Startups                 | Up to $30K        | AI Accelerator (cohort)  | https://vercel.com/startups/credits      |
+| **Render** | Render Startup Program              | $500              | $2.5K–$100K via partners | https://render.com/startups              |
 
 ### Vercel profile — also apply for stack partners
 
-| Service | Program | Apply |
-|---------|---------|-------|
-| **Supabase** (Postgres) | Supabase Startup | https://supabase.com/solutions/startups |
-| **Upstash** (Redis) | Upstash startup / free tier | https://upstash.com |
+| Service                 | Program                     | Apply                                   |
+| ----------------------- | --------------------------- | --------------------------------------- |
+| **Supabase** (Postgres) | Supabase Startup            | https://supabase.com/solutions/startups |
+| **Upstash** (Redis)     | Upstash startup / free tier | https://upstash.com                     |
 
 **Disclaimer:** Approval not guaranteed; credits expire; payment method may still be required.
 
-## Quick start
+## Quick start (GCP master orchestrator)
 
-Placeholder commands (implemented in Phase 0.2):
+All commands accept `--env sandbox|staging|production` (default `sandbox`) and run a
+preflight (auth, billing, project, state bucket, required config) before any apply.
+State lives in a self-managed GCS bucket (`<project>-pulumi-state`); the orchestrator
+creates it idempotently and runs `pulumi login gs://…` for you.
 
 ```bash
-# Initialize: answer wizard prompts for profile, region, domain
-pnpm infra:init
+# One-time per env: ensure state bucket + pulumi login + stack init + cross-layer config
+pnpm infra:init --env sandbox
 
-# Deploy: build, migrate, and launch services
-pnpm infra:deploy
+# Deploy all six layers in dependency order (bootstrap → db/storage/messaging → secrets → apps)
+pnpm infra:deploy --env sandbox
 
-# Preview (Pulumi clouds only)
-pnpm infra:preview
+# Deploy a single layer
+pnpm infra:deploy database --env staging
 
-# Teardown: delete all cloud resources
-pnpm infra:destroy
+# Read-only diff (L3) for every layer
+pnpm infra:preview --env sandbox
+
+# Tear down in reverse order (apps → … → bootstrap), with confirmation.
+# database/storage are protected — unprotect them first (the command prints how).
+pnpm infra:destroy --env sandbox
+
+# L4 ephemeral proof: apply → smoke-test → destroy a throwaway stack (on-demand only)
+pnpm infra:test:ephemeral
 ```
+
+> The multi-cloud profile wizard moved to `pnpm infra:init:profile`.
+
+### Pipelines
+
+- **Infra pipeline** — `.github/workflows/infra-deploy.yml`, manual `workflow_dispatch`
+  with `{env, layer}` inputs. Uses Workload Identity Federation; `production` routes
+  through the `production-gcp` GitHub Environment (required reviewers). Runs `pnpm infra:deploy`.
+- **App release pipeline** — `.github/workflows/app-release.yml`, on push to `main`/tags.
+  Builds+pushes all 5 images → runs the `starter-migrate` Cloud Run Job as a gate →
+  deploys each Cloud Run revision `--no-traffic` → smoke-tests the candidate → shifts
+  traffic to 100%. Rollback: `gcloud run services update-traffic <svc> --to-revisions <prev>=100`.
+
+### Zero-downtime rules (enforced / process)
+
+1. New revision deployed `--no-traffic`, gated on a health smoke before any traffic.
+2. **Expand/contract migrations** — old and new revisions share the DB during rollout, so
+   every migration must be backward-compatible (add nullable/new → backfill → later drop).
+3. **Graceful shutdown / worker drain** on SIGTERM; workers finish/ack in-flight jobs before exit.
+4. **Backward-compatible Pub/Sub message contracts** (at-least-once; concurrent old/new workers).
+5. Prior revisions are retained for instant rollback.
 
 ## Profile guides
 
@@ -151,6 +182,7 @@ Pulumi [CrossGuard](https://www.pulumi.com/docs/iac/crossguard/) policies in `in
 Infracost is **not wired** to this repository. Infracost requires Terraform plan output; Pulumi does not produce Terraform-format plans natively. A custom shim converting `pulumi preview --json` to Terraform plan format would be required and is out of scope.
 
 Recommended alternatives:
+
 - **Pulumi Cloud Cost Explorer** (paid feature): https://www.pulumi.com/docs/iac/concepts/options/pulumi-cost-explorer
 - **Manual estimates**: use the cost ranges in the profile table above; set up GCP/AWS/Azure budget alerts at $10, $25, and $50 USD via the init wizard.
 
