@@ -299,6 +299,58 @@ if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
     .apply((recs) => recs.flat());
 }
 
+// --- Optional: uptime checks + alert policies --------------------------------
+const enableMonitoring = config.getBoolean("enableMonitoring") ?? false;
+
+if (enableMonitoring) {
+  const channel = new gcp.monitoring.NotificationChannel("alert-email", {
+    type: "email",
+    labels: { email_address: config.require("alertEmail") },
+  });
+
+  for (const app of APPS) {
+    if (!app.public) continue;
+    // `uri` is "https://..." — strip scheme so monitoredResource.labels.host gets a bare hostname.
+    const hostLabel = services[app.name].uri.apply((u) => u.replace(/^https?:\/\//, ""));
+    const check = new gcp.monitoring.UptimeCheckConfig(`uptime-${app.name}`, {
+      displayName: `uptime-${app.name}`,
+      timeout: "10s",
+      period: "300s",
+      httpCheck: { path: app.healthPath, port: 443, useSsl: true, requestMethod: "GET" },
+      monitoredResource: {
+        type: "uptime_url",
+        labels: { project_id: projectId, host: hostLabel },
+      },
+    });
+
+    new gcp.monitoring.AlertPolicy(`alert-${app.name}`, {
+      displayName: `${app.name} uptime failed`,
+      combiner: "OR",
+      notificationChannels: [channel.id],
+      conditions: [
+        {
+          displayName: `${app.name} uptime check failing`,
+          conditionThreshold: {
+            filter: pulumi.interpolate`metric.type="monitoring.googleapis.com/uptime_check/check_passed" AND resource.type="uptime_url" AND metric.label.check_id="${check.uptimeCheckId}"`,
+            comparison: "COMPARISON_LT",
+            thresholdValue: 1,
+            duration: "300s",
+            trigger: { count: 1 },
+            aggregations: [
+              {
+                alignmentPeriod: "300s",
+                perSeriesAligner: "ALIGN_NEXT_OLDER",
+                crossSeriesReducer: "REDUCE_COUNT_FALSE",
+                groupByFields: ["resource.label.host"],
+              },
+            ],
+          },
+        },
+      ],
+    });
+  }
+}
+
 // --- Exports -----------------------------------------------------------------
 export const dashboardUrl = services.dashboard.uri;
 export const wwwUrl = services.www.uri;
