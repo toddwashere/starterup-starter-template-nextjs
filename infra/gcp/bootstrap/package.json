@@ -16,5 +16,8 @@
     "@types/node": "^24",
     "typescript": "^5.7",
     "vitest": "^3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "protobufjs"]
   }
 }
