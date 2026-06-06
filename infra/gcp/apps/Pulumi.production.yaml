@@ -11,3 +11,6 @@ config:
   starter-gcp-apps:lbDomain: "example.com"
   starter-gcp-apps:enableMonitoring: "true"
   starter-gcp-apps:alertEmail: "alerts@example.com"
+  starter-gcp-apps:complianceMode: "soc2"
+  # Note: prod also sets enableHttpsLb: "true" so Cloud Armor has a policy to harden.
+  # To enable VPC-SC: set vpcServiceControls: "true" and accessPolicyId: "<numeric id>"

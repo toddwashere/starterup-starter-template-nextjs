@@ -2,9 +2,18 @@ import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
 import { APPS } from "../../shared/apps.manifest";
 import { buildAppEnv, appRoles, appSecretAccessorIds } from "./service-config";
+import { resolveCompliance, type ComplianceMode } from "../../shared/compliance";
 
 const config = new pulumi.Config();
 const isProduction = pulumi.getStack() === "production";
+
+const compliance = resolveCompliance(
+  (config.get("complianceMode") as ComplianceMode) ?? "none",
+  { vpcServiceControls: config.getBoolean("vpcServiceControls") ?? undefined },
+);
+
+// Org-level Access Context Manager access policy id (numeric). Required for VPC-SC.
+const accessPolicyId = config.get("accessPolicyId");
 
 const bootstrap = new pulumi.StackReference(config.require("bootstrapStackRef"));
 const database = new pulumi.StackReference(config.require("databaseStackRef"));
@@ -136,6 +145,11 @@ for (const app of APPS) {
     name: `starter-${app.name}`,
     location: region,
     ingress: app.worker ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL",
+    // Binary Authorization: requires the bootstrap binauthz project policy (same
+    // complianceMode must be set on both layers for the policy to exist).
+    ...(compliance.binaryAuthorization
+      ? { binaryAuthorization: { useDefault: true } }
+      : {}),
     template: {
       serviceAccount: sa.email,
       maxInstanceRequestConcurrency: app.worker ? 1 : 80,
@@ -206,9 +220,34 @@ if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
     { host: baseDomain, app: "www" },
   ];
 
+  // P6 owns the LB + base Cloud Armor policy (built only when enableHttpsLb).
+  // P8 adds rate-limit rules + adaptive protection when compliance.cloudArmor.
+  // When compliant, the stricter rule (count: 100/min) supersedes the base rule
+  // (count: 600/min); adaptive protection is also enabled for L7 DDoS defense.
+  const complianceArmorRules = compliance.cloudArmor
+    ? [
+        {
+          action: "rate_based_ban",
+          priority: 900,
+          match: {
+            versionedExpr: "SRC_IPS_V1",
+            config: { srcIpRanges: ["*"] },
+          },
+          rateLimitOptions: {
+            conformAction: "allow",
+            exceedAction: "deny(429)",
+            enforceOnKey: "IP",
+            rateLimitThreshold: { count: 100, intervalSec: 60 },
+          },
+          description: "Per-IP rate limiting (compliance).",
+        },
+      ]
+    : [];
+
   // Cloud Armor security policy (rate limit + deny known-bad).
   const armor = new gcp.compute.SecurityPolicy("starter-armor", {
     rules: [
+      ...complianceArmorRules,
       {
         action: "allow",
         priority: 2147483647,
@@ -228,6 +267,13 @@ if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
         description: "rate limit per IP",
       },
     ],
+    ...(compliance.cloudArmor
+      ? {
+          adaptiveProtectionConfig: {
+            layer7DdosDefenseConfig: { enable: true },
+          },
+        }
+      : {}),
   });
 
   // One serverless NEG + backend per public app.
@@ -349,6 +395,31 @@ if (enableMonitoring) {
       ],
     });
   }
+}
+
+// --- VPC Service Controls perimeter (optional sub-flag; off by default). ------
+// VPC-SC is org-scoped and disabled by default; enabling it without a correct
+// access policy + access levels can lock out legitimate access, so it is
+// intentionally opt-in via vpcServiceControls: true AND accessPolicyId.
+// Requires an org-level Access Context Manager access policy. Gated on BOTH the
+// compliance sub-flag and a configured accessPolicyId to avoid a broken apply.
+if (compliance.vpcServiceControls && accessPolicyId) {
+  new gcp.accesscontextmanager.ServicePerimeter("starter-vpc-sc", {
+    parent: `accessPolicies/${accessPolicyId}`,
+    name: `accessPolicies/${accessPolicyId}/servicePerimeters/starter_${pulumi.getStack()}`,
+    title: `starter-${pulumi.getStack()}`,
+    status: {
+      restrictedServices: [
+        "run.googleapis.com",
+        "sqladmin.googleapis.com",
+        "storage.googleapis.com",
+        "pubsub.googleapis.com",
+        "secretmanager.googleapis.com",
+        "cloudkms.googleapis.com",
+      ],
+      resources: [pulumi.interpolate`projects/${projectId}`],
+    },
+  });
 }
 
 // --- Exports -----------------------------------------------------------------

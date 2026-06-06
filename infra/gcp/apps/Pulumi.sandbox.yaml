@@ -9,3 +9,4 @@ config:
   starter-gcp-apps:imageTag: "latest"
   starter-gcp-apps:enableHttpsLb: "false"
   starter-gcp-apps:enableMonitoring: "false"
+  starter-gcp-apps:complianceMode: "none"

@@ -10,3 +10,4 @@ config:
   starter-gcp-apps:enableHttpsLb: "false"
   starter-gcp-apps:enableMonitoring: "true"
   starter-gcp-apps:alertEmail: "alerts@example.com"
+  starter-gcp-apps:complianceMode: "none"
