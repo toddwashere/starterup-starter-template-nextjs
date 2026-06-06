@@ -45,3 +45,40 @@ export function maxInstanceCountSandboxCap(
     );
   }
 }
+
+/**
+ * Flags an `allUsers` Cloud Run IAM binding on a service that is NOT in the
+ * public-services allowlist (workers must never be publicly invokable).
+ */
+export function noAllUsersOnNonPublicService(
+  resourceType: string,
+  resource: { name?: string; member?: string },
+  nonPublicServiceNames: readonly string[],
+  reportViolation: (msg: string) => void,
+): void {
+  if (resourceType !== "gcp:cloudrunv2/serviceIamMember:ServiceIamMember") return;
+  if (resource.member !== "allUsers" && resource.member !== "allAuthenticatedUsers") return;
+  if (nonPublicServiceNames.some((n) => (resource.name ?? "").includes(n))) {
+    reportViolation(
+      `Cloud Run service ${resource.name ?? "?"} must not allow ${resource.member} (non-public service).`,
+    );
+  }
+}
+
+/**
+ * Flags primitive owner/editor/viewer roles bound to any member — runtime and
+ * deploy SAs must use least-privilege predefined roles, never primitives.
+ */
+export function noPrimitiveRolesOnRuntimeSa(
+  resourceType: string,
+  resource: { role?: string; member?: string },
+  reportViolation: (msg: string) => void,
+): void {
+  if (!resourceType.toLowerCase().includes("iammember")) return;
+  const primitive = ["roles/owner", "roles/editor", "roles/viewer"];
+  if (resource.role && primitive.includes(resource.role)) {
+    reportViolation(
+      `Primitive role ${resource.role} bound to ${resource.member ?? "?"} is denied; use least-privilege roles.`,
+    );
+  }
+}

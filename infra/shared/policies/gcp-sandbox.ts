@@ -3,6 +3,8 @@ import * as pulumi from "@pulumi/pulumi";
 import {
   noGlobalForwardingRulesInSandbox,
   maxInstanceCountSandboxCap,
+  noAllUsersOnNonPublicService,
+  noPrimitiveRolesOnRuntimeSa,
 } from "./gcp-sandbox-validators";
 
 /**
@@ -56,6 +58,37 @@ new PolicyPack("gcp-sandbox", {
         "gcp:cloudrunv2/service:Service",
         (resource, args, reportViolation) => {
           maxInstanceCountSandboxCap(currentStack(), args.type, resource as Parameters<typeof maxInstanceCountSandboxCap>[2], reportViolation);
+        },
+      ),
+    },
+    {
+      name: "no-allusers-on-non-public-service",
+      description: "Workers and other non-public Cloud Run services must not allow allUsers.",
+      enforcementLevel: "mandatory",
+      validateResource: validateResourceOfType(
+        "gcp:cloudrunv2/serviceIamMember:ServiceIamMember",
+        (resource, args, reportViolation) => {
+          noAllUsersOnNonPublicService(
+            args.type,
+            resource as { name?: string; member?: string },
+            ["starter-workers"],
+            reportViolation,
+          );
+        },
+      ),
+    },
+    {
+      name: "no-primitive-roles",
+      description: "Primitive owner/editor/viewer roles are denied.",
+      enforcementLevel: "mandatory",
+      validateResource: validateResourceOfType(
+        "gcp:projects/iAMMember:IAMMember",
+        (resource, args, reportViolation) => {
+          noPrimitiveRolesOnRuntimeSa(
+            args.type,
+            resource as { role?: string; member?: string },
+            reportViolation,
+          );
         },
       ),
     },

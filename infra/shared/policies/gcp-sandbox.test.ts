@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   noGlobalForwardingRulesInSandbox,
   maxInstanceCountSandboxCap,
+  noAllUsersOnNonPublicService,
+  noPrimitiveRolesOnRuntimeSa,
 } from "./gcp-sandbox-validators";
 
 describe("noGlobalForwardingRulesInSandbox", () => {
@@ -96,6 +98,52 @@ describe("maxInstanceCountSandboxCap", () => {
       "sandbox",
       "gcp:cloudrunv2/service:Service",
       { name: "dashboard", template: {} },
+      report,
+    );
+    expect(report).not.toHaveBeenCalled();
+  });
+});
+
+describe("noAllUsersOnNonPublicService", () => {
+  it("flags allUsers invoker on a worker service binding", () => {
+    const report = vi.fn();
+    noAllUsersOnNonPublicService(
+      "gcp:cloudrunv2/serviceIamMember:ServiceIamMember",
+      { name: "starter-workers", member: "allUsers" },
+      ["starter-workers"],
+      report,
+    );
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows allUsers invoker on a public service", () => {
+    const report = vi.fn();
+    noAllUsersOnNonPublicService(
+      "gcp:cloudrunv2/serviceIamMember:ServiceIamMember",
+      { name: "starter-www", member: "allUsers" },
+      ["starter-workers"],
+      report,
+    );
+    expect(report).not.toHaveBeenCalled();
+  });
+});
+
+describe("noPrimitiveRolesOnRuntimeSa", () => {
+  it("flags roles/owner bound to a member", () => {
+    const report = vi.fn();
+    noPrimitiveRolesOnRuntimeSa(
+      "gcp:projects/iAMMember:IAMMember",
+      { role: "roles/owner", member: "serviceAccount:x@y.iam" },
+      report,
+    );
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a scoped role", () => {
+    const report = vi.fn();
+    noPrimitiveRolesOnRuntimeSa(
+      "gcp:projects/iAMMember:IAMMember",
+      { role: "roles/cloudsql.client", member: "serviceAccount:x@y.iam" },
       report,
     );
     expect(report).not.toHaveBeenCalled();
