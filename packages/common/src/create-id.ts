@@ -10,7 +10,7 @@ export type AuthIdPrefix =
   | "mbr"
   | "authinv"
   | "apikey"
-  | "oauthapp"
+  | "oauthclient"
   | "oauthat"
   | "oauthrt"
   | "oauthc";

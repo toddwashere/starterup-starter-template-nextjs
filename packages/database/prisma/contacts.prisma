@@ -3,7 +3,7 @@
 model Contact {
   id              String    @id
   organizationId  String
-  kind            String    // "person" | "company"
+  kind            String // "person" | "company"
   displayName     String
   firstName       String?
   lastName        String?
@@ -20,9 +20,9 @@ model Contact {
   updatedAt       DateTime  @updatedAt
   archivedAt      DateTime?
 
-  stage        ContactStage?         @relation(fields: [stageId], references: [id])
-  parent       Contact?              @relation("ContactHierarchy", fields: [parentContactId], references: [id])
-  children     Contact[]             @relation("ContactHierarchy")
+  stage        ContactStage?          @relation(fields: [stageId], references: [id])
+  parent       Contact?               @relation("ContactHierarchy", fields: [parentContactId], references: [id])
+  children     Contact[]              @relation("ContactHierarchy")
   tags         ContactTagAssignment[]
   interactions ContactInteraction[]
   tasks        ContactTask[]
@@ -36,14 +36,14 @@ model Contact {
 }
 
 model ContactStage {
-  id             String    @id
+  id             String   @id
   organizationId String
   name           String
-  color          String    @default("#6366f1")
-  sortOrder      Int       @default(0)
-  isDefault      Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  color          String   @default("#6366f1")
+  sortOrder      Int      @default(0)
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   contacts Contact[]
 
@@ -51,12 +51,12 @@ model ContactStage {
 }
 
 model ContactTag {
-  id             String    @id
+  id             String   @id
   organizationId String
   name           String
-  color          String    @default("#6366f1")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  color          String   @default("#6366f1")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   assignments ContactTagAssignment[]
 
@@ -88,15 +88,15 @@ model ContactSegment {
 }
 
 model ContactInteraction {
-  id             String   @id
+  id             String    @id
   organizationId String
   contactId      String
-  type           String   @default("note")
+  type           String    @default("note")
   body           String
-  happenedAt     DateTime @default(now())
+  happenedAt     DateTime  @default(now())
   createdById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   archivedAt     DateTime?
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)

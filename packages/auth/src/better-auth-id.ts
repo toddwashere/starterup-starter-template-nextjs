@@ -15,7 +15,7 @@ const betterAuthModelIdPrefixes: Record<string, AuthIdPrefix> = {
   invitation: "authinv",
   apikey: "apikey",
   apiKey: "apikey",
-  oauthApplication: "oauthapp",
+  oauthClient: "oauthclient",
   oauthAccessToken: "oauthat",
   oauthRefreshToken: "oauthrt",
   oauthConsent: "oauthc",

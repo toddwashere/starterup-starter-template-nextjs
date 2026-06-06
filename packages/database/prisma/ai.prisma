@@ -27,17 +27,17 @@ model AiThread {
 }
 
 model AiMessage {
-  id              String   @id // createId("aimsg")
+  id              String             @id // createId("aimsg")
   threadId        String
   role            AiMessageRole
-  content         String   @db.Text
+  content         String             @db.Text
   /// JSON: tool calls / results for assistant turns (ToolResult[])
   toolPayload     Json?
   feedback        AiMessageFeedback?
-  feedbackComment String?  @db.Text
+  feedbackComment String?            @db.Text
   /// e.g. { langfuseTraceId?: string }
   metadata        Json?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime           @default(now())
 
   thread AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 

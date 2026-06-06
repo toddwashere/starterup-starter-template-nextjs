@@ -1,9 +1,9 @@
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  emailVerified    Boolean   @default(false)
+  image            String?
   role             String    @default("user")
   banned           Boolean   @default(false)
   banReason        String?
@@ -17,7 +17,7 @@ model User {
   members     Member[]
   invitations Invitation[]
 
-  oauthApplications  OauthApplication[]
+  oauthClients       OauthClient[]
   oauthAccessTokens  OauthAccessToken[]
   oauthRefreshTokens OauthRefreshToken[]
   oauthConsents      OauthConsent[]
@@ -36,7 +36,9 @@ model Session {
   activeOrganizationId String?
   impersonatedBy       String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthAccessTokens  OauthAccessToken[]
+  oauthRefreshTokens OauthRefreshToken[]
 
   @@index([userId])
 }
@@ -79,8 +81,6 @@ model Jwks {
   privateKey String
   createdAt  DateTime  @default(now())
   expiresAt  DateTime?
-  alg        String?
-  crv        String?
 
   @@map("jwks")
 }
@@ -120,6 +120,7 @@ model Invitation {
   role           String   @default("member")
   status         String   @default("pending")
   expiresAt      DateTime
+  createdAt      DateTime @default(now())
   inviterId      String
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -159,23 +160,37 @@ model Apikey {
   @@map("apikey")
 }
 
-model OauthApplication {
-  id                   String   @id
-  name                 String?
-  icon                 String?
-  metadata             String?
-  clientId             String   @unique
-  clientSecret         String?
-  redirectURLs         String
-  scopes               String
-  pkce                 Boolean  @default(false)
-  disabled             Boolean  @default(false)
-  userId               String?
-  clientType           String   @default("confidential")
-  authenticationScheme String   @default("none")
-  requirePkce          Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+model OauthClient {
+  id                      String   @id
+  clientId                String   @unique
+  clientSecret            String?
+  name                    String?
+  uri                     String?
+  icon                    String?
+  contacts                String[]
+  tos                     String?
+  policy                  String?
+  softwareId              String?
+  softwareVersion         String?
+  softwareStatement       String?
+  redirectUris            String[]
+  postLogoutRedirectUris  String[]
+  scopes                  String[]
+  grantTypes              String[]
+  responseTypes           String[]
+  tokenEndpointAuthMethod String?
+  type                    String?
+  subjectType             String?
+  public                  Boolean?
+  requirePKCE             Boolean?
+  skipConsent             Boolean?
+  enableEndSession        Boolean?
+  disabled                Boolean  @default(false)
+  metadata                Json?
+  referenceId             String?
+  userId                  String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   user          User?               @relation(fields: [userId], references: [id])
   accessTokens  OauthAccessToken[]
@@ -183,57 +198,68 @@ model OauthApplication {
   consents      OauthConsent[]
 
   @@index([userId])
-  @@map("oauthApplication")
+  @@map("oauthClient")
 }
 
 model OauthAccessToken {
-  id                   String   @id
-  accessToken          String   @unique
-  accessTokenExpiresAt DateTime
-  clientId             String
-  userId               String
-  scopes               String
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id          String   @id
+  token       String   @unique
+  clientId    String
+  sessionId   String?
+  userId      String?
+  refreshId   String?
+  referenceId String?
+  scopes      String[]
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
 
-  application OauthApplication @relation(fields: [clientId], references: [clientId])
-  user        User             @relation(fields: [userId], references: [id])
+  client  OauthClient        @relation(fields: [clientId], references: [clientId])
+  session Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user    User?              @relation(fields: [userId], references: [id])
+  refresh OauthRefreshToken? @relation(fields: [refreshId], references: [id])
 
   @@index([clientId])
+  @@index([sessionId])
   @@index([userId])
+  @@index([refreshId])
   @@map("oauthAccessToken")
 }
 
 model OauthRefreshToken {
-  id                    String    @id
-  refreshToken          String    @unique
-  refreshTokenExpiresAt DateTime?
-  clientId              String
-  userId                String
-  scopes                String
-  accessTokenId         String?
-  revoked               Boolean   @default(false)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id          String    @id
+  token       String    @unique
+  clientId    String
+  sessionId   String?
+  userId      String
+  referenceId String?
+  scopes      String[]
+  expiresAt   DateTime?
+  revoked     DateTime?
+  authTime    DateTime?
+  createdAt   DateTime  @default(now())
 
-  application OauthApplication @relation(fields: [clientId], references: [clientId])
-  user        User             @relation(fields: [userId], references: [id])
+  client       OauthClient        @relation(fields: [clientId], references: [clientId])
+  session      Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user         User               @relation(fields: [userId], references: [id])
+  accessTokens OauthAccessToken[]
 
   @@index([clientId])
+  @@index([sessionId])
   @@index([userId])
   @@map("oauthRefreshToken")
 }
 
 model OauthConsent {
-  id        String   @id
-  userId    String
-  clientId  String
-  scopes    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id
+  clientId    String
+  userId      String?
+  referenceId String?
+  scopes      String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  application OauthApplication @relation(fields: [clientId], references: [clientId])
-  user        User             @relation(fields: [userId], references: [id])
+  client OauthClient @relation(fields: [clientId], references: [clientId])
+  user   User?       @relation(fields: [userId], references: [id])
 
   @@index([clientId])
   @@index([userId])

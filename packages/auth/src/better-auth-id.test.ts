@@ -13,7 +13,7 @@ describe("createBetterAuthId", () => {
     ["jwks", "jwks"],
     ["apikey", "apikey"],
     ["apiKey", "apikey"],
-    ["oauthApplication", "oauthapp"],
+    ["oauthClient", "oauthclient"],
     ["oauthAccessToken", "oauthat"],
     ["oauthRefreshToken", "oauthrt"],
     ["oauthConsent", "oauthc"],
