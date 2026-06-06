@@ -52,6 +52,7 @@ const COMPLIANCE_TYPES = {
   auditConfig: "gcp:projects/iAMAuditConfig:IAMAuditConfig",
   sink: "gcp:logging/projectSink:ProjectSink",
   sinkWriter: "gcp:storage/bucketIAMMember:BucketIAMMember",
+  logSinkBucket: "gcp:storage/bucket:Bucket",
   keyRing: "gcp:kms/keyRing:KeyRing",
   cryptoKey: "gcp:kms/cryptoKey:CryptoKey",
   orgPolicy: "gcp:orgpolicy/policy:Policy",

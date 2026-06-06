@@ -54,7 +54,8 @@ const jobsTopic = new gcp.pubsub.Topic("jobs", {
 
 const dlqTopic = new gcp.pubsub.Topic("jobs-dlq", {
   name: pulumi.interpolate`jobs-dlq-${pulumi.getStack()}`,
-});
+  kmsKeyName: topicKmsKeyName,
+}, { dependsOn: pubsubKmsDeps });
 
 const jobsSubscription = new gcp.pubsub.Subscription("jobs-sub", {
   name: pulumi.interpolate`jobs-sub-${pulumi.getStack()}`,
