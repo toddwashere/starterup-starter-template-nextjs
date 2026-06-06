@@ -89,7 +89,7 @@ export function runPreflight(input: PreflightInput): PreflightResult;
 | Output | Type | Consumed by |
 |--------|------|-------------|
 | `projectId` | string | all |
-| `region` | string | all |
+| `regionOut` | string | all |
 | `networkId` | string ("" when disabled) | database, messaging, apps |
 | `networkSelfLink` | string ("") | apps |
 | `subnetSelfLink` | string ("") | apps |
