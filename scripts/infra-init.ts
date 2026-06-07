@@ -91,16 +91,16 @@ export function formatNextSteps(
 
     case "gcp":
       lines.push(
-        "  1. Apply Pulumi core stack:",
-        `     cd infra/gcp/core && pulumi up -s ${variant}`,
+        "  1. One-time setup (state bucket + stacks + cross-layer config):",
+        `     pnpm infra:init --env ${variant}`,
         "",
-        "  2. Apply apps stack:",
-        `     cd infra/gcp/apps && pulumi up -s ${variant}`,
+        "  2. Deploy all six layers in dependency order:",
+        `     pnpm infra:deploy --env ${variant}`,
         "",
-        "  3. Verify smoke:",
-        "     pulumi stack output dashboardUrl",
+        "  3. Verify (read-only diff, all layers):",
+        `     pnpm infra:preview --env ${variant}`,
         "",
-        "  Note: Phase 5.1 is the canonical implementation — see infra/gcp/README.md when ready.",
+        "  See infra/gcp/README.md for the full step-by-step guide.",
       );
       break;
 
@@ -217,9 +217,7 @@ async function main(): Promise<void> {
   // --- Prompt 1: profile ---
   let profile: ProfileName | undefined;
   while (!profile) {
-    const raw = await prompter.question(
-      `Profile [${VALID_PROFILES.join("|")}]: `,
-    );
+    const raw = await prompter.question(`Profile [${VALID_PROFILES.join("|")}]: `);
     const trimmed = raw.trim().toLowerCase() as ProfileName;
     if ((VALID_PROFILES as string[]).includes(trimmed)) {
       profile = trimmed;

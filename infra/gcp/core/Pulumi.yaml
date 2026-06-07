@@ -1,6 +1,0 @@
-name: starter-gcp-core
-runtime: nodejs
-description: Core GCP resources for the SaaS starter template (Postgres, Pub/Sub, secrets)
-config:
-  gcp:project:
-    description: GCP project ID

@@ -1,9 +1,0 @@
-config:
-  gcp:project: "your-prod-project-id"
-  gcp:region: "us-central1"
-  starter-gcp-core:dbTier: "db-custom-2-7680"      # 2 vCPU / 7.5 GB RAM
-  starter-gcp-core:dbVersion: "POSTGRES_16"
-  starter-gcp-core:dbAvailability: "REGIONAL"       # multi-zone HA
-  starter-gcp-core:dbPointInTime: "true"
-  starter-gcp-core:privateNetwork: "true"           # enable VPC + private Cloud SQL IP
-  starter-gcp-core:vpcCidr: "10.10.0.0/24"          # VPC connector CIDR

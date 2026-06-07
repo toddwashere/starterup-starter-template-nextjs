@@ -1,226 +1,281 @@
 # GCP (Pulumi)
 
-Sandbox and production stacks for Google Cloud — Cloud Run, Cloud SQL (Postgres), Pub/Sub, and Secret Manager.
+Turnkey Google Cloud infrastructure for the whole stack: Cloud Run (all 5 apps), Cloud SQL
+(Postgres), GCS, Pub/Sub + optional Redis, Secret Manager, and an optional global HTTPS load
+balancer — provisioned by a **single orchestrator command**.
 
-Two Pulumi projects live here:
-
-| Project | Path | What it owns |
-|---------|------|--------------|
-| `starter-gcp-core` | `infra/gcp/core/` | Cloud SQL, Pub/Sub topic + DLQ, Secret Manager entries |
-| `starter-gcp-apps` | `infra/gcp/apps/` | Cloud Run services (dashboard, www, public-api, workers) |
-
-`apps` depends on `core` via `pulumi.StackReference`. Deploy `core` first.
-
-## Status
-
-- **Task 3.1 (this commit):** scaffold — exports + StackReference wired; no real GCP resources yet.
-- **Task 3.2 (next):** Cloud SQL, Pub/Sub, Secret Manager, Cloud Run services for sandbox.
-- **Task 7.1 (future):** production hardening (HA Postgres, VPC, IAM).
-
-## Prerequisites
-
-- [Pulumi CLI](https://www.pulumi.com/docs/install/) installed
-- `gcloud auth application-default login` (or a service account key in `GOOGLE_CREDENTIALS`)
-- A GCP project with billing enabled
-- Artifact Registry repository for Docker images
-
-See [infra/README.md](../README.md) for GCP startup credits and credit programs.
-
-## First-time setup
-
-These projects are **not** in the pnpm workspace. Install deps inside each project dir:
-
-```sh
-cd infra/gcp/core
-pnpm install          # or: npm install
-pulumi stack init sandbox
-pulumi config set gcp:project  your-sandbox-project-id
-pulumi config set gcp:region   us-central1
-pulumi config set starter-gcp-core:dbTier    db-f1-micro
-pulumi config set starter-gcp-core:dbVersion POSTGRES_16
-
-cd ../apps
-pnpm install
-pulumi stack init sandbox
-pulumi config set gcp:project  your-sandbox-project-id
-pulumi config set gcp:region   us-central1
-pulumi config set starter-gcp-apps:coreStackRef   <org>/starter-gcp-core/sandbox
-pulumi config set starter-gcp-apps:imageRegistry  us-central1-docker.pkg.dev/<project>/starter
-```
-
-`Pulumi.sandbox.yaml` in each directory contains these keys as placeholders — edit them or set via `pulumi config set`.
-
-## Deploy
-
-```sh
-# 1. Core infrastructure
-cd infra/gcp/core
-pulumi up -s sandbox
-
-# 2. App services (reads outputs from core)
-cd ../apps
-pulumi up -s sandbox
-```
-
-## Sandbox vs production
-
-- **sandbox** (`Pulumi.sandbox.yaml`): minimal resources, smallest Cloud SQL tier (`db-f1-micro`), no HA, public IP DB, `maxInstanceCount: 2`.
-- **production** (`Pulumi.production.yaml`): HA Postgres, private Cloud SQL IP, VPC connector, min-instance warm dashboard, higher Cloud Run cap.
-
-See the [deploy-profiles spec](../../docs/superpowers/specs/2026-05-28-deploy-profiles-design.md) for the full profile breakdown.
-
-## Production deploy
-
-### What changes in production
-
-| Feature | Sandbox | Production |
-|---------|---------|------------|
-| Cloud SQL tier | `db-f1-micro` | `db-custom-2-7680` (2 vCPU / 7.5 GB) |
-| Availability | `ZONAL` | `REGIONAL` (multi-zone HA) |
-| Point-in-time recovery | disabled | enabled |
-| Cloud SQL IP | public (SQL Proxy socket) | private (VPC connector) |
-| VPC | none | `starter-vpc` + Serverless VPC connector |
-| `minInstanceCount` | 0 (all services) | 1 for dashboard (warm), 0 for others |
-| `maxInstanceCount` | 2 (CrossGuard enforced) | 10 |
-| Global HTTPS LB | n/a | optional — set `enableHttpsLb: true` |
-| Canary traffic split | n/a | optional — set `canaryRevision` + `canaryPercent` |
-
-Use separate GCP projects for sandbox and production to isolate billing, IAM, and quotas.
-
-### First-time production setup
-
-```sh
-cd infra/gcp/core
-pnpm install
-pulumi stack init production
-# Edit Pulumi.production.yaml with your prod project ID, or use:
-pulumi config set gcp:project  your-prod-project-id  --stack production
-# ... set remaining keys as shown in Pulumi.production.yaml ...
-
-cd ../apps
-pnpm install
-pulumi stack init production
-pulumi config set starter-gcp-apps:coreStackRef  <org>/starter-gcp-core/production  --stack production
-# ... set remaining keys ...
-```
-
-### Deploy order (production)
-
-Follow the migration → producers → readiness → workers pattern documented in
-`.github/workflows/deploy-gcp.yml`:
-
-1. `prisma migrate deploy` — run before rolling new images
-2. `pulumi up -s production` in `core/` — Cloud SQL, VPC, Pub/Sub, Secret Manager
-3. `pulumi up -s production` in `apps/` — Cloud Run services
-4. Smoke-test `/api/health` on dashboard and public-api
-
-### Optional: global HTTPS load balancer
-
-Set `enableHttpsLb: true` and `lbDomain: app.example.com` in
-`infra/gcp/apps/Pulumi.production.yaml`. Pulumi will provision a serverless NEG,
-backend service, URL map, Google-managed TLS certificate, HTTPS target proxy,
-and a global forwarding rule. Point your DNS A record at the reserved IP before
-provisioning the cert (Google-managed certs require DNS propagation).
-
-### Optional: canary traffic split
-
-Set `canaryRevision` (e.g. `starter-dashboard-00042-abc`) and `canaryPercent`
-(e.g. `5`) in `infra/gcp/apps/Pulumi.production.yaml`. The scaffolding in
-`apps/index.ts` shows the traffic block shape; wire it into the dashboard
-Service definition and redeploy. Canary only fires on the production stack.
-
-### Required Cloud Run service-account IAM roles
-
-| Role | Required for |
-|------|-------------|
-| `roles/cloudsql.client` | Cloud SQL connections |
-| `roles/secretmanager.secretAccessor` | DATABASE_URL secret |
-| `roles/pubsub.publisher` | Pub/Sub topic publish |
-| `roles/pubsub.subscriber` | Pub/Sub subscription pull |
-
-## GitHub Actions deploy
-
-The workflow at `.github/workflows/deploy-gcp.yml` automates sandbox previews and production deploys.
-**It is scaffolding** — it will not run end-to-end until you complete the one-time setup below.
-
-### Required secrets (GitHub repo → Settings → Secrets and variables → Actions)
-
-| Secret | Description |
-|--------|-------------|
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full resource name of the WIF provider, e.g. `projects/123/locations/global/workloadIdentityPools/github/providers/github` |
-| `GCP_DEPLOY_SERVICE_ACCOUNT` | Service account email used for deployments, e.g. `github-deploy@your-project.iam.gserviceaccount.com` |
-| `PULUMI_ACCESS_TOKEN` | Pulumi Cloud personal/org access token |
-| `DATABASE_URL_DEPLOY` | Postgres connection string used by `prisma migrate deploy` (Cloud SQL Auth Proxy URL or direct IAM-authed connection) |
-
-### Required variables (GitHub repo → Settings → Secrets and variables → Actions → Variables)
-
-| Variable | Example |
-|----------|---------|
-| `GCP_REGION` | `us-central1` |
-| `GCP_ARTIFACT_REGISTRY` | `us-central1-docker.pkg.dev/your-project/starter` |
-
-### GitHub Environment: `production-gcp`
-
-Create the environment at **Settings → Environments → New environment** and add required reviewers.
-The `deploy` job will pause for approval before applying changes to production.
-
-### Workload Identity Federation
-
-OIDC authentication removes the need for long-lived service account keys.
-Setup guide: <https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines>
-
-Grant the WIF service account these roles on your GCP project:
-- `roles/run.admin`
-- `roles/cloudsql.client`
-- `roles/artifactregistry.writer`
-- `roles/secretmanager.admin` (or a narrower custom role)
-- `roles/iam.serviceAccountUser`
-
-### Manual sandbox deploy
-
-```sh
-gh workflow run deploy-gcp.yml -f stack=sandbox
-```
-
-### How the workflow jobs are ordered
-
-1. **preview** (PR only) — runs `pulumi preview` on sandbox and posts a comment.
-2. **build-images** (push/dispatch) — builds and pushes all 5 app images via Docker matrix.
-3. **deploy** (push/dispatch, after `build-images`, gated by `production-gcp` approval):
-   - `prisma migrate deploy` — runs before rolling new images.
-   - `pulumi up` core stack — Cloud SQL, Pub/Sub, Secret Manager.
-   - `pulumi up` apps stack — Cloud Run services pinned to `github.sha`.
-   - Smoke-tests `/health` on dashboard and public-api.
+You create the GCP project and link billing manually. Everything else is automated, in the
+right order, with a preflight that fails fast on misconfiguration (no apply-fail-fix loop).
 
 ---
 
-## Billing alerts (mandatory)
+## TL;DR — deploy a sandbox in 4 steps
 
-**Before your first deploy, configure budget alerts.** Runaway Cloud Run or Cloud SQL costs can accumulate quickly.
+```bash
+# 0. One-time machine setup
+gcloud auth application-default login          # authenticate
+gcloud projects create my-sandbox-proj         # or use an existing project
+# → link a billing account to the project in the GCP console (Billing → Link)
 
-Set alerts at $10, $25, and $50 USD using the `gcloud` CLI (replace `BILLING_ACCOUNT_ID`):
+# 1. Point the sandbox at your project: edit infra/gcp/bootstrap/Pulumi.sandbox.yaml
+#    set `gcp:project: "my-sandbox-proj"` (and gcp:region if not us-central1)
 
-```sh
-# Find your billing account ID
+# 2. One-time per env: create state bucket + init all stacks + wire cross-layer config
+pnpm infra:init --env sandbox
+
+# 3. Deploy all six layers in dependency order
+pnpm infra:deploy --env sandbox
+```
+
+That's it. The orchestrator creates a self-managed Pulumi state bucket
+(`<project>-pulumi-state`), logs in to it, runs a preflight, then applies every layer.
+
+> Real third-party secrets (Stripe, Resend, etc.) are created **empty** — apps that need them
+> won't start until you populate them. See [Populate secrets](#5-populate-third-party-secrets).
+
+---
+
+## The six layers
+
+Each layer is an independent Pulumi project under `infra/gcp/<layer>/`, with one stack per
+environment (`sandbox`, `staging`, `production`). Dependencies flow strictly downward via
+`pulumi.StackReference`, so a change to one layer can't ripple into another.
+
+| #   | Layer       | Owns                                                                                                                                                      | Protected            |
+| --- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| 1   | `bootstrap` | API enablement, VPC + connector, Artifact Registry, deploy SA + Workload Identity Federation, billing budget, (compliance: KMS, audit logs, org policies) | KMS keys, log bucket |
+| 2   | `database`  | Cloud SQL Postgres instance + db + user + generated password                                                                                              | ✅ instance          |
+| 3   | `storage`   | GCS `uploads` bucket (uniform access, public-access prevention, versioning)                                                                               | ✅ bucket            |
+| 4   | `messaging` | Pub/Sub topic + DLQ + subscription; flag-gated Memorystore Redis                                                                                          | —                    |
+| 5   | `secrets`   | Secret Manager entries (generated + placeholder) + composed `DATABASE_URL`                                                                                | —                    |
+| 6   | `apps`      | 5 Cloud Run services + per-app least-privilege SAs, `migrate` job, flag-gated HTTPS LB + Cloud Armor + monitoring                                         | —                    |
+
+Deploy order: `bootstrap → database → storage → messaging → secrets → apps`.
+Destroy order is the reverse (`database`/`storage` are protected — the command tells you how to unprotect).
+
+---
+
+## Commands
+
+All commands take `--env sandbox|staging|production` (default `sandbox`) and run a preflight
+(auth, billing, project, state bucket, required config) before any apply.
+
+```bash
+pnpm infra:init     --env <env>            # one-time: state bucket + login + stacks + config
+pnpm infra:deploy   --env <env>            # deploy ALL layers in order
+pnpm infra:deploy   database --env <env>   # deploy ONE layer
+pnpm infra:preview  --env <env>            # read-only diff of every layer (free, no apply)
+pnpm infra:destroy  --env <env>            # tear down in reverse order (with confirmation)
+pnpm infra:test:ephemeral                  # apply → smoke-test → destroy a throwaway sandbox stack
+```
+
+> The old multi-cloud profile wizard now lives at `pnpm infra:init:profile`.
+
+---
+
+## Full setup
+
+### 1. Prerequisites (once per machine)
+
+- [`gcloud` CLI](https://cloud.google.com/sdk/docs/install) and
+  [Pulumi CLI](https://www.pulumi.com/docs/install/) installed
+- `gcloud auth application-default login`
+- A GCP project with **billing linked** (the preflight will refuse to deploy otherwise)
+
+### 2. Point an environment at your project
+
+Each environment maps to a **separate GCP project** (isolates billing, IAM, quotas). Edit the
+bootstrap stack config for the env you're deploying:
+
+`infra/gcp/bootstrap/Pulumi.<env>.yaml`
+
+```yaml
+config:
+  gcp:project: "my-sandbox-proj" # ← your project ID
+  gcp:region: "us-central1"
+  starter-gcp-bootstrap:complianceMode: "none" # none | soc2 | hipaa | hipaa+soc2
+  starter-gcp-bootstrap:budgetAmount: "50"
+  # starter-gcp-bootstrap:billingAccountId: "XXXXXX-XXXXXX-XXXXXX"  # uncomment to create a budget
+  # starter-gcp-bootstrap:githubRepo: "your-org/your-repo"          # for CI (see Pipelines)
+```
+
+`pnpm infra:init` propagates `gcp:project` / `gcp:region` and the cross-layer stack references
+to **every** layer, so you normally only edit the bootstrap file.
+
+### 3. Initialize the environment
+
+```bash
+pnpm infra:init --env sandbox
+```
+
+Creates the GCS state bucket, runs `pulumi login gs://…`, and initializes + configures all six
+stacks. Idempotent — safe to re-run.
+
+### 4. Deploy
+
+```bash
+pnpm infra:deploy --env sandbox
+```
+
+Applies the six layers in order behind the preflight gate. To iterate on one layer:
+`pnpm infra:deploy apps --env sandbox`.
+
+### 5. Populate third-party secrets
+
+The `secrets` layer auto-generates `database-url`, `better-auth-secret`, and
+`campaign-unsubscribe-secret`. The following are created **empty** — add a value before the
+apps that read them will start:
+
+```bash
+printf '%s' 'sk_live_…'   | gcloud secrets versions add stripe-secret-key      --data-file=- --project my-sandbox-proj
+printf '%s' 'whsec_…'     | gcloud secrets versions add stripe-webhook-secret  --data-file=- --project my-sandbox-proj
+printf '%s' 're_…'        | gcloud secrets versions add resend-api-key         --data-file=- --project my-sandbox-proj
+printf '%s' 'sk-or-…'     | gcloud secrets versions add openrouter-api-key     --data-file=- --project my-sandbox-proj
+printf '%s' 'https://…'   | gcloud secrets versions add sentry-dsn             --data-file=- --project my-sandbox-proj
+```
+
+Real keys never enter Pulumi state or stack config.
+
+### 6. Verify
+
+```bash
+pnpm infra:preview --env sandbox     # should show "no changes"
+# Cloud Run URLs:
+cd infra/gcp/apps && pulumi stack output --stack sandbox
+```
+
+---
+
+## Environments
+
+| Env          | Typical use     | Cloud SQL                                        | Networking | Compliance | HTTPS LB                 |
+| ------------ | --------------- | ------------------------------------------------ | ---------- | ---------- | ------------------------ |
+| `sandbox`    | dev / throwaway | `db-f1-micro`, public IP                         | none       | `none`     | off (raw Cloud Run URLs) |
+| `staging`    | pre-prod        | `db-custom-2-7680`, private IP                   | VPC        | `none`     | off                      |
+| `production` | live            | `db-custom-2-7680` REGIONAL HA, private IP, PITR | VPC        | `soc2`     | on                       |
+
+Defaults live in each layer's `Pulumi.<env>.yaml` — override per env as needed.
+
+---
+
+## Feature flags
+
+Set in the relevant layer's `Pulumi.<env>.yaml`. Off = the resource is not created.
+
+| Flag               | Layer       | Default                       | Effect                                        |
+| ------------------ | ----------- | ----------------------------- | --------------------------------------------- |
+| `enableRedis`      | messaging   | `false`                       | Memorystore Redis cache                       |
+| `enableHttpsLb`    | apps        | `false` (prod `true`)         | Global HTTPS LB + Cloud Armor + managed certs |
+| `enableMonitoring` | apps        | `false` (staging/prod `true`) | Uptime checks + alert policies                |
+| `complianceMode`   | every layer | `none` (prod `soc2`)          | HIPAA/SOC 2 control bundle (see below)        |
+
+---
+
+## Production: domains, TLS, and the load balancer
+
+DNS stays at **your registrar** (e.g. Namecheap); GCP owns the LB, WAF, and TLS.
+
+1. In `infra/gcp/apps/Pulumi.production.yaml` set `enableHttpsLb: "true"` and
+   `lbDomain: "example.com"`, then `pnpm infra:deploy apps --env production`.
+2. Read the outputs and add records at your registrar:
+
+   ```bash
+   cd infra/gcp/apps
+   pulumi stack output lbIpAddress             --stack production   # → A records
+   pulumi stack output dnsAuthorizationRecords --stack production   # → cert-auth CNAMEs
+   ```
+
+   - A records: `app.`, `api.`, `mcp.`, apex + `www.` → the LB IP
+   - The DNS-authorization CNAMEs so Google-managed certs provision (zero-downtime cutover)
+
+Host routing: `app.` → dashboard, `api.` → public-api, `mcp.` → public-mcp, apex + `www.` → www.
+Workers stay internal (no public ingress).
+
+---
+
+## Compliance mode (HIPAA / SOC 2)
+
+Set `complianceMode` to `soc2`, `hipaa`, or `hipaa+soc2` in **each layer's** `Pulumi.<env>.yaml`
+for that environment (keep them consistent across the env). When enabled it adds: Data Access
+audit logs, an immutable bucket-locked log sink, CMEK on Cloud SQL / GCS / Pub/Sub, org-policy
+constraints, Essential Contacts, Binary Authorization, and Cloud Armor. With `none` (the
+default), none of these resources are created.
+
+```yaml
+# e.g. infra/gcp/bootstrap/Pulumi.production.yaml
+config:
+  starter-gcp-bootstrap:complianceMode: "soc2"
+  starter-gcp-bootstrap:securityContactEmail: "security@example.com" # Essential Contacts
+```
+
+**Out of scope (manual):** signing the Google BAA, the audit + evidence collection, periodic
+access reviews, and keeping PHI out of app logs.
+
+---
+
+## CI/CD pipelines
+
+Two GitHub Actions workflows, both authenticating via Workload Identity Federation (no JSON keys):
+
+- **`infra-deploy.yml`** — manual (`workflow_dispatch`) with `{env, layer}` inputs. Runs
+  `pnpm infra:deploy`. `production` routes through the `production-gcp` GitHub Environment
+  (required reviewers).
+- **`app-release.yml`** — on push to `main` / tags. Builds + pushes all 5 images → runs the
+  `starter-migrate` Cloud Run Job as a gate → deploys each Cloud Run revision `--no-traffic` →
+  smoke-tests the candidate → shifts traffic to 100%. Rollback is a traffic shift to the prior
+  revision.
+- **`deploy-gcp.yml`** — PR-only `pulumi preview` (L3) of all layers with the CrossGuard policy pack.
+
+### One-time CI setup
+
+1. Set `starter-gcp-bootstrap:githubRepo: "your-org/your-repo"` in the bootstrap stack config
+   for each env and redeploy `bootstrap` (this binds the WIF pool to your repo's deploy SA).
+2. Add GitHub **secrets** (Settings → Secrets and variables → Actions):
+
+   | Secret                           | Value                                                                    |
+   | -------------------------------- | ------------------------------------------------------------------------ |
+   | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `cd infra/gcp/bootstrap && pulumi stack output workloadIdentityProvider` |
+   | `GCP_DEPLOY_SERVICE_ACCOUNT`     | `… pulumi stack output deployServiceAccountEmail`                        |
+   | `PULUMI_CONFIG_PASSPHRASE`       | passphrase encrypting stack secrets on the GCS backend                   |
+
+3. Add GitHub **variables**: `GCP_REGION` (e.g. `us-central1`), `GCP_ARTIFACT_REGISTRY`
+   (`… pulumi stack output artifactRegistryRepo`).
+4. Create the **`production-gcp`** environment (Settings → Environments) and add required reviewers.
+
+---
+
+## Teardown
+
+```bash
+pnpm infra:destroy --env sandbox
+```
+
+Destroys in reverse order. `database` and `storage` are protected — the command prints the
+`pulumi state unprotect` step to run first. For a hard reset, delete the GCP project.
+
+---
+
+## Billing alerts
+
+The `bootstrap` layer creates a budget when you set `billingAccountId` + `budgetAmount` (alerts
+at 20 % / 50 % / 100 %). To add manual alerts instead:
+
+```bash
 gcloud billing accounts list
-
-# Create budget with alert thresholds at 20 %, 50 %, and 100 % of $50
 gcloud billing budgets create \
   --billing-account=BILLING_ACCOUNT_ID \
   --display-name="starter-gcp-budget" \
   --budget-amount=50USD \
-  --threshold-rule=percent=0.2 \
-  --threshold-rule=percent=0.5 \
-  --threshold-rule=percent=1.0
+  --threshold-rule=percent=0.2 --threshold-rule=percent=0.5 --threshold-rule=percent=1.0
 ```
-
-Repeat with `--budget-amount=10USD` and `--budget-amount=25USD` for earlier warnings, or use the
-[GCP Billing console](https://console.cloud.google.com/billing) for a UI-guided setup.
 
 Docs: <https://cloud.google.com/billing/docs/how-to/budgets>
 
----
-
 ## Startup credits
 
-See [infra/README.md](../README.md) — the Google for Startups and GCP free tier sections apply here.
+See [infra/README.md](../README.md) — the Google for Startups Cloud Program and GCP free-tier
+sections apply here.
+
+## Design reference
+
+[`docs/superpowers/specs/2026-06-06-gcp-comprehensive-iac-design.md`](../../docs/superpowers/specs/2026-06-06-gcp-comprehensive-iac-design.md)

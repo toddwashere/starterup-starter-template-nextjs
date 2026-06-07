@@ -7,9 +7,7 @@ const gcpConfig = new pulumi.Config("gcp");
 const project = gcpConfig.require("project");
 const region = gcpConfig.require("region");
 
-const compliance = resolveCompliance(
-  (config.get("complianceMode") as ComplianceMode) ?? "none",
-);
+const compliance = resolveCompliance((config.get("complianceMode") as ComplianceMode) ?? "none");
 
 // --- Read foundational outputs from the bootstrap layer. ----------------------
 const bootstrapStackRef = config.require("bootstrapStackRef");
@@ -18,9 +16,7 @@ const bootstrap = new pulumi.StackReference(bootstrapStackRef);
 // networkId is "" when bootstrap provisioned no private network (e.g. sandbox).
 const networkId = bootstrap.getOutput("networkId").apply((v) => (v as string) ?? "");
 // kmsCryptoKeyId is "" when bootstrap created no key (CMEK disabled).
-const kmsCryptoKeyId = bootstrap
-  .getOutput("kmsCryptoKeyId")
-  .apply((v) => (v as string) ?? "");
+const kmsCryptoKeyId = bootstrap.getOutput("kmsCryptoKeyId").apply((v) => (v as string) ?? "");
 
 // --- Feature flag + per-stack Redis tuning. -----------------------------------
 const enableRedis = config.getBoolean("enableRedis") ?? false;
@@ -46,16 +42,23 @@ if (compliance.cmek) {
 }
 
 // --- Pub/Sub (always created — queue backend for the GCP profile). ------------
-// Mirrors infra/gcp/core/index.ts exactly.
-const jobsTopic = new gcp.pubsub.Topic("jobs", {
-  name: pulumi.interpolate`jobs-${pulumi.getStack()}`,
-  kmsKeyName: topicKmsKeyName,
-}, { dependsOn: pubsubKmsDeps });
+const jobsTopic = new gcp.pubsub.Topic(
+  "jobs",
+  {
+    name: pulumi.interpolate`jobs-${pulumi.getStack()}`,
+    kmsKeyName: topicKmsKeyName,
+  },
+  { dependsOn: pubsubKmsDeps },
+);
 
-const dlqTopic = new gcp.pubsub.Topic("jobs-dlq", {
-  name: pulumi.interpolate`jobs-dlq-${pulumi.getStack()}`,
-  kmsKeyName: topicKmsKeyName,
-}, { dependsOn: pubsubKmsDeps });
+const dlqTopic = new gcp.pubsub.Topic(
+  "jobs-dlq",
+  {
+    name: pulumi.interpolate`jobs-dlq-${pulumi.getStack()}`,
+    kmsKeyName: topicKmsKeyName,
+  },
+  { dependsOn: pubsubKmsDeps },
+);
 
 const jobsSubscription = new gcp.pubsub.Subscription("jobs-sub", {
   name: pulumi.interpolate`jobs-sub-${pulumi.getStack()}`,
@@ -88,9 +91,7 @@ const redis = enableRedis
       // GCP uses default (DIRECT_PEERING) connectivity. networkId flows through
       // resource INPUTS (not a resource constructed inside .apply).
       authorizedNetwork: networkId.apply((net) => net || ""),
-      connectMode: networkId.apply((net) =>
-        net ? "PRIVATE_SERVICE_ACCESS" : "DIRECT_PEERING",
-      ),
+      connectMode: networkId.apply((net) => (net ? "PRIVATE_SERVICE_ACCESS" : "DIRECT_PEERING")),
     })
   : undefined;
 
