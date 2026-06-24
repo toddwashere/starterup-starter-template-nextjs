@@ -146,11 +146,21 @@ The `secrets` layer auto-generates `database-url`, `better-auth-secret`, and
 apps that read them will start:
 
 ```bash
+# See what's missing
+pnpm infra:secrets:status --env sandbox
+
+# Set interactively (paste value, Ctrl-D)
+pnpm infra:secrets:set --env sandbox stripe-secret-key
+
+# Or from a local env var (never commit the value)
+pnpm infra:secrets:set --env sandbox stripe-secret-key --from-env STRIPE_SECRET_KEY
+```
+
+`--strict` on status exits non-zero when any placeholder is still empty (useful in CI deploy
+pipelines). Raw `gcloud` equivalents:
+
+```bash
 printf '%s' 'sk_live_…'   | gcloud secrets versions add stripe-secret-key      --data-file=- --project my-sandbox-proj
-printf '%s' 'whsec_…'     | gcloud secrets versions add stripe-webhook-secret  --data-file=- --project my-sandbox-proj
-printf '%s' 're_…'        | gcloud secrets versions add resend-api-key         --data-file=- --project my-sandbox-proj
-printf '%s' 'sk-or-…'     | gcloud secrets versions add openrouter-api-key     --data-file=- --project my-sandbox-proj
-printf '%s' 'https://…'   | gcloud secrets versions add sentry-dsn             --data-file=- --project my-sandbox-proj
 ```
 
 Real keys never enter Pulumi state or stack config.

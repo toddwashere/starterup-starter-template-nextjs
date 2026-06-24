@@ -198,9 +198,9 @@ function runConfigure(env: Env): void {
 }
 
 function printSecretReminder(): void {
-  console.log("\n▶ Placeholder secrets (populate when ready — apps may stay unhealthy until set):");
+  console.log("\n▶ Placeholder secrets — check status: pnpm infra:secrets:status --env <env>");
   for (const s of placeholderSecrets()) {
-    console.log(`  gcloud secrets versions add ${s.id} --data-file=- --project <project>`);
+    console.log(`  pnpm infra:secrets:set --env <env> ${s.id}`);
   }
 }
 

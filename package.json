@@ -21,6 +21,8 @@
     "infra:init:profile": "tsx scripts/infra-init.ts",
     "infra:init": "tsx infra/scripts/infra.ts init",
     "infra:configure": "tsx infra/scripts/configure.ts",
+    "infra:secrets:status": "tsx infra/scripts/secrets.ts status",
+    "infra:secrets:set": "tsx infra/scripts/secrets.ts set",
     "infra:deploy": "tsx infra/scripts/infra.ts deploy",
     "infra:preview": "tsx infra/scripts/infra.ts preview",
     "infra:destroy": "tsx infra/scripts/infra.ts destroy",
