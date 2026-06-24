@@ -1,4 +1,5 @@
 import { QUEUE_PROFILES, type ProfileName } from "./queue-profiles";
+import { buildPublicUrlEnv } from "./public-urls";
 
 export interface BuildEnvOptions {
   /** Base domain for the production deploy, e.g., "example.com". */
@@ -33,15 +34,7 @@ function publicUrls(
   if (!baseDomain) {
     throw new Error(`baseDomain is required for profile "${profile}"`);
   }
-  const subdomain = (sub: string) => `https://${sub}.${baseDomain}`;
-  return {
-    NEXT_PUBLIC_DASHBOARD_URL: subdomain("app"),
-    NEXT_PUBLIC_WWW_URL: `https://${baseDomain}`,
-    NEXT_PUBLIC_API_URL: subdomain("api"),
-    NEXT_PUBLIC_MCP_URL: subdomain("mcp"),
-    NEXT_PUBLIC_BETTER_AUTH_URL: subdomain("app"),
-    BETTER_AUTH_URL: subdomain("app"),
-  };
+  return buildPublicUrlEnv(baseDomain);
 }
 
 function queueEnv(

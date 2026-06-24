@@ -13,6 +13,11 @@ import {
 export const commonConfig = {
   schemaVersion: 1,
   gcp: { region: "us-central1" },
+  domains: {
+    base: "example.com",
+    stagingPrefix: "staging",
+    sandboxPrefix: "sandbox",
+  },
   database: { version: "POSTGRES_16" },
   bootstrap: {
     vpcCidr: "10.10.0.0/24",
@@ -34,6 +39,11 @@ export const commonConfig = {
 const envBase = defineGcpEnvConfig({
   schemaVersion: 1,
   gcp: { project: "", region: "us-central1" },
+  domains: {
+    base: "",
+    stagingPrefix: "staging",
+    sandboxPrefix: "sandbox",
+  },
   complianceMode: "none",
   bootstrap: {
     privateNetwork: false,
@@ -61,7 +71,6 @@ const envBase = defineGcpEnvConfig({
     imageTag: "latest",
     enableHttpsLb: false,
     enableMonitoring: false,
-    lbDomain: "",
     alertEmail: "",
     vpcServiceControls: false,
     accessPolicyId: "",

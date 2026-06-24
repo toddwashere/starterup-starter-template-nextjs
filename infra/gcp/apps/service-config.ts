@@ -9,6 +9,8 @@ export interface EnvContext {
   redisHost: string;
   redisPort: number;
   uploadsBucket: string;
+  /** Public app URLs (from centralized domain config via Pulumi lbDomain). */
+  publicUrls?: Record<string, string>;
 }
 
 /** A Cloud Run env var: either a literal value or a Secret Manager reference id. */
@@ -47,6 +49,12 @@ export function buildAppEnv(app: AppDescriptor, ctx: EnvContext): AppEnvVar[] {
 
   if (app.needsStorage && ctx.uploadsBucket) {
     env.push({ name: "GCS_UPLOADS_BUCKET", value: ctx.uploadsBucket });
+  }
+
+  if (ctx.publicUrls) {
+    for (const [name, value] of Object.entries(ctx.publicUrls)) {
+      env.push({ name, value });
+    }
   }
 
   return env;

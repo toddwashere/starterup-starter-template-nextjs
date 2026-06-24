@@ -47,6 +47,18 @@ describe("buildAppEnv", () => {
     expect(envNames("www")).not.toContain("GCS_UPLOADS_BUCKET");
     expect(envNames("public-mcp")).not.toContain("GCS_UPLOADS_BUCKET");
   });
+
+  it("includes public URL env vars when publicUrls is set", () => {
+    const names = envNames("dashboard", {
+      ...ctx,
+      publicUrls: {
+        NEXT_PUBLIC_DASHBOARD_URL: "https://app.staging.example.com",
+        BETTER_AUTH_URL: "https://app.staging.example.com",
+      },
+    });
+    expect(names).toContain("NEXT_PUBLIC_DASHBOARD_URL");
+    expect(names).toContain("BETTER_AUTH_URL");
+  });
 });
 
 describe("appRoles", () => {

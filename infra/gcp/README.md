@@ -33,7 +33,7 @@ Env profiles live at `infra/gcp/config.<env>.ts` (alongside this README) — Typ
 
 | File | Role |
 | ---- | ---- |
-| `config.common.ts` | Cheap `envBaseConfig` + structural invariants (region, Postgres version, VPC CIDR) |
+| `config.common.ts` | Cheap `envBaseConfig`, structural invariants, and **`domains.base`** + env prefixes |
 | `config.production.ts` | All cost-bearing prod settings (private network, DB tier/HA/PITR, LB, monitoring, SOC2) |
 | `config.staging.ts` | Production + staging cost cuts (ZONAL DB, no PITR/LB/SOC2) |
 | `config.sandbox.ts` | `envBaseConfig` + project and budget only |
@@ -194,8 +194,20 @@ Set in the relevant layer's `Pulumi.<env>.yaml`. Off = the resource is not creat
 
 DNS stays at **your registrar** (e.g. Namecheap); GCP owns the LB, WAF, and TLS.
 
-1. In `infra/gcp/apps/Pulumi.production.yaml` set `enableHttpsLb: "true"` and
-   `lbDomain: "example.com"`, then `pnpm infra:deploy apps --env production`.
+Set your apex domain once in `infra/gcp/config.common.ts`:
+
+```ts
+domains: {
+  base: "example.com",
+  stagingPrefix: "staging",  // → staging.example.com, app.staging.example.com, …
+  sandboxPrefix: "sandbox",  // → sandbox.example.com (Cloud Run public URL env vars)
+},
+```
+
+`pnpm infra:configure` fans out per-env apex hostnames to `starter-gcp-apps:lbDomain` and
+Cloud Run public URL env vars (`NEXT_PUBLIC_*`, `BETTER_AUTH_URL`).
+
+1. Deploy production apps: `pnpm infra:deploy apps --env production` (requires `enableHttpsLb: true`).
 2. Read the outputs and add records at your registrar:
 
    ```bash
@@ -204,11 +216,11 @@ DNS stays at **your registrar** (e.g. Namecheap); GCP owns the LB, WAF, and TLS.
    pulumi stack output dnsAuthorizationRecords --stack production   # → cert-auth CNAMEs
    ```
 
-   - A records: `app.`, `api.`, `mcp.`, apex + `www.` → the LB IP
+   - A records: `app.`, `api.`, `mcp.`, apex + `www.` → the LB IP (production apex `example.com`)
    - The DNS-authorization CNAMEs so Google-managed certs provision (zero-downtime cutover)
 
 Host routing: `app.` → dashboard, `api.` → public-api, `mcp.` → public-mcp, apex + `www.` → www.
-Workers stay internal (no public ingress).
+Workers stay internal (no public ingress). Staging/sandbox use prefixed apex domains when you add DNS.
 
 ---
 

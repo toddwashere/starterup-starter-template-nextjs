@@ -1,4 +1,8 @@
 import type { ComplianceMode } from "./compliance";
+import { resolveEnvApexDomain, type DomainsConfig } from "./public-urls";
+
+export type { DomainsConfig } from "./public-urls";
+export { resolveEnvApexDomain } from "./public-urls";
 
 export type GcpEnvName = "sandbox" | "staging" | "production";
 
@@ -56,8 +60,6 @@ export interface AppsConfig {
   enableHttpsLb: boolean;
   /** Enable Cloud Monitoring dashboards and alerts. */
   enableMonitoring: boolean;
-  /** Public domain for the HTTPS LB. DNS stays at your registrar; point A records to LB IP. */
-  lbDomain: string;
   /** Email address for monitoring alert notifications. */
   alertEmail: string;
   /** Enable VPC Service Controls perimeter. */
@@ -77,6 +79,8 @@ export interface GcpEnvConfig {
   /** Config schema version — must match `SUPPORTED_SCHEMA_VERSION`. */
   schemaVersion: number;
   gcp: GcpProjectConfig;
+  /** Public hostnames — `domains.base` plus per-env prefixes; fanned out to LB + app env. */
+  domains: DomainsConfig;
   /** Compliance bundle: `none`, `hipaa`, `soc2`, or `hipaa+soc2`. Propagated to all Pulumi layers. */
   complianceMode: ComplianceMode;
   bootstrap: BootstrapConfig;
@@ -171,12 +175,18 @@ export function validateEnvConfig(config: GcpEnvConfig, env: GcpEnvName): Valida
     critical.push("Missing required gcp.region.");
   }
 
+  if (!config.domains.base?.trim()) {
+    critical.push("Missing required domains.base.");
+  }
+
+  const apexDomain = resolveEnvApexDomain(config.domains, env);
+
   if (!COMPLIANCE_MODES.includes(config.complianceMode)) {
     critical.push(`Invalid complianceMode "${config.complianceMode}".`);
   }
 
-  if (config.apps.enableHttpsLb && !config.apps.lbDomain?.trim()) {
-    critical.push("apps.enableHttpsLb is true but apps.lbDomain is empty.");
+  if (config.apps.enableHttpsLb && !apexDomain) {
+    critical.push("apps.enableHttpsLb is true but domains.base is empty.");
   }
 
   if (config.apps.enableMonitoring && !config.apps.alertEmail?.trim()) {
@@ -276,7 +286,7 @@ export function fanOutLayerConfig(
       out[`${p}:bootstrapStackRef`] = stackRef("bootstrap", env);
       out[`${p}:databaseStackRef`] = stackRef("database", env);
       break;
-    case "apps":
+    case "apps": {
       out[`${p}:bootstrapStackRef`] = stackRef("bootstrap", env);
       out[`${p}:databaseStackRef`] = stackRef("database", env);
       out[`${p}:storageStackRef`] = stackRef("storage", env);
@@ -286,13 +296,15 @@ export function fanOutLayerConfig(
       out[`${p}:enableHttpsLb`] = String(config.apps.enableHttpsLb);
       out[`${p}:enableMonitoring`] = String(config.apps.enableMonitoring);
       out[`${p}:complianceMode`] = config.complianceMode;
-      setIfNonEmpty(out, `${p}:lbDomain`, config.apps.lbDomain);
+      const apex = resolveEnvApexDomain(config.domains, env);
+      setIfNonEmpty(out, `${p}:lbDomain`, apex);
       setIfNonEmpty(out, `${p}:alertEmail`, config.apps.alertEmail);
       if (config.apps.vpcServiceControls) {
         out[`${p}:vpcServiceControls`] = "true";
       }
       setIfNonEmpty(out, `${p}:accessPolicyId`, config.apps.accessPolicyId);
       break;
+    }
   }
 
   return out;

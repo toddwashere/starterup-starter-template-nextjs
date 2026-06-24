@@ -12,6 +12,7 @@ import {
 const SANDBOX_FIXTURE: GcpEnvConfig = defineGcpEnvConfig({
   schemaVersion: 1,
   gcp: { project: "default-proj", region: "us-central1" },
+  domains: { base: "example.com", stagingPrefix: "staging", sandboxPrefix: "sandbox" },
   complianceMode: "none",
   bootstrap: {
     privateNetwork: false,
@@ -37,7 +38,6 @@ const SANDBOX_FIXTURE: GcpEnvConfig = defineGcpEnvConfig({
     imageTag: "latest",
     enableHttpsLb: false,
     enableMonitoring: false,
-    lbDomain: "",
     alertEmail: "",
     vpcServiceControls: false,
     accessPolicyId: "",
@@ -110,17 +110,18 @@ describe("validateEnvConfig", () => {
     expect(result.critical.some((e) => e.includes("gcp.project"))).toBe(true);
   });
 
-  it("fails critical when enableHttpsLb is true without lbDomain", () => {
+  it("fails critical when enableHttpsLb is true without domains.base", () => {
     const cfg = mergeEnvConfig(
       {
         gcp: { project: "acme", region: "us-central1" },
-        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true, lbDomain: "" },
+        domains: { base: "", stagingPrefix: "staging", sandboxPrefix: "sandbox" },
+        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true },
       },
       SANDBOX_FIXTURE,
     );
     const result = validateEnvConfig(cfg, "production");
     expect(result.ok).toBe(false);
-    expect(result.critical.some((e) => e.includes("lbDomain"))).toBe(true);
+    expect(result.critical.some((e) => e.includes("domains.base"))).toBe(true);
   });
 
   it("warns but passes when githubRepo is empty", () => {
@@ -144,7 +145,7 @@ describe("validateEnvConfig", () => {
     const cfg = mergeEnvConfig(
       {
         gcp: { project: "acme", region: "us-central1" },
-        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true, lbDomain: "example.com" },
+        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true },
       },
       SANDBOX_FIXTURE,
     );
@@ -190,6 +191,17 @@ describe("fanOutLayerConfig", () => {
     const out = fanOutLayerConfig("bootstrap", "sandbox", cfg);
     expect(out["starter-gcp-bootstrap:billingAccountId"]).toBeUndefined();
     expect(out["starter-gcp-bootstrap:githubRepo"]).toBeUndefined();
+  });
+
+  it("fans out env-specific apex domains to apps lbDomain", () => {
+    const outProd = fanOutLayerConfig("apps", "production", cfg);
+    expect(outProd["starter-gcp-apps:lbDomain"]).toBe("example.com");
+
+    const outStaging = fanOutLayerConfig("apps", "staging", cfg);
+    expect(outStaging["starter-gcp-apps:lbDomain"]).toBe("staging.example.com");
+
+    const outSandbox = fanOutLayerConfig("apps", "sandbox", cfg);
+    expect(outSandbox["starter-gcp-apps:lbDomain"]).toBe("sandbox.example.com");
   });
 });
 

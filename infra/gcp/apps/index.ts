@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as gcp from "@pulumi/gcp";
+import { buildPublicUrlEnv, resolveLbHosts } from "../../shared/public-urls";
 import { APPS } from "../../shared/apps.manifest";
 import { buildAppEnv, appRoles, appSecretAccessorIds } from "./service-config";
 import { resolveCompliance, type ComplianceMode } from "../../shared/compliance";
@@ -41,6 +42,8 @@ const imageRegistry = config.get("imageRegistry")
   ? pulumi.output(config.require("imageRegistry"))
   : artifactRegistryRepo;
 const imageTag = config.get("imageTag") ?? "latest";
+const apexDomain = config.get("lbDomain") ?? "";
+const publicUrlEnv = apexDomain ? buildPublicUrlEnv(apexDomain) : {};
 
 const services: Record<string, gcp.cloudrunv2.Service> = {};
 const serviceAccounts: Record<string, gcp.serviceaccount.Account> = {};
@@ -83,6 +86,7 @@ for (const app of APPS) {
         redisHost: rHost,
         redisPort: rPort,
         uploadsBucket: bucket,
+        publicUrls: publicUrlEnv,
       });
       return descriptors;
     });
@@ -212,13 +216,7 @@ let dnsAuthorizationRecordsOut: pulumi.Output<unknown> = pulumi.output([]);
 
 if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
   const baseDomain = config.require("lbDomain");
-  // host -> app routing
-  const hosts: { host: string; app: string }[] = [
-    { host: `app.${baseDomain}`, app: "dashboard" },
-    { host: `api.${baseDomain}`, app: "public-api" },
-    { host: `mcp.${baseDomain}`, app: "public-mcp" },
-    { host: baseDomain, app: "www" },
-  ];
+  const hosts = resolveLbHosts(baseDomain);
 
   // P6 owns the LB + base Cloud Armor policy (built only when enableHttpsLb).
   // P8 adds rate-limit rules + adaptive protection when compliance.cloudArmor.

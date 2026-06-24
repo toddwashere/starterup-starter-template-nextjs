@@ -21,7 +21,6 @@ const stagingOverrides = {
   apps: {
     imageTag: "latest",
     enableHttpsLb: false,
-    lbDomain: "",
   },
 } satisfies DeepPartialGcpEnvConfig;
 

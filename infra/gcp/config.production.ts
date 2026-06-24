@@ -32,7 +32,6 @@ const productionOverrides = {
     imageTag: "v0.1.0",
     enableHttpsLb: true,
     enableMonitoring: true,
-    lbDomain: "example.com",
     alertEmail: "alerts@example.com",
   },
 } satisfies DeepPartialGcpEnvConfig;
