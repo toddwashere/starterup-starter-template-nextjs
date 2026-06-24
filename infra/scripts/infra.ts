@@ -9,8 +9,11 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 
-import { runPreflight, type PreflightInput } from "../shared/preflight";
+import { validateEnvConfig, type GcpEnvConfig } from "../shared/gcp-env-config";
+import { cloudRunImageRefs, missingImageRefs } from "../shared/image-preflight";
+import { runPreflight, type EnvConfigCheck, type PreflightInput } from "../shared/preflight";
 import { placeholderSecrets } from "../shared/secret-catalog";
+import { loadEnvConfig } from "./load-env-config";
 import {
   LAYER_DEPENDENCIES,
   PROTECTED_LAYERS,
@@ -103,7 +106,17 @@ function ensureStateBackend(projectId: string): string {
 
 /** Impure: gathers facts via gcloud and reads layer config. Decision logic stays
  *  in the pure runPreflight. */
-function gatherPreflightFacts(env: Env, projectId: string, bucket: string): PreflightInput {
+function envConfigCheck(config: GcpEnvConfig, env: Env): EnvConfigCheck {
+  const result = validateEnvConfig(config, env);
+  return { critical: result.critical, warnings: result.warnings };
+}
+
+function gatherPreflightFacts(
+  env: Env,
+  projectId: string,
+  bucket: string,
+  envConfig?: EnvConfigCheck,
+): PreflightInput {
   const authenticated = ok(() =>
     sh("gcloud", ["auth", "application-default", "print-access-token"], { capture: true }),
   );
@@ -120,31 +133,72 @@ function gatherPreflightFacts(env: Env, projectId: string, bucket: string): Pref
     sh("gcloud", ["storage", "ls", `gs://${bucket}`], { capture: true }),
   );
 
-  const file = path.join(layerDir("bootstrap"), `Pulumi.${env}.yaml`);
-  const config: Record<string, string | undefined> = {
-    "gcp:project": parseProjectIdFromConfig(readFileSync(file, "utf8")),
-    "gcp:region": REGION,
-  };
-
   return {
     authenticated,
     billingLinked,
     projectExists,
     stateBucketReachable,
-    config,
+    config: {
+      "gcp:project": projectId,
+      "gcp:region": REGION,
+    },
     requiredKeys: [...REQUIRED_CONFIG_KEYS],
+    envConfig,
   };
 }
 
-function preflightOrAbort(env: Env, projectId: string, bucket: string): void {
+function preflightOrAbort(env: Env, projectId: string, bucket: string, validation: EnvConfigCheck): void {
   console.log("\n▶ Preflight …");
-  const result = runPreflight(gatherPreflightFacts(env, projectId, bucket));
+  const result = runPreflight(gatherPreflightFacts(env, projectId, bucket, validation));
+  for (const w of result.warnings) console.warn(`⚠ ${w}`);
   if (!result.ok) {
     console.error("✖ Preflight failed:");
     for (const err of result.errors) console.error(`  - ${err}`);
     process.exit(1);
   }
   console.log("✓ Preflight passed");
+}
+
+function getArtifactRegistry(env: Env): string | undefined {
+  if (!ok(() => pulumi(["stack", "select", env, "--non-interactive"], "bootstrap"))) {
+    return undefined;
+  }
+  try {
+    return sh("pulumi", ["stack", "output", "artifactRegistryRepo", "--stack", env], {
+      cwd: layerDir("bootstrap"),
+      capture: true,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function dockerImageExists(image: string): boolean {
+  return ok(() =>
+    sh("gcloud", ["artifacts", "docker", "images", "describe", image, "--quiet"], { capture: true }),
+  );
+}
+
+function imagePreflightOrAbort(env: Env, imageTag: string): void {
+  console.log("\n▶ Image preflight …");
+  const registry = getArtifactRegistry(env);
+  if (!registry) {
+    console.warn("⚠ Skipping image preflight — bootstrap stack not deployed or Artifact Registry output missing.");
+    return;
+  }
+  const missing = missingImageRefs(cloudRunImageRefs(registry, imageTag), dockerImageExists);
+  if (missing.length === 0) {
+    console.log("✓ Image preflight passed");
+    return;
+  }
+  console.error("✖ Image preflight failed — missing container images:");
+  for (const ref of missing) console.error(`  - ${ref.app}: ${ref.image}`);
+  console.error("  Push images first (CI release workflow or docker push), then redeploy apps.");
+  process.exit(1);
+}
+
+function deployIncludesApps(layer: Layer | undefined): boolean {
+  return layer === undefined || layer === "apps";
 }
 
 // --- per-layer pulumi actions -------------------------------------------------
@@ -197,6 +251,12 @@ function runConfigure(env: Env): void {
   sh("pnpm", ["infra:configure", "--env", env]);
 }
 
+async function prepareEnv(env: Env): Promise<{ projectId: string; envConfig: GcpEnvConfig }> {
+  runConfigure(env);
+  const envConfig = await loadEnvConfig(env);
+  return { projectId: envConfig.gcp.project, envConfig };
+}
+
 function printSecretReminder(): void {
   console.log("\n▶ Placeholder secrets — check status: pnpm infra:secrets:status --env <env>");
   for (const s of placeholderSecrets()) {
@@ -206,19 +266,26 @@ function printSecretReminder(): void {
 
 // --- commands -----------------------------------------------------------------
 
-function cmdDeploy(layer: Layer | undefined, env: Env): void {
-  const projectId = getProjectId(env);
+async function cmdDeploy(layer: Layer | undefined, env: Env, skipSmoke: boolean): Promise<void> {
+  const { projectId, envConfig } = await prepareEnv(env);
+  const validation = envConfigCheck(envConfig, env);
   const bucket = ensureStateBackend(projectId);
-  preflightOrAbort(env, projectId, bucket);
+  preflightOrAbort(env, projectId, bucket, validation);
   const layers = layer ? [layer] : deployOrder();
-  for (const l of layers) deployLayer(l, env);
+  for (const l of layers) {
+    if (l === "apps") imagePreflightOrAbort(env, envConfig.apps.imageTag);
+    deployLayer(l, env);
+  }
+  if (!skipSmoke && deployIncludesApps(layer)) smokeTest(env);
   printSecretReminder();
   console.log("\n✓ Deploy complete.");
 }
 
-function cmdPreview(layer: Layer | undefined, env: Env): void {
-  const projectId = getProjectId(env);
-  ensureStateBackend(projectId);
+async function cmdPreview(layer: Layer | undefined, env: Env): Promise<void> {
+  const { projectId, envConfig } = await prepareEnv(env);
+  const validation = envConfigCheck(envConfig, env);
+  const bucket = ensureStateBackend(projectId);
+  preflightOrAbort(env, projectId, bucket, validation);
   const layers = layer ? [layer] : deployOrder();
   for (const l of layers) previewLayer(l, env);
   console.log("\n✓ Preview complete (no changes applied).");
@@ -250,6 +317,7 @@ async function cmdDestroy(layer: Layer | undefined, env: Env): Promise<void> {
  */
 async function cmdEphemeral(): Promise<void> {
   const env: Env = "sandbox";
+  runConfigure(env);
   const projectId = getProjectId(env);
   ensureStateBackend(projectId);
   const stack = ephemeralStackName();
@@ -299,13 +367,13 @@ function cmdInit(env: Env): void {
 // --- entrypoint ---------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { command, layer, env } = parseArgs(process.argv.slice(2));
+  const { command, layer, env, skipSmoke } = parseArgs(process.argv.slice(2));
   switch (command) {
     case "deploy":
-      cmdDeploy(layer, env);
+      await cmdDeploy(layer, env, skipSmoke);
       break;
     case "preview":
-      cmdPreview(layer, env);
+      await cmdPreview(layer, env);
       break;
     case "destroy":
       await cmdDestroy(layer, env);

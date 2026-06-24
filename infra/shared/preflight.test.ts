@@ -12,7 +12,7 @@ const ok: PreflightInput = {
 
 describe("runPreflight", () => {
   it("passes when all preconditions hold", () => {
-    expect(runPreflight(ok)).toEqual({ ok: true, errors: [] });
+    expect(runPreflight(ok)).toEqual({ ok: true, errors: [], warnings: [] });
   });
 
   it("fails on missing auth", () => {
@@ -42,5 +42,18 @@ describe("runPreflight", () => {
   it("aggregates multiple errors", () => {
     const r = runPreflight({ ...ok, authenticated: false, billingLinked: false });
     expect(r.errors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("fails on env config critical issues and surfaces warnings", () => {
+    const r = runPreflight({
+      ...ok,
+      envConfig: {
+        critical: ["Missing required domains.base."],
+        warnings: ["bootstrap.githubRepo is empty"],
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes("domains.base"))).toBe(true);
+    expect(r.warnings).toContain("bootstrap.githubRepo is empty");
   });
 });

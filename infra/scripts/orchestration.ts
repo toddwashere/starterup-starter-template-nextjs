@@ -91,15 +91,17 @@ export interface ParsedArgs {
   command: string;
   layer?: Layer;
   env: Env;
+  skipSmoke: boolean;
 }
 
 /**
  * Parse the orchestrator argv (already sliced past node + script path).
- * Shape: `<command> [layer] [--env <env>|--env=<env>] [other flags ignored]`.
+ * Shape: `<command> [layer] [--env <env>|--env=<env>] [--skip-smoke] [other flags ignored]`.
  */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
   let env = "sandbox";
+  let skipSmoke = false;
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
@@ -109,6 +111,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     if (token.startsWith("--env=")) {
       env = token.slice("--env=".length);
+      continue;
+    }
+    if (token === "--skip-smoke") {
+      skipSmoke = true;
       continue;
     }
     if (token.startsWith("-")) {
@@ -133,5 +139,5 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     layer = layerArg;
   }
 
-  return { command, layer, env };
+  return { command, layer, env, skipSmoke };
 }

@@ -70,16 +70,22 @@ Destroy order is the reverse (`database`/`storage` are protected — the command
 
 ## Commands
 
-All commands take `--env sandbox|staging|production` (default `sandbox`) and run a preflight
-(auth, billing, project, state bucket, required config) before any apply.
+All commands take `--env sandbox|staging|production` (default `sandbox`). **Deploy** and **preview**
+run `infra:configure` first, then a preflight gate (GCP auth/billing/project, state bucket,
+required Pulumi config, and TypeScript env validation). **Deploy** also checks Artifact Registry
+images before the apps layer and smoke-tests `GET /api/health` on the dashboard URL afterward
+(use `--skip-smoke` to skip the health check).
 
 ```bash
-pnpm infra:init     --env <env>            # one-time: state bucket + login + stacks + config
-pnpm infra:deploy   --env <env>            # deploy ALL layers in order
-pnpm infra:deploy   database --env <env>   # deploy ONE layer
-pnpm infra:preview  --env <env>            # read-only diff of every layer (free, no apply)
+pnpm infra:init     --env <env>            # one-time: configure + state bucket + login + stacks
+pnpm infra:deploy   --env <env>            # configure → preflight → deploy ALL layers
+pnpm infra:deploy   database --env <env>   # deploy ONE layer (no smoke test)
+pnpm infra:preview  --env <env>            # configure → preflight → read-only diff (no apply)
 pnpm infra:destroy  --env <env>            # tear down in reverse order (with confirmation)
 pnpm infra:test:ephemeral                  # apply → smoke-test → destroy a throwaway sandbox stack
+
+# Inspect merged env config without writing Pulumi YAML
+pnpm infra:configure --env <env> --print-resolved
 ```
 
 > The old multi-cloud profile wizard now lives at `pnpm infra:init:profile`.

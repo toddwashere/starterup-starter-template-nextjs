@@ -1,3 +1,8 @@
+export interface EnvConfigCheck {
+  critical: string[];
+  warnings: string[];
+}
+
 export interface PreflightInput {
   authenticated: boolean;
   billingLinked: boolean;
@@ -5,15 +10,20 @@ export interface PreflightInput {
   stateBucketReachable: boolean;
   config: Record<string, string | undefined>;
   requiredKeys: readonly string[];
+  /** From validateEnvConfig — critical issues block deploy. */
+  envConfig?: EnvConfigCheck;
 }
 
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
+  warnings: string[];
 }
 
 export function runPreflight(input: PreflightInput): PreflightResult {
   const errors: string[] = [];
+  const warnings: string[] = [];
+
   if (!input.authenticated) {
     errors.push("Not authenticated to GCP. Run `gcloud auth application-default login`.");
   }
@@ -31,5 +41,13 @@ export function runPreflight(input: PreflightInput): PreflightResult {
       errors.push(`Missing required Pulumi config key: ${key}`);
     }
   }
-  return { ok: errors.length === 0, errors };
+
+  if (input.envConfig) {
+    for (const issue of input.envConfig.critical) {
+      errors.push(`Env config: ${issue}`);
+    }
+    warnings.push(...input.envConfig.warnings);
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
 }

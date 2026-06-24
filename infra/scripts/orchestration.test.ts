@@ -48,7 +48,12 @@ describe("layer ordering", () => {
 
 describe("parseArgs", () => {
   it("defaults env to sandbox", () => {
-    expect(parseArgs(["deploy"])).toEqual({ command: "deploy", layer: undefined, env: "sandbox" });
+    expect(parseArgs(["deploy"])).toEqual({
+      command: "deploy",
+      layer: undefined,
+      env: "sandbox",
+      skipSmoke: false,
+    });
   });
 
   it("parses a layer positional and --env flag", () => {
@@ -56,6 +61,7 @@ describe("parseArgs", () => {
       command: "deploy",
       layer: "database",
       env: "staging",
+      skipSmoke: false,
     });
   });
 
@@ -68,7 +74,12 @@ describe("parseArgs", () => {
       command: "destroy",
       layer: undefined,
       env: "sandbox",
+      skipSmoke: false,
     });
+  });
+
+  it("parses --skip-smoke", () => {
+    expect(parseArgs(["deploy", "--env", "sandbox", "--skip-smoke"]).skipSmoke).toBe(true);
   });
 
   it("rejects an invalid env", () => {
