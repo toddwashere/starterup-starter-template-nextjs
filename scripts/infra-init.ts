@@ -91,7 +91,7 @@ export function formatNextSteps(
 
     case "gcp":
       lines.push(
-        "  1. Edit infra/gcp/config." + variant + ".yaml (copy from config." + variant + ".example.yaml)",
+        "  1. Edit infra/gcp/config." + variant + ".ts",
         `     pnpm infra:configure --env ${variant}`,
         "",
         "  2. One-time setup (state bucket + stacks; runs configure automatically):",

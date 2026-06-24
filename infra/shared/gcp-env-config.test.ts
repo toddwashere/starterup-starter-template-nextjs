@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  composeEnvConfig,
+  defineGcpEnvConfig,
   fanOutLayerConfig,
   mergeEnvConfig,
   renderPulumiStackYaml,
@@ -7,7 +9,7 @@ import {
   type GcpEnvConfig,
 } from "./gcp-env-config";
 
-const DEFAULTS: GcpEnvConfig = {
+const SANDBOX_FIXTURE: GcpEnvConfig = defineGcpEnvConfig({
   schemaVersion: 1,
   gcp: { project: "default-proj", region: "us-central1" },
   complianceMode: "none",
@@ -40,13 +42,19 @@ const DEFAULTS: GcpEnvConfig = {
     vpcServiceControls: false,
     accessPolicyId: "",
   },
-};
+});
+
+describe("defineGcpEnvConfig", () => {
+  it("returns the config unchanged (type-check helper)", () => {
+    expect(defineGcpEnvConfig(SANDBOX_FIXTURE)).toBe(SANDBOX_FIXTURE);
+  });
+});
 
 describe("mergeEnvConfig", () => {
   it("fills missing keys from defaults without overwriting user values", () => {
     const merged = mergeEnvConfig(
       { gcp: { project: "my-proj", region: "us-central1" } },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     expect(merged.gcp.project).toBe("my-proj");
     expect(merged.database.tier).toBe("db-f1-micro");
@@ -63,7 +71,7 @@ describe("mergeEnvConfig", () => {
           pointInTimeRecovery: true,
         },
       },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     expect(merged.database.tier).toBe("db-custom-2-7680");
     expect(merged.database.pointInTimeRecovery).toBe(true);
@@ -71,15 +79,32 @@ describe("mergeEnvConfig", () => {
   });
 
   it("keeps default nested keys when user sets only part of an object", () => {
-    const merged = mergeEnvConfig({ gcp: { project: "my-proj" } }, DEFAULTS);
+    const merged = mergeEnvConfig({ gcp: { project: "my-proj" } }, SANDBOX_FIXTURE);
     expect(merged.gcp.project).toBe("my-proj");
     expect(merged.gcp.region).toBe("us-central1");
   });
 });
 
+describe("composeEnvConfig", () => {
+  it("applies overlays in order so later layers win", () => {
+    const base = defineGcpEnvConfig({
+      ...SANDBOX_FIXTURE,
+      database: { ...SANDBOX_FIXTURE.database, tier: "db-custom-2-7680" },
+    });
+    const composed = composeEnvConfig(
+      base,
+      { database: { version: "POSTGRES_16" } },
+      { database: { tier: "db-f1-micro" } },
+    );
+    expect(composed.database.tier).toBe("db-f1-micro");
+    expect(composed.database.version).toBe("POSTGRES_16");
+    expect(composed.gcp.project).toBe("default-proj");
+  });
+});
+
 describe("validateEnvConfig", () => {
   it("fails critical when gcp.project is empty", () => {
-    const cfg = mergeEnvConfig({ gcp: { project: "", region: "us-central1" } }, DEFAULTS);
+    const cfg = mergeEnvConfig({ gcp: { project: "", region: "us-central1" } }, SANDBOX_FIXTURE);
     const result = validateEnvConfig(cfg, "sandbox");
     expect(result.ok).toBe(false);
     expect(result.critical.some((e) => e.includes("gcp.project"))).toBe(true);
@@ -89,9 +114,9 @@ describe("validateEnvConfig", () => {
     const cfg = mergeEnvConfig(
       {
         gcp: { project: "acme", region: "us-central1" },
-        apps: { ...DEFAULTS.apps, enableHttpsLb: true, lbDomain: "" },
+        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true, lbDomain: "" },
       },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     const result = validateEnvConfig(cfg, "production");
     expect(result.ok).toBe(false);
@@ -99,7 +124,7 @@ describe("validateEnvConfig", () => {
   });
 
   it("warns but passes when githubRepo is empty", () => {
-    const cfg = mergeEnvConfig({ gcp: { project: "acme", region: "us-central1" } }, DEFAULTS);
+    const cfg = mergeEnvConfig({ gcp: { project: "acme", region: "us-central1" } }, SANDBOX_FIXTURE);
     const result = validateEnvConfig(cfg, "sandbox");
     expect(result.ok).toBe(true);
     expect(result.warnings.some((w) => w.includes("githubRepo"))).toBe(true);
@@ -108,7 +133,7 @@ describe("validateEnvConfig", () => {
   it("fails on unsupported schemaVersion", () => {
     const cfg = mergeEnvConfig(
       { schemaVersion: 99, gcp: { project: "acme", region: "us-central1" } },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     const result = validateEnvConfig(cfg, "sandbox");
     expect(result.ok).toBe(false);
@@ -119,9 +144,9 @@ describe("validateEnvConfig", () => {
     const cfg = mergeEnvConfig(
       {
         gcp: { project: "acme", region: "us-central1" },
-        apps: { ...DEFAULTS.apps, enableHttpsLb: true, lbDomain: "example.com" },
+        apps: { ...SANDBOX_FIXTURE.apps, enableHttpsLb: true, lbDomain: "example.com" },
       },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     const result = validateEnvConfig(cfg, "sandbox");
     expect(result.warnings.some((w) => w.toLowerCase().includes("sandbox"))).toBe(true);
@@ -131,7 +156,7 @@ describe("validateEnvConfig", () => {
 describe("fanOutLayerConfig", () => {
   const cfg = mergeEnvConfig(
     { gcp: { project: "acme-sandbox", region: "us-central1" }, complianceMode: "none" },
-    DEFAULTS,
+    SANDBOX_FIXTURE,
   );
 
   it("maps bootstrap keys", () => {
@@ -152,7 +177,7 @@ describe("fanOutLayerConfig", () => {
   it("propagates complianceMode to apps layer", () => {
     const prod = mergeEnvConfig(
       { gcp: { project: "acme-prod", region: "us-central1" }, complianceMode: "soc2" },
-      DEFAULTS,
+      SANDBOX_FIXTURE,
     );
     const out = fanOutLayerConfig("apps", "production", prod);
     expect(out["starter-gcp-apps:complianceMode"]).toBe("soc2");

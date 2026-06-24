@@ -17,8 +17,7 @@ gcloud auth application-default login          # authenticate
 gcloud projects create my-sandbox-proj         # or use an existing project
 # → link a billing account to the project in the GCP console (Billing → Link)
 
-# 1. Set your project in infra/gcp/config.sandbox.yaml
-#    (copy from config.sandbox.example.yaml if needed)
+# 1. Set your project in infra/gcp/config.sandbox.ts
 
 # 2. Validate config and fan out to all six Pulumi layer stack files
 pnpm infra:configure --env sandbox
@@ -30,8 +29,16 @@ pnpm infra:init --env sandbox
 pnpm infra:deploy --env sandbox
 ```
 
-Env profiles live at `infra/gcp/config.<env>.yaml` — secret-free and safe to commit.
-Re-run `pnpm infra:configure --env <env>` after pulling infra changes to merge new defaults.
+Env profiles live at `infra/gcp/config.<env>.ts` (alongside this README) — TypeScript with IDE autocomplete, secret-free and safe to commit.
+
+| File | Role |
+| ---- | ---- |
+| `config.common.ts` | Cheap `envBaseConfig` + structural invariants (region, Postgres version, VPC CIDR) |
+| `config.production.ts` | All cost-bearing prod settings (private network, DB tier/HA/PITR, LB, monitoring, SOC2) |
+| `config.staging.ts` | Production + staging cost cuts (ZONAL DB, no PITR/LB/SOC2) |
+| `config.sandbox.ts` | `envBaseConfig` + project and budget only |
+
+Re-run `pnpm infra:configure --env <env>` after editing your env config or pulling infra changes (new required fields surface as TypeScript errors in the env files).
 
 That's it. The orchestrator creates a self-managed Pulumi state bucket
 (`<project>-pulumi-state`), logs in to it, runs a preflight, then applies every layer.
@@ -91,16 +98,24 @@ pnpm infra:test:ephemeral                  # apply → smoke-test → destroy a 
 ### 2. Point an environment at your project
 
 Each environment maps to a **separate GCP project** (isolates billing, IAM, quotas). Edit the
-env profile for the environment you're deploying:
+TypeScript env profile for the environment you're deploying:
 
-`infra/gcp/config.<env>.yaml` (copy from `config.<env>.example.yaml` if needed)
+| File | What to edit |
+| ---- | ------------ |
+| `config.sandbox.ts` | Sandbox project ID and cost knobs |
+| `config.staging.ts` | Staging project ID and staging-only deltas |
+| `config.production.ts` | Production project ID and live-traffic settings |
+| `config.common.ts` | Shared invariants when a value should never drift |
 
-```yaml
-gcp:
-  project: "my-sandbox-proj" # ← your project ID
-  region: "us-central1"
-complianceMode: "none"
-# … see config.sandbox.example.yaml for all options
+```ts
+// config.staging.ts — inherits production; only list intentional deltas
+const stagingOverrides = {
+  gcp: { project: "my-staging-proj" },
+  complianceMode: "none",
+  bootstrap: { budgetAmount: 100 },
+  // …
+};
+export const config = composeEnvConfig(productionConfig, commonConfig, stagingOverrides);
 ```
 
 `pnpm infra:configure --env sandbox` validates your config and writes all six
@@ -155,7 +170,7 @@ cd infra/gcp/apps && pulumi stack output --stack sandbox
 | Env          | Typical use     | Cloud SQL                                        | Networking | Compliance | HTTPS LB                 |
 | ------------ | --------------- | ------------------------------------------------ | ---------- | ---------- | ------------------------ |
 | `sandbox`    | dev / throwaway | `db-f1-micro`, public IP                         | none       | `none`     | off (raw Cloud Run URLs) |
-| `staging`    | pre-prod        | `db-custom-2-7680`, private IP                   | VPC        | `none`     | off                      |
+| `staging`    | pre-prod        | `db-custom-2-7680` ZONAL, private IP, no PITR    | VPC        | `none`     | off                      |
 | `production` | live            | `db-custom-2-7680` REGIONAL HA, private IP, PITR | VPC        | `soc2`     | on                       |
 
 Defaults live in each layer's `Pulumi.<env>.yaml` — override per env as needed.

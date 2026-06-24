@@ -55,7 +55,7 @@ State lives in a self-managed GCS bucket (`<project>-pulumi-state`); the orchest
 creates it idempotently and runs `pulumi login gs://…` for you.
 
 ```bash
-# Edit infra/gcp/config.sandbox.yaml, then validate + fan out layer stack config
+# Edit infra/gcp/config.sandbox.ts, then validate + fan out layer stack config
 pnpm infra:configure --env sandbox
 
 # One-time per env: ensure state bucket + pulumi login + stack init (runs configure first)

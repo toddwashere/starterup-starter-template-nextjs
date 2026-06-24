@@ -1,15 +1,13 @@
 #!/usr/bin/env tsx
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { pathToFileURL } from "node:url";
 
 import { placeholderSecrets } from "../shared/secret-catalog";
 import {
   GCP_ENV_NAMES,
   envConfigPath,
-  envExamplePath,
   fanOutLayerConfig,
-  mergeEnvConfig,
   renderPulumiStackYaml,
   validateEnvConfig,
   type GcpEnvConfig,
@@ -39,8 +37,18 @@ function parseEnvArg(argv: string[]): GcpEnvName {
   return env as GcpEnvName;
 }
 
-function loadYamlFile(path: string): Partial<GcpEnvConfig> {
-  return parseYaml(readFileSync(path, "utf8")) as Partial<GcpEnvConfig>;
+async function loadEnvConfig(env: GcpEnvName): Promise<GcpEnvConfig> {
+  const path = join(process.cwd(), envConfigPath(env));
+  try {
+    const mod = (await import(pathToFileURL(path).href)) as { config?: GcpEnvConfig };
+    if (!mod.config) {
+      throw new Error(`Expected export "config" from ${envConfigPath(env)}`);
+    }
+    return mod.config;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to load ${envConfigPath(env)}: ${message}`);
+  }
 }
 
 function atomicWrite(path: string, content: string): void {
@@ -60,21 +68,10 @@ function printPlaceholderChecklist(): void {
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const env = parseEnvArg(process.argv.slice(2));
-  const configFile = envConfigPath(env);
-  const exampleFile = envExamplePath(env);
-
-  const defaults = loadYamlFile(exampleFile) as GcpEnvConfig;
-  let user: Partial<GcpEnvConfig> = {};
-  try {
-    user = loadYamlFile(configFile);
-  } catch {
-    throw new Error(`Missing ${configFile}. Copy ${exampleFile} and set gcp.project.`);
-  }
-
-  const merged = mergeEnvConfig(user, defaults);
-  const validation = validateEnvConfig(merged, env);
+  const config = await loadEnvConfig(env);
+  const validation = validateEnvConfig(config, env);
 
   for (const w of validation.warnings) console.warn(`⚠ ${w}`);
   if (!validation.ok) {
@@ -84,7 +81,7 @@ function main(): void {
   }
 
   for (const layer of LAYERS) {
-    const entries = fanOutLayerConfig(layer, env, merged);
+    const entries = fanOutLayerConfig(layer, env, config);
     const yaml = renderPulumiStackYaml(entries);
     const path = layerPulumiPath(layer, env);
     atomicWrite(path, yaml);
@@ -95,4 +92,7 @@ function main(): void {
   console.log(`\nNext: pnpm infra:init --env ${env} && pnpm infra:deploy --env ${env}`);
 }
 
-main();
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});

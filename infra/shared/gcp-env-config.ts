@@ -10,44 +10,74 @@ export const GCP_ENV_NAMES: readonly GcpEnvName[] = [
 export const SUPPORTED_SCHEMA_VERSION = 1;
 
 export interface BootstrapConfig {
+  /** When true, Cloud SQL is private-only and a VPC connector is provisioned. */
   privateNetwork: boolean;
+  /** VPC subnet CIDR for private networking (e.g. `10.10.0.0/24`). */
   vpcCidr: string;
+  /** Monthly budget cap in USD. Requires `billingAccountId` to create the budget resource. */
   budgetAmount: number;
+  /** GCP billing account ID. Leave empty to skip budget resource creation. */
   billingAccountId: string;
+  /** GitHub repo for Actions WIF (e.g. `your-org/your-repo`). Leave empty to skip WIF binding. */
   githubRepo: string;
+  /** Security contact email. Required when `complianceMode` is not `none`. */
   securityContactEmail: string;
 }
 
 export interface DatabaseConfig {
+  /** Cloud SQL machine tier (e.g. `db-f1-micro` for sandbox). */
   tier: string;
+  /** Postgres version (e.g. `POSTGRES_16`). */
   version: string;
+  /** `ZONAL` or `REGIONAL` availability. */
   availability: string;
+  /** Enable point-in-time recovery (recommended for production). */
   pointInTimeRecovery: boolean;
 }
 
 export interface StorageConfig {
+  /** When true, buckets are destroyed on stack teardown (sandbox only). */
   forceDestroy: boolean;
 }
 
 export interface MessagingConfig {
+  /** Provision Memorystore Redis (adds cost). Enable for Redis-backed queues. */
   enableRedis: boolean;
+  /** Redis tier: `BASIC` or `STANDARD_HA`. */
   redisTier: string;
+  /** Redis memory size in GB. */
   redisMemorySizeGb: number;
 }
 
 export interface AppsConfig {
+  /** Container image tag deployed to Cloud Run. */
   imageTag: string;
+  /** Provision HTTPS load balancer with managed cert (production). */
   enableHttpsLb: boolean;
+  /** Enable Cloud Monitoring dashboards and alerts. */
   enableMonitoring: boolean;
+  /** Public domain for the HTTPS LB. DNS stays at your registrar; point A records to LB IP. */
   lbDomain: string;
+  /** Email address for monitoring alert notifications. */
   alertEmail: string;
+  /** Enable VPC Service Controls perimeter. */
   vpcServiceControls: boolean;
+  /** Numeric access policy ID when `vpcServiceControls` is true. */
   accessPolicyId: string;
 }
 
+export interface GcpProjectConfig {
+  /** GCP project ID for this environment. */
+  project: string;
+  /** Default region for regional resources (e.g. `us-central1`). */
+  region: string;
+}
+
 export interface GcpEnvConfig {
+  /** Config schema version — must match `SUPPORTED_SCHEMA_VERSION`. */
   schemaVersion: number;
-  gcp: { project: string; region: string };
+  gcp: GcpProjectConfig;
+  /** Compliance bundle: `none`, `hipaa`, `soc2`, or `hipaa+soc2`. Propagated to all Pulumi layers. */
   complianceMode: ComplianceMode;
   bootstrap: BootstrapConfig;
   database: DatabaseConfig;
@@ -56,40 +86,39 @@ export interface GcpEnvConfig {
   apps: AppsConfig;
 }
 
-/** Partial env config as loaded from YAML (nested keys may be incomplete). */
+/** Recursive partial for env config overlays (common, staging deltas, tests). */
 export type DeepPartialGcpEnvConfig = {
-  [K in keyof GcpEnvConfig]?: GcpEnvConfig[K] extends Record<string, unknown>
-    ? Partial<GcpEnvConfig[K]>
+  [K in keyof GcpEnvConfig]?: GcpEnvConfig[K] extends object
+    ? { [P in keyof GcpEnvConfig[K]]?: GcpEnvConfig[K][P] }
     : GcpEnvConfig[K];
 };
 
 export function envConfigPath(env: GcpEnvName): string {
-  return `infra/gcp/config.${env}.yaml`;
+  return `infra/gcp/config.${env}.ts`;
 }
 
-export function envExamplePath(env: GcpEnvName): string {
-  return `infra/gcp/config.${env}.example.yaml`;
+/** Type-check helper for env config files — export the full profile from each env file. */
+export function defineGcpEnvConfig(config: GcpEnvConfig): GcpEnvConfig {
+  return config;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function deepMerge<T extends Record<string, unknown>>(
-  user: Partial<T>,
-  defaults: T,
-): T {
+function deepMerge<T extends object>(user: Partial<T>, defaults: T): T {
   const out = structuredClone(defaults);
-  for (const [key, value] of Object.entries(user)) {
+  for (const key of Object.keys(user) as (keyof T)[]) {
+    const value = user[key];
     if (value === undefined) continue;
-    const defaultValue = out[key as keyof T];
+    const defaultValue = out[key];
     if (isPlainObject(value) && isPlainObject(defaultValue)) {
-      (out as Record<string, unknown>)[key] = deepMerge(
-        value as Record<string, unknown>,
-        defaultValue as Record<string, unknown>,
-      );
+      out[key] = deepMerge(
+        value as Partial<object>,
+        defaultValue as object,
+      ) as T[keyof T];
     } else {
-      (out as Record<string, unknown>)[key] = value;
+      out[key] = value as T[keyof T];
     }
   }
   return out;
@@ -101,6 +130,20 @@ export function mergeEnvConfig(
   defaults: GcpEnvConfig,
 ): GcpEnvConfig {
   return deepMerge(user as Partial<GcpEnvConfig>, defaults);
+}
+
+/**
+ * Layer partial configs onto a full base profile. Each overlay wins over the accumulated result.
+ * Typical order: `composeEnvConfig(productionConfig, commonConfig, stagingOverrides)`.
+ */
+export function composeEnvConfig(
+  base: GcpEnvConfig,
+  ...overlays: DeepPartialGcpEnvConfig[]
+): GcpEnvConfig {
+  return overlays.reduce<GcpEnvConfig>(
+    (acc, overlay) => mergeEnvConfig(overlay, acc),
+    base,
+  );
 }
 
 const COMPLIANCE_MODES: readonly ComplianceMode[] = ["none", "hipaa", "soc2", "hipaa+soc2"];
@@ -257,7 +300,7 @@ export function fanOutLayerConfig(
 
 export function renderPulumiStackYaml(entries: Record<string, string>): string {
   const lines = [
-    "# Generated by pnpm infra:configure — edit infra/gcp/config.<env>.yaml instead.",
+    "# Generated by pnpm infra:configure — edit infra/gcp/config.<env>.ts instead.",
     "config:",
   ];
   for (const [key, value] of Object.entries(entries).sort(([a], [b]) => a.localeCompare(b))) {
