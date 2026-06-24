@@ -91,13 +91,16 @@ export function formatNextSteps(
 
     case "gcp":
       lines.push(
-        "  1. One-time setup (state bucket + stacks + cross-layer config):",
+        "  1. Edit infra/gcp/config." + variant + ".yaml (copy from config." + variant + ".example.yaml)",
+        `     pnpm infra:configure --env ${variant}`,
+        "",
+        "  2. One-time setup (state bucket + stacks; runs configure automatically):",
         `     pnpm infra:init --env ${variant}`,
         "",
-        "  2. Deploy all six layers in dependency order:",
+        "  3. Deploy all six layers in dependency order:",
         `     pnpm infra:deploy --env ${variant}`,
         "",
-        "  3. Verify (read-only diff, all layers):",
+        "  4. Verify (read-only diff, all layers):",
         `     pnpm infra:preview --env ${variant}`,
         "",
         "  See infra/gcp/README.md for the full step-by-step guide.",

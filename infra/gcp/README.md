@@ -17,15 +17,21 @@ gcloud auth application-default login          # authenticate
 gcloud projects create my-sandbox-proj         # or use an existing project
 # → link a billing account to the project in the GCP console (Billing → Link)
 
-# 1. Point the sandbox at your project: edit infra/gcp/bootstrap/Pulumi.sandbox.yaml
-#    set `gcp:project: "my-sandbox-proj"` (and gcp:region if not us-central1)
+# 1. Set your project in infra/gcp/config.sandbox.yaml
+#    (copy from config.sandbox.example.yaml if needed)
 
-# 2. One-time per env: create state bucket + init all stacks + wire cross-layer config
+# 2. Validate config and fan out to all six Pulumi layer stack files
+pnpm infra:configure --env sandbox
+
+# 3. One-time per env: create state bucket + init all stacks
 pnpm infra:init --env sandbox
 
-# 3. Deploy all six layers in dependency order
+# 4. Deploy all six layers in dependency order
 pnpm infra:deploy --env sandbox
 ```
+
+Env profiles live at `infra/gcp/config.<env>.yaml` — secret-free and safe to commit.
+Re-run `pnpm infra:configure --env <env>` after pulling infra changes to merge new defaults.
 
 That's it. The orchestrator creates a self-managed Pulumi state bucket
 (`<project>-pulumi-state`), logs in to it, runs a preflight, then applies every layer.
@@ -85,22 +91,20 @@ pnpm infra:test:ephemeral                  # apply → smoke-test → destroy a 
 ### 2. Point an environment at your project
 
 Each environment maps to a **separate GCP project** (isolates billing, IAM, quotas). Edit the
-bootstrap stack config for the env you're deploying:
+env profile for the environment you're deploying:
 
-`infra/gcp/bootstrap/Pulumi.<env>.yaml`
+`infra/gcp/config.<env>.yaml` (copy from `config.<env>.example.yaml` if needed)
 
 ```yaml
-config:
-  gcp:project: "my-sandbox-proj" # ← your project ID
-  gcp:region: "us-central1"
-  starter-gcp-bootstrap:complianceMode: "none" # none | soc2 | hipaa | hipaa+soc2
-  starter-gcp-bootstrap:budgetAmount: "50"
-  # starter-gcp-bootstrap:billingAccountId: "XXXXXX-XXXXXX-XXXXXX"  # uncomment to create a budget
-  # starter-gcp-bootstrap:githubRepo: "your-org/your-repo"          # for CI (see Pipelines)
+gcp:
+  project: "my-sandbox-proj" # ← your project ID
+  region: "us-central1"
+complianceMode: "none"
+# … see config.sandbox.example.yaml for all options
 ```
 
-`pnpm infra:init` propagates `gcp:project` / `gcp:region` and the cross-layer stack references
-to **every** layer, so you normally only edit the bootstrap file.
+`pnpm infra:configure --env sandbox` validates your config and writes all six
+`Pulumi.<env>.yaml` layer files. `pnpm infra:init` runs configure automatically.
 
 ### 3. Initialize the environment
 

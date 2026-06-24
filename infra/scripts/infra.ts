@@ -10,6 +10,7 @@ import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import { runPreflight, type PreflightInput } from "../shared/preflight";
+import { placeholderSecrets } from "../shared/secret-catalog";
 import {
   LAYER_DEPENDENCIES,
   PROTECTED_LAYERS,
@@ -191,6 +192,18 @@ async function confirm(question: string, expected: string): Promise<void> {
   }
 }
 
+function runConfigure(env: Env): void {
+  console.log(`\n▶ Running configure for env "${env}" …`);
+  sh("pnpm", ["infra:configure", "--env", env]);
+}
+
+function printSecretReminder(): void {
+  console.log("\n▶ Placeholder secrets (populate when ready — apps may stay unhealthy until set):");
+  for (const s of placeholderSecrets()) {
+    console.log(`  gcloud secrets versions add ${s.id} --data-file=- --project <project>`);
+  }
+}
+
 // --- commands -----------------------------------------------------------------
 
 function cmdDeploy(layer: Layer | undefined, env: Env): void {
@@ -199,6 +212,7 @@ function cmdDeploy(layer: Layer | undefined, env: Env): void {
   preflightOrAbort(env, projectId, bucket);
   const layers = layer ? [layer] : deployOrder();
   for (const l of layers) deployLayer(l, env);
+  printSecretReminder();
   console.log("\n✓ Deploy complete.");
 }
 
@@ -272,6 +286,7 @@ function smokeTest(stack: string): void {
 }
 
 function cmdInit(env: Env): void {
+  runConfigure(env);
   const projectId = getProjectId(env);
   ensureStateBackend(projectId);
   for (const l of deployOrder()) {

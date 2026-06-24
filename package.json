@@ -20,6 +20,7 @@
     "validate:env": "tsx scripts/validate-env.mts",
     "infra:init:profile": "tsx scripts/infra-init.ts",
     "infra:init": "tsx infra/scripts/infra.ts init",
+    "infra:configure": "tsx infra/scripts/configure.ts",
     "infra:deploy": "tsx infra/scripts/infra.ts deploy",
     "infra:preview": "tsx infra/scripts/infra.ts preview",
     "infra:destroy": "tsx infra/scripts/infra.ts destroy",
@@ -35,6 +36,7 @@
     "turbo": "^2.4",
     "typescript": "^5.7",
     "vitest": "^3",
+    "yaml": "^2.9.0",
     "zod": "^3"
   },
   "packageManager": "pnpm@11.1.3"

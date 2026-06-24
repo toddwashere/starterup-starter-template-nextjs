@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mergeEnvConfig, type GcpEnvConfig } from "./gcp-env-config";
+import {
+  fanOutLayerConfig,
+  mergeEnvConfig,
+  renderPulumiStackYaml,
+  validateEnvConfig,
+  type GcpEnvConfig,
+} from "./gcp-env-config";
 
 const DEFAULTS: GcpEnvConfig = {
   schemaVersion: 1,
@@ -68,5 +74,104 @@ describe("mergeEnvConfig", () => {
     const merged = mergeEnvConfig({ gcp: { project: "my-proj" } }, DEFAULTS);
     expect(merged.gcp.project).toBe("my-proj");
     expect(merged.gcp.region).toBe("us-central1");
+  });
+});
+
+describe("validateEnvConfig", () => {
+  it("fails critical when gcp.project is empty", () => {
+    const cfg = mergeEnvConfig({ gcp: { project: "", region: "us-central1" } }, DEFAULTS);
+    const result = validateEnvConfig(cfg, "sandbox");
+    expect(result.ok).toBe(false);
+    expect(result.critical.some((e) => e.includes("gcp.project"))).toBe(true);
+  });
+
+  it("fails critical when enableHttpsLb is true without lbDomain", () => {
+    const cfg = mergeEnvConfig(
+      {
+        gcp: { project: "acme", region: "us-central1" },
+        apps: { ...DEFAULTS.apps, enableHttpsLb: true, lbDomain: "" },
+      },
+      DEFAULTS,
+    );
+    const result = validateEnvConfig(cfg, "production");
+    expect(result.ok).toBe(false);
+    expect(result.critical.some((e) => e.includes("lbDomain"))).toBe(true);
+  });
+
+  it("warns but passes when githubRepo is empty", () => {
+    const cfg = mergeEnvConfig({ gcp: { project: "acme", region: "us-central1" } }, DEFAULTS);
+    const result = validateEnvConfig(cfg, "sandbox");
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((w) => w.includes("githubRepo"))).toBe(true);
+  });
+
+  it("fails on unsupported schemaVersion", () => {
+    const cfg = mergeEnvConfig(
+      { schemaVersion: 99, gcp: { project: "acme", region: "us-central1" } },
+      DEFAULTS,
+    );
+    const result = validateEnvConfig(cfg, "sandbox");
+    expect(result.ok).toBe(false);
+    expect(result.critical.some((e) => e.includes("schemaVersion"))).toBe(true);
+  });
+
+  it("warns on sandbox cost guardrails when enableHttpsLb is true", () => {
+    const cfg = mergeEnvConfig(
+      {
+        gcp: { project: "acme", region: "us-central1" },
+        apps: { ...DEFAULTS.apps, enableHttpsLb: true, lbDomain: "example.com" },
+      },
+      DEFAULTS,
+    );
+    const result = validateEnvConfig(cfg, "sandbox");
+    expect(result.warnings.some((w) => w.toLowerCase().includes("sandbox"))).toBe(true);
+  });
+});
+
+describe("fanOutLayerConfig", () => {
+  const cfg = mergeEnvConfig(
+    { gcp: { project: "acme-sandbox", region: "us-central1" }, complianceMode: "none" },
+    DEFAULTS,
+  );
+
+  it("maps bootstrap keys", () => {
+    const out = fanOutLayerConfig("bootstrap", "sandbox", cfg);
+    expect(out["gcp:project"]).toBe("acme-sandbox");
+    expect(out["starter-gcp-bootstrap:privateNetwork"]).toBe("false");
+    expect(out["starter-gcp-bootstrap:complianceMode"]).toBe("none");
+  });
+
+  it("maps database stack ref", () => {
+    const out = fanOutLayerConfig("database", "sandbox", cfg);
+    expect(out["starter-gcp-database:bootstrapStackRef"]).toBe(
+      "organization/starter-gcp-bootstrap/sandbox",
+    );
+    expect(out["starter-gcp-database:dbTier"]).toBe("db-f1-micro");
+  });
+
+  it("propagates complianceMode to apps layer", () => {
+    const prod = mergeEnvConfig(
+      { gcp: { project: "acme-prod", region: "us-central1" }, complianceMode: "soc2" },
+      DEFAULTS,
+    );
+    const out = fanOutLayerConfig("apps", "production", prod);
+    expect(out["starter-gcp-apps:complianceMode"]).toBe("soc2");
+    expect(out["starter-gcp-apps:secretsStackRef"]).toBe(
+      "organization/starter-gcp-secrets/production",
+    );
+  });
+
+  it("omits empty optional bootstrap strings", () => {
+    const out = fanOutLayerConfig("bootstrap", "sandbox", cfg);
+    expect(out["starter-gcp-bootstrap:billingAccountId"]).toBeUndefined();
+    expect(out["starter-gcp-bootstrap:githubRepo"]).toBeUndefined();
+  });
+});
+
+describe("renderPulumiStackYaml", () => {
+  it("renders a config block with quoted values", () => {
+    const yaml = renderPulumiStackYaml({ "gcp:project": "acme", "gcp:region": "us-central1" });
+    expect(yaml).toContain('gcp:project: "acme"');
+    expect(yaml).toContain("config:");
   });
 });

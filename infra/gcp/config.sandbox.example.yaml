@@ -1,0 +1,38 @@
+schemaVersion: 1
+
+gcp:
+  project: "your-sandbox-project-id"
+  region: "us-central1"
+
+complianceMode: "none"
+
+bootstrap:
+  privateNetwork: false
+  vpcCidr: "10.10.0.0/24"
+  budgetAmount: 50
+  billingAccountId: ""
+  githubRepo: ""
+  securityContactEmail: ""
+
+database:
+  tier: "db-f1-micro"
+  version: "POSTGRES_16"
+  availability: "ZONAL"
+  pointInTimeRecovery: false
+
+storage:
+  forceDestroy: true
+
+messaging:
+  enableRedis: false
+  redisTier: "BASIC"
+  redisMemorySizeGb: 1
+
+apps:
+  imageTag: "latest"
+  enableHttpsLb: false
+  enableMonitoring: false
+  lbDomain: ""
+  alertEmail: ""
+  vpcServiceControls: false
+  accessPolicyId: ""

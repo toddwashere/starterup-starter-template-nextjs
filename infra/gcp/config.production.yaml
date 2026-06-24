@@ -1,0 +1,38 @@
+schemaVersion: 1
+
+gcp:
+  project: "your-prod-project-id"
+  region: "us-central1"
+
+complianceMode: "soc2"
+
+bootstrap:
+  privateNetwork: true
+  vpcCidr: "10.10.0.0/24"
+  budgetAmount: 150
+  billingAccountId: ""
+  githubRepo: ""
+  securityContactEmail: ""
+
+database:
+  tier: "db-custom-2-7680"
+  version: "POSTGRES_16"
+  availability: "REGIONAL"
+  pointInTimeRecovery: true
+
+storage:
+  forceDestroy: false
+
+messaging:
+  enableRedis: false
+  redisTier: "STANDARD_HA"
+  redisMemorySizeGb: 1
+
+apps:
+  imageTag: "v0.1.0"
+  enableHttpsLb: true
+  enableMonitoring: true
+  lbDomain: "example.com"
+  alertEmail: "alerts@example.com"
+  vpcServiceControls: false
+  accessPolicyId: ""
