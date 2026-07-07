@@ -46,7 +46,7 @@ const envBase = defineGcpEnvConfig({
   },
   complianceMode: "none",
   bootstrap: {
-    privateNetwork: false,
+    privateNetwork: true,
     vpcCidr: "10.10.0.0/24",
     budgetAmount: 0,
     billingAccountId: "",

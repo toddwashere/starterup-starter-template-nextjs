@@ -8,6 +8,22 @@ import {
   validateEnvConfig,
   type GcpEnvConfig,
 } from "./gcp-env-config";
+import { envBaseConfig as sandbox } from "../gcp/config.common";
+import { config as staging } from "../gcp/config.staging";
+import { config as production } from "../gcp/config.production";
+
+describe("single-topology config", () => {
+  it("enables privateNetwork in every environment", () => {
+    expect(sandbox.bootstrap.privateNetwork).toBe(true);
+    expect(staging.bootstrap.privateNetwork).toBe(true);
+    expect(production.bootstrap.privateNetwork).toBe(true);
+  });
+
+  it("uses a smaller staging database tier", () => {
+    expect(staging.database.tier).toBe("db-custom-1-3840");
+    expect(staging.database.availability).toBe("ZONAL");
+  });
+});
 
 const SANDBOX_FIXTURE: GcpEnvConfig = defineGcpEnvConfig({
   schemaVersion: 1,

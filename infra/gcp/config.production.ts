@@ -14,7 +14,6 @@ const productionOverrides = {
   gcp: { project: "your-prod-project-id" },
   complianceMode: "soc2",
   bootstrap: {
-    privateNetwork: true,
     budgetAmount: 150,
   },
   database: {

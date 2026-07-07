@@ -15,6 +15,7 @@ const stagingOverrides = {
   complianceMode: "none",
   bootstrap: { budgetAmount: 100 },
   database: {
+    tier: "db-custom-1-3840",
     availability: "ZONAL",
     pointInTimeRecovery: false,
   },

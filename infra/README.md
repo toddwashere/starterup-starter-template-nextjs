@@ -9,11 +9,12 @@ Choose a hosting platform, run an init wizard, and deploy the full monorepo stac
 | **local**             | $0         | $0                 | Yes                  | Low        |
 | **vercel + supabase** | $0\*       | ~$45–90/mo         | Sandbox only         | Medium     |
 | **render**            | $0\*       | ~$35–75/mo         | No                   | Medium     |
-| **gcp**               | ~$0–30/mo  | ~$80–150/mo        | No                   | High       |
+| **gcp**               | ~$28–35/mo† | ~$330–390/mo†     | No                   | High       |
 | **aws**               | ~$0–45/mo  | ~$90–160/mo        | No                   | High       |
 | **azure**             | ~$15–40/mo | ~$85–155/mo        | No                   | High       |
 
 \* Hobby limits, pauses, expiry — not production-ready.
+† GCP per-env: sandbox ~$28–35/mo, staging ~$77/mo (`db-custom-1-3840`), production ~$330–390/mo (`db-custom-2-7680` REGIONAL HA). Sandbox and staging use the same always-private topology as production (VPC + Serverless VPC connector + Private Services Access + private Cloud SQL; no Cloud NAT).
 
 ## Prerequisites
 

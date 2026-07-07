@@ -16,7 +16,7 @@ describe("database layer (mocked)", () => {
       {
         newResource: (args) => {
           created.push({ type: args.type, name: args.name, inputs: args.inputs });
-          // bootstrap StackReference: sandbox => networkId "" (public mode).
+          // bootstrap StackReference: always supplies a non-empty network (Tasks 1-2 guarantee this).
           if (args.type === "pulumi:pulumi:StackReference") {
             return {
               id: `${args.name}-id`,
@@ -24,10 +24,11 @@ describe("database layer (mocked)", () => {
                 outputs: {
                   projectId: "test-project",
                   regionOut: "us-central1",
-                  networkId: "",
-                  networkSelfLink: "",
+                  networkId: "projects/test-project/global/networks/starter-vpc",
+                  networkSelfLink:
+                    "https://www.googleapis.com/compute/v1/projects/test-project/global/networks/starter-vpc",
                   subnetSelfLink: "",
-                  vpcConnectorId: "",
+                  vpcConnectorId: "projects/test-project/locations/us-central1/connectors/starter-connector",
                   privateServicesConnection: "",
                   artifactRegistryRepo:
                     "us-central1-docker.pkg.dev/test-project/starter",
@@ -45,7 +46,7 @@ describe("database layer (mocked)", () => {
                 ...args.inputs,
                 name: args.inputs.name ?? args.name,
                 connectionName: "test-project:us-central1:starter-db-sandbox",
-                privateIpAddress: "",
+                privateIpAddress: "10.10.0.3",
               },
             };
           }
@@ -88,7 +89,7 @@ describe("database layer (mocked)", () => {
     expect(inst!.inputs.deletionProtection).toBe(true);
   });
 
-  it("uses a public IP in sandbox (bootstrap network absent)", async () => {
+  it("uses a private IP in every environment (bootstrap network present)", async () => {
     const inst = created.find(
       (r) => r.type === "gcp:sql/databaseInstance:DatabaseInstance",
     );
@@ -96,13 +97,13 @@ describe("database layer (mocked)", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (res) => (pulumi.output(inst!.inputs.settings) as pulumi.Output<any>).apply((s: any) => res(s.ipConfiguration)),
     );
-    expect(ipConfig.ipv4Enabled).toBe(true);
-    expect(ipConfig.privateNetwork).toBeUndefined();
+    expect(ipConfig.ipv4Enabled).toBe(false);
+    expect(ipConfig.privateNetwork).toBeTruthy();
   });
 
-  it("exports an empty dbPrivateIp when public (private IP only with a network)", async () => {
+  it("exports a non-empty dbPrivateIp when private", async () => {
     const ip = await new Promise<string>((res) => infra.dbPrivateIp.apply(res));
-    expect(ip).toBe("");
+    expect(ip).toBe("10.10.0.3");
   });
 
   it("exports non-empty connection facts for downstream layers", async () => {
