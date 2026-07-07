@@ -24,6 +24,7 @@
     "zod": "^3"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
     "@types/node": "^24",
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",

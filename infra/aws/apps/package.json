@@ -2,6 +2,7 @@
   "name": "starter-aws-apps",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.1.3",
   "type": "module",
   "main": "index.ts",
   "dependencies": {

@@ -1,0 +1,94 @@
+# syntax=docker/dockerfile:1
+#
+# AWS Lambda container image for the @apps/workers SQS handler
+# (apps/workers/src/lambda.ts -> `handler`). This is SEPARATE from
+# apps/workers/Dockerfile, which builds the long-lived poller image
+# (`tsx src/index.ts`) used by App Runner / docker-compose. That poller image
+# does NOT implement the AWS Lambda Runtime API, so it cannot be used as a
+# Lambda function — hence this dedicated image built on the AWS Lambda base,
+# which bundles the Runtime Interface Client (RIC).
+#
+# Build context must be the repo root.
+#
+# ---------------------------------------------------------------------------
+# PACKAGING CHOICE — tsx runtime (the "acceptable fallback"), not esbuild.
+# ---------------------------------------------------------------------------
+# The repo runs TypeScript directly via `tsx`: workspace packages export their
+# `./src/*.ts` source (no compiled output), and the DB client is Prisma 7's new
+# `prisma-client` generator emitting ESM into
+# packages/database/src/generated/prisma consumed through a driver adapter
+# (@prisma/adapter-pg). With driver adapters Prisma uses a WASM query compiler,
+# so there is no native Rust query-engine binary and no binaryTargets to tune.
+#
+# esbuild single-file bundling was rejected because it would have to correctly
+# externalize + relocate that generated ESM client and its WASM query compiler
+# AND re-resolve the whole workspace TS import graph — exactly the
+# "bundling fights Prisma/native deps" case the fix notes call out. Instead we
+# reuse the EXACT turbo-prune + pnpm-install + `prisma generate` pipeline from
+# apps/workers/Dockerfile (which already runs this identical code path via tsx,
+# verified end-to-end in Task 10) and load the handler through tsx. This carries
+# the full assembled tree (source + node_modules + generated client) into the
+# Lambda task root, so nothing about the runtime code path differs from the
+# proven poller image except the entrypoint.
+#
+# The RIC invokes Node on the handler, which cannot execute `.ts` directly, so
+# we register tsx's ESM loader via NODE_OPTIONS. The container's handler
+# resolves to the `handler` export of apps/workers/src/lambda.ts.
+
+# ---------------------------------------------------------------------------
+# Stage 1: prune the monorepo down to @apps/workers + its dependencies.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS pruner
+WORKDIR /app
+RUN corepack enable
+COPY . .
+RUN npx --yes turbo@^2 prune @apps/workers --docker
+
+# ---------------------------------------------------------------------------
+# Stage 2: install deps and generate the Prisma client (no tsc build step —
+# the workspace runs TypeScript source directly via tsx).
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS builder
+WORKDIR /app
+RUN corepack enable
+
+# Install dependencies using only the pruned lockfile + package manifests so
+# this layer is cached unless a manifest changes.
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile
+
+# Copy the pruned source.
+COPY --from=pruner /app/out/full/ .
+
+# Generate the Prisma client from the schema. No DB connection is made, but
+# prisma.config.ts resolves env("DATABASE_URL") while loading, so pass a
+# placeholder to satisfy config loading. Run prisma directly to avoid the
+# package's dotenv-based db:generate script (which expects a repo-root .env).
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" \
+    pnpm --filter @workspace/database exec prisma generate
+
+# ---------------------------------------------------------------------------
+# Stage 3: Lambda runtime image (AWS base image bundles the RIC).
+# ---------------------------------------------------------------------------
+FROM public.ecr.aws/lambda/nodejs:20 AS runner
+
+ENV NODE_ENV=production
+
+# Carry the full assembled monorepo tree (source + node_modules + generated
+# Prisma client) into the Lambda task root. The handler file therefore lives at
+# ${LAMBDA_TASK_ROOT}/apps/workers/src/lambda.ts and its workspace deps resolve
+# through the pnpm node_modules links exactly as in the poller image.
+COPY --from=builder /app/ ${LAMBDA_TASK_ROOT}/
+
+# Register tsx's ESM loader so the RIC can import the TypeScript handler (and
+# the transitively-imported .ts workspace source). tsx is a direct dependency
+# of @apps/workers, so its loader is always present at this path regardless of
+# pnpm hoisting; referencing it by explicit path avoids any bare-specifier
+# resolution ambiguity from the task-root cwd. tsx's `.` export IS this file
+# (dist/loader.mjs), so this is equivalent to `--import tsx`.
+ENV NODE_OPTIONS="--import ${LAMBDA_TASK_ROOT}/apps/workers/node_modules/tsx/dist/loader.mjs"
+
+# Handler path is relative to ${LAMBDA_TASK_ROOT}; resolves apps/workers/src/lambda.ts
+# and calls its `handler` export. Kept in sync with the imageConfig.commands in
+# infra/aws/apps/index.ts.
+CMD ["apps/workers/src/lambda.handler"]
