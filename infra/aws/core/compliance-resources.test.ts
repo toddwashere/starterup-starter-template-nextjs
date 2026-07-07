@@ -45,6 +45,9 @@ async function buildWith(compliance: ComplianceConfig) {
     compliance,
   });
   // Yield so all microtask-queued resource registrations complete.
+  // This is a known Pulumi-mock settling pattern: registrations are queued as
+  // microtasks and cannot be awaited without changing the function signature.
+  // Removing this timeout causes a registration race; keep it.
   await new Promise<void>((resolve) => setTimeout(resolve, 200));
   return result;
 }
@@ -133,6 +136,19 @@ describe("compliance resources (mode hipaa)", () => {
     expect(types).toContain("AWS::SecretsManager::Secret");
   });
 
+  // Fix 3: assert trail→bucket wiring so the s3BucketName is never empty and
+  // always points at the created log bucket (guards against Fix 2 regressing).
+  it("wires the CloudTrail trail s3BucketName to the log bucket", () => {
+    const trails = recorded.filter((r) => r.type === COMPLIANCE_TYPES.trail);
+    expect(trails).toHaveLength(1);
+    const buckets = recorded.filter((r) => r.type === COMPLIANCE_TYPES.s3Bucket);
+    expect(buckets).toHaveLength(1);
+    const trailBucketName = trails[0].inputs.s3BucketName as string;
+    expect(trailBucketName).not.toBe("");
+    // The mock resolves the bucket name to the resource's logical name.
+    expect(trailBucketName).toBe(buckets[0].name);
+  });
+
   it("creates a WAF v2 WebACL with REGIONAL scope", () => {
     const webAcls = recorded.filter((r) => r.type === COMPLIANCE_TYPES.webAcl);
     expect(webAcls).toHaveLength(1);
@@ -141,7 +157,8 @@ describe("compliance resources (mode hipaa)", () => {
 
   it("creates AWS Config managed rules (RDS + S3 encryption)", () => {
     const rules = recorded.filter((r) => r.type === COMPLIANCE_TYPES.cfgRule);
-    expect(rules.length).toBeGreaterThan(0);
+    // Fix 5: exact count — two Config rules are created (RDS + S3 encryption).
+    expect(rules).toHaveLength(2);
     const identifiers = rules.map(
       (r) => (r.inputs.source as { sourceIdentifier: string }).sourceIdentifier,
     );

@@ -57,6 +57,7 @@ export function buildComplianceResources(
 
   // --- (b) Immutable log sink: S3 BucketV2 with Object Lock. -----------------
   let logBucketName: pulumi.Output<string> = pulumi.output("");
+  let logBucketArn: pulumi.Output<string> = pulumi.output("");
   if (compliance.immutableLogSink) {
     const logBucket = new aws.s3.BucketV2(
       `${namePrefix}-compliance-logs`,
@@ -82,10 +83,58 @@ export function buildComplianceResources(
     );
 
     logBucketName = logBucket.bucket;
+    logBucketArn = logBucket.arn;
   }
 
   // --- (c) CloudTrail: S3 + Secrets Manager data events. --------------------
   if (compliance.auditLogs) {
+    // Fix 2: fail fast — a trail pointed at an empty bucket name is invalid.
+    if (!compliance.immutableLogSink) {
+      throw new Error(
+        `auditLogs requires immutableLogSink to be enabled (namePrefix=${namePrefix}). ` +
+          `Enable compliance.immutableLogSink or disable compliance.auditLogs.`,
+      );
+    }
+
+    // Fix 1: standard CloudTrail bucket policy — the trail service principal
+    // needs s3:GetBucketAcl on the bucket and s3:PutObject on /AWSLogs/*.
+    // The trail must dependsOn this policy to avoid a creation race.
+    const callerIdentity = pulumi.output(aws.getCallerIdentity({}));
+    const trailBucketPolicy = new aws.s3.BucketPolicy(
+      `${namePrefix}-compliance-trail-bucket-policy`,
+      {
+        bucket: logBucketName,
+        policy: pulumi.all([logBucketArn, callerIdentity]).apply(
+          ([bucketArn, identity]) =>
+            JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Sid: "AWSCloudTrailAclCheck",
+                  Effect: "Allow",
+                  Principal: { Service: "cloudtrail.amazonaws.com" },
+                  Action: "s3:GetBucketAcl",
+                  Resource: bucketArn,
+                },
+                {
+                  Sid: "AWSCloudTrailWrite",
+                  Effect: "Allow",
+                  Principal: { Service: "cloudtrail.amazonaws.com" },
+                  Action: "s3:PutObject",
+                  Resource: `${bucketArn}/AWSLogs/${identity.accountId}/*`,
+                  Condition: {
+                    StringEquals: {
+                      "s3:x-amz-acl": "bucket-owner-full-control",
+                    },
+                  },
+                },
+              ],
+            }),
+        ),
+      },
+      { protect: true, dependsOn },
+    );
+
     new aws.cloudtrail.Trail(
       `${namePrefix}-compliance-trail`,
       {
@@ -111,7 +160,9 @@ export function buildComplianceResources(
           },
         ],
       },
-      { dependsOn },
+      // Fix 1: dependsOn the bucket policy to avoid creation race.
+      // Fix 4: protect:true matches KMS/S3 durable compliance resources.
+      { protect: true, dependsOn: [...(dependsOn ?? []), trailBucketPolicy] },
     );
   }
 
@@ -130,7 +181,8 @@ export function buildComplianceResources(
         },
         rules: [],
       },
-      { dependsOn },
+      // Fix 4: protect:true matches KMS/S3 durable compliance resources.
+      { protect: true, dependsOn },
     );
   }
 
@@ -145,7 +197,8 @@ export function buildComplianceResources(
           sourceIdentifier: "RDS_INSTANCE_PUBLIC_ACCESS_CHECK",
         },
       },
-      { dependsOn },
+      // Fix 4: protect:true matches KMS/S3 durable compliance resources.
+      { protect: true, dependsOn },
     );
 
     new aws.cfg.Rule(
@@ -157,7 +210,8 @@ export function buildComplianceResources(
           sourceIdentifier: "S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED",
         },
       },
-      { dependsOn },
+      // Fix 4: protect:true matches KMS/S3 durable compliance resources.
+      { protect: true, dependsOn },
     );
   }
 
