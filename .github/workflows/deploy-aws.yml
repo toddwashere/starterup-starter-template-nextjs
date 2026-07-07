@@ -177,7 +177,8 @@ jobs:
           fi
 
       # Run migrations BEFORE rolling new images so existing code keeps running.
-      # DATABASE_URL_DEPLOY should point at RDS via a secure connection string.
+      # Requires secret: DIRECT_URL_DEPLOY — the direct (non-pooled) RDS connection string.
+      # Prisma resolves DIRECT_URL ?? DATABASE_URL for migrations (Task 1 convention).
       - name: Install deps (database)
         working-directory: packages/database
         run: pnpm install --frozen-lockfile
@@ -185,7 +186,7 @@ jobs:
       - name: Run Prisma migrations
         working-directory: packages/database
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DEPLOY }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL_DEPLOY }}
         run: pnpm exec prisma migrate deploy
 
       # Deploy core infrastructure (RDS, SQS, Secrets Manager)
@@ -202,7 +203,9 @@ jobs:
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
-      # Deploy app services (ECS Fargate) — imageTag pins every service to this SHA
+      # Deploy app services: App Runner rolling update (dashboard, www, public-api, public-mcp)
+      # + workers Lambda (Function + EventSourceMapping) — all managed by the apps stack.
+      # imageTag pins every service to this SHA; no separate Lambda publish step needed.
       - name: Install deps (apps stack)
         working-directory: infra/aws/apps
         run: pnpm install --frozen-lockfile
@@ -217,3 +220,11 @@ jobs:
             imageTag: { value: "${{ github.sha }}" }
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Smoke test dashboard health
+        working-directory: infra/aws/apps
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          URL=$(pulumi stack output dashboardUrl --stack ${{ steps.stack.outputs.name }})
+          curl --fail --retry 5 --retry-all-errors --retry-delay 15 "https://$URL/api/health"
