@@ -317,13 +317,13 @@ new aws.rds.ProxyTarget("db-proxy-target", {
 
 // --- SQS (jobs queue + DLQ) -------------------------------------------------
 const dlq = new aws.sqs.Queue("jobs-dlq", {
-  name: `${namePrefix}-jobs-dlq`,
+  name: pulumi.interpolate`starter-jobs-dlq-${pulumi.getStack()}`,
   messageRetentionSeconds: 1209600, // 14 days
   tags: baseTags,
 });
 
 const jobsQueue = new aws.sqs.Queue("jobs", {
-  name: `${namePrefix}-jobs`,
+  name: pulumi.interpolate`starter-jobs-${pulumi.getStack()}`,
   visibilityTimeoutSeconds: 60,
   messageRetentionSeconds: 345600, // 4 days
   redrivePolicy: pulumi.jsonStringify({
@@ -402,7 +402,7 @@ export const sqsQueueArn = jobsQueue.arn;
 export const sqsDlqArn = dlq.arn;
 export const uploadsBucket = uploadsBucketResource.bucket;
 // Re-export the compliance KMS key ARN ("" when CMEK is disabled).
-export { kmsKeyArn };
+export { kmsKeyArn, privateSubnetIds };
 
 // Preserved from the prior core stack (still consumed / informational).
 export const regionOutput = region;
