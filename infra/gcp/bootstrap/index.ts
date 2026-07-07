@@ -9,7 +9,6 @@ const gcpConfig = new pulumi.Config("gcp");
 const project = gcpConfig.require("project");
 const region = gcpConfig.require("region");
 
-const privateNetwork = config.getBoolean("privateNetwork") ?? false;
 const vpcCidr = config.get("vpcCidr") ?? "10.10.0.0/24";
 const complianceMode = (config.get("complianceMode") as ComplianceMode) ?? "none";
 const compliance = resolveCompliance(complianceMode, {
@@ -35,47 +34,36 @@ const complianceResources = buildComplianceResources({
   dependsOn: apis,
 });
 
-// --- 2. VPC + connector + private services access (when privateNetwork). ------
-const network = privateNetwork
-  ? new gcp.compute.Network("starter-vpc", { autoCreateSubnetworks: false }, { dependsOn: apis })
-  : undefined;
+// --- 2. VPC + connector + private services access (always). -------------------
+const network = new gcp.compute.Network("starter-vpc", { autoCreateSubnetworks: false }, { dependsOn: apis });
 
-const subnet = network
-  ? new gcp.compute.Subnetwork("starter-subnet", {
-      network: network.id,
-      region,
-      ipCidrRange: vpcCidr,
-      privateIpGoogleAccess: true,
-    })
-  : undefined;
+const subnet = new gcp.compute.Subnetwork("starter-subnet", {
+  network: network.id,
+  region,
+  ipCidrRange: vpcCidr,
+  privateIpGoogleAccess: true,
+});
 
-const vpcConnector = network
-  ? new gcp.vpcaccess.Connector("starter-connector", {
-      region,
-      network: network.name,
-      ipCidrRange: "10.20.0.0/28",
-      minThroughput: 200,
-      maxThroughput: 300,
-    })
-  : undefined;
+const vpcConnector = new gcp.vpcaccess.Connector("starter-connector", {
+  region,
+  network: network.name,
+  ipCidrRange: "10.20.0.0/28",
+  minThroughput: 200,
+  maxThroughput: 300,
+});
 
-const psaRange = network
-  ? new gcp.compute.GlobalAddress("starter-psa", {
-      purpose: "VPC_PEERING",
-      addressType: "INTERNAL",
-      prefixLength: 16,
-      network: network.id,
-    })
-  : undefined;
+const psaRange = new gcp.compute.GlobalAddress("starter-psa", {
+  purpose: "VPC_PEERING",
+  addressType: "INTERNAL",
+  prefixLength: 16,
+  network: network.id,
+});
 
-const psa =
-  network && psaRange
-    ? new gcp.servicenetworking.Connection("starter-psa-conn", {
-        network: network.id,
-        service: "servicenetworking.googleapis.com",
-        reservedPeeringRanges: [psaRange.name],
-      })
-    : undefined;
+const psa = new gcp.servicenetworking.Connection("starter-psa-conn", {
+  network: network.id,
+  service: "servicenetworking.googleapis.com",
+  reservedPeeringRanges: [psaRange.name],
+});
 
 // --- 3. Artifact Registry repository for app images. --------------------------
 const repo = new gcp.artifactregistry.Repository(
@@ -163,11 +151,11 @@ if (billingAccountId && budgetAmount) {
 // --- Exports (locked contract — see plan header). -----------------------------
 export const projectId = project;
 export const regionOut = region;
-export const networkId = network ? network.id : pulumi.output("");
-export const networkSelfLink = network ? network.selfLink : pulumi.output("");
-export const subnetSelfLink = subnet ? subnet.selfLink : pulumi.output("");
-export const vpcConnectorId = vpcConnector ? vpcConnector.id : pulumi.output("");
-export const privateServicesConnection = psa ? psa.id : pulumi.output("");
+export const networkId = network.id;
+export const networkSelfLink = network.selfLink;
+export const subnetSelfLink = subnet.selfLink;
+export const vpcConnectorId = vpcConnector.id;
+export const privateServicesConnection = psa.id;
 export const artifactRegistryRepo = pulumi.interpolate`${region}-docker.pkg.dev/${project}/${repo.repositoryId}`;
 export const deployServiceAccountEmail = deploySa.email;
 export const workloadIdentityProvider = wifProvider.name;

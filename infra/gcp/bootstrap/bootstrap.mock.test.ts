@@ -23,10 +23,10 @@ describe("bootstrap layer (mocked)", () => {
       "starter-gcp-bootstrap",
       "sandbox",
     );
-    // sandbox stack → privateNetwork false → network outputs are "".
     pulumi.runtime.setAllConfig({
       "gcp:project": "test-project",
       "gcp:region": "us-central1",
+      "starter-gcp-bootstrap:privateNetwork": "true",
     });
     infra = await import("./index");
   });
@@ -37,9 +37,11 @@ describe("bootstrap layer (mocked)", () => {
     expect(repo).toContain("docker.pkg.dev");
   });
 
-  it("exposes empty network outputs in sandbox (privateNetwork off)", async () => {
+  it("provisions network outputs in every environment", async () => {
     const net = await new Promise<string>((res) => infra.networkId.apply(res));
-    expect(net).toBe("");
+    const connector = await new Promise<string>((res) => infra.vpcConnectorId.apply(res));
+    expect(net).not.toBe("");
+    expect(connector).not.toBe("");
   });
 
   it("exports a deploy service account email", async () => {
