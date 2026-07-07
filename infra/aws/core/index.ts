@@ -366,9 +366,13 @@ new aws.s3.BucketPublicAccessBlock("uploads-public-access-block", {
 
 // --- Secrets Manager: connection strings ------------------------------------
 // POOLED: routes through the RDS Proxy endpoint (App workloads use this).
-const pooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${dbProxy.endpoint}:5432/starter`;
+// `sslmode=require` is mandatory: the proxy sets requireTls:true, and the
+// runtime @prisma/adapter-pg (pg) defaults to no TLS otherwise → connection
+// rejected.
+const pooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${dbProxy.endpoint}:5432/starter?sslmode=require`;
 // DIRECT: hits the instance endpoint directly (migrations / long transactions).
-const directUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${db.endpoint}/starter`;
+// PG16's default parameter group ships rds.force_ssl=1, so require TLS here too.
+const directUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${db.endpoint}/starter?sslmode=require`;
 
 const dbUrlSecret = new aws.secretsmanager.Secret("database-url", {
   name: `/starter/${stack}/database-url`,
@@ -406,6 +410,5 @@ export { kmsKeyArn, privateSubnetIds };
 
 // Preserved from the prior core stack (still consumed / informational).
 export const regionOutput = region;
-export const databaseUrl = pulumi.secret(pooledUrl);
 export const sqsDlqUrl = dlq.url;
 export const dbInstanceEndpoint = db.endpoint;

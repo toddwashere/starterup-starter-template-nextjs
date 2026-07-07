@@ -109,7 +109,8 @@ jobs:
           - { name: www,         dockerfile: infra/shared/docker/Dockerfile.www }
           - { name: public-api,  dockerfile: infra/shared/docker/Dockerfile.public-api }
           - { name: public-mcp,  dockerfile: infra/shared/docker/Dockerfile.public-mcp }
-          - { name: workers,     dockerfile: apps/workers/Dockerfile }
+          - { name: workers,        dockerfile: apps/workers/Dockerfile }
+          - { name: workers-lambda, dockerfile: apps/workers/Dockerfile.lambda }
     steps:
       - uses: actions/checkout@v4
 

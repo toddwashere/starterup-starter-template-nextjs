@@ -26,7 +26,11 @@ const config = new pulumi.Config();
 const coreStackRef = config.require("coreStackRef");
 const imageRegistry = config.require("imageRegistry"); // ECR registry URL
 
-const imageTag = cfg.apps.imageTag;
+// CI passes the deploy-time image tag via `pulumi up --config imageTag=<sha>`
+// (see .github/workflows/deploy-aws.yml). Honor that override first so App
+// Runner/Lambda reference the SHA-tagged images CI actually pushed; fall back
+// to the env config's tag for local/default deploys.
+const imageTag = config.get("imageTag") ?? cfg.apps.imageTag;
 
 // The AWS provider reads `aws:region` from stack config; fall back to the env
 // config's region so both stay in sync (kept identical to core).
@@ -292,15 +296,18 @@ const dbSecret = aws.secretsmanager.getSecretVersionOutput({
   secretId: databaseUrlSecretArn,
 });
 
-// Container-image packaging (preferred): matches the existing Docker pipeline
-// (one image per app in ECR) so there is no separate zip build.  The Lambda
-// entrypoint built in Task 2 is invoked via imageConfig.command.
+// Container-image packaging: matches the existing Docker pipeline (one image
+// per app in ECR) so there is no separate zip build. NOTE this points at the
+// dedicated `workers-lambda` image (apps/workers/Dockerfile.lambda), which is
+// built on the AWS Lambda Node base image and bundles the Runtime Interface
+// Client — NOT the `workers` image, whose CMD runs the long-lived poller
+// (`tsx src/index.ts`) and does not implement the Lambda Runtime API.
 const workersFn = new aws.lambda.Function("workers", {
   name: `${namePrefix}-workers`,
   packageType: "Image",
-  imageUri: pulumi.interpolate`${imageRegistry}/workers:${imageTag}`,
+  imageUri: pulumi.interpolate`${imageRegistry}/workers-lambda:${imageTag}`,
   imageConfig: {
-    commands: ["lambda.handler"],
+    commands: ["apps/workers/src/lambda.handler"],
   },
   role: workersRole.arn,
   timeout: 60,
