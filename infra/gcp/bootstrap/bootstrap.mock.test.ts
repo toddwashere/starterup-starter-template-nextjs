@@ -26,7 +26,9 @@ describe("bootstrap layer (mocked)", () => {
     pulumi.runtime.setAllConfig({
       "gcp:project": "test-project",
       "gcp:region": "us-central1",
-      "starter-gcp-bootstrap:privateNetwork": "true",
+      // privateNetwork flag is set to "false" to prove single-topology invariant:
+      // network resources must be created unconditionally regardless of this flag.
+      "starter-gcp-bootstrap:privateNetwork": "false",
     });
     infra = await import("./index");
   });

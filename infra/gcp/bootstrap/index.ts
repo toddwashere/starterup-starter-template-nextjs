@@ -35,6 +35,9 @@ const complianceResources = buildComplianceResources({
 });
 
 // --- 2. VPC + connector + private services access (always). -------------------
+// Single-topology design: VPC, Connector, and PSA are created unconditionally in
+// every environment. The `privateNetwork` config flag is retained as a topology
+// marker (always true) but no longer gates resource creation.
 const network = new gcp.compute.Network("starter-vpc", { autoCreateSubnetworks: false }, { dependsOn: apis });
 
 const subnet = new gcp.compute.Subnetwork("starter-subnet", {

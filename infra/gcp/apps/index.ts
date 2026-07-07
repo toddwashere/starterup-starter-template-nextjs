@@ -45,6 +45,12 @@ const imageTag = config.get("imageTag") ?? "latest";
 const apexDomain = config.get("lbDomain") ?? "";
 const publicUrlEnv = apexDomain ? buildPublicUrlEnv(apexDomain) : {};
 
+// VPC connector access — shared by Cloud Run Services AND the migrate Job so that
+// private-IP Cloud SQL is reachable in every topology (connector absent → undefined).
+const vpcAccess = vpcConnectorId.apply((id) =>
+  id ? { connector: id, egress: "ALL_TRAFFIC" } : { connector: undefined, egress: undefined },
+);
+
 const services: Record<string, gcp.cloudrunv2.Service> = {};
 const serviceAccounts: Record<string, gcp.serviceaccount.Account> = {};
 
@@ -140,11 +146,6 @@ for (const app of APPS) {
     ? [{ name: "cloudsql", cloudSqlInstance: { instances: [dbConnectionName] } }]
     : undefined;
 
-  const vpcAccess: pulumi.Input<gcp.types.input.cloudrunv2.ServiceTemplateVpcAccess> | undefined =
-    vpcConnectorId.apply((id) =>
-      id ? { connector: id, egress: "ALL_TRAFFIC" } : { connector: undefined, egress: undefined },
-    );
-
   services[app.name] = new gcp.cloudrunv2.Service(app.name, {
     name: `starter-${app.name}`,
     location: region,
@@ -188,6 +189,7 @@ const migrateJob = new gcp.cloudrunv2.Job("migrate", {
   template: {
     template: {
       serviceAccount: serviceAccounts.dashboard.email,
+      vpcAccess,
       containers: [
         {
           image: pulumi.interpolate`${imageRegistry}/dashboard:${imageTag}`,
