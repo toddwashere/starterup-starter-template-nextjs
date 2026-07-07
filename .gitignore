@@ -37,6 +37,7 @@ pnpm-debug.log*
 # local env files
 .env
 .env*.local
+infra/.pulumi-passphrase
 
 # vercel
 .vercel

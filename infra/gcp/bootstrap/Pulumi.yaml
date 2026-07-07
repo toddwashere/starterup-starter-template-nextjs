@@ -1,8 +1,3 @@
 name: starter-gcp-bootstrap
 runtime: nodejs
 description: Foundational GCP resources (API enablement, VPC, Artifact Registry, deploy identity, budget)
-config:
-  gcp:project:
-    description: GCP project ID
-  gcp:region:
-    description: GCP region for regional resources (e.g. us-central1)

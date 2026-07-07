@@ -10,8 +10,8 @@ import {
  * Builds on `envBaseConfig` with only project and budget overrides.
  */
 const sandboxOverrides = {
-  gcp: { project: "your-sandbox-project-id" },
-  bootstrap: { budgetAmount: 50 },
+  gcp: { project: "inthealth-test" },
+  bootstrap: { budgetAmount: 20 },
 } satisfies DeepPartialGcpEnvConfig;
 
 export const config = composeEnvConfig(envBaseConfig, sandboxOverrides);

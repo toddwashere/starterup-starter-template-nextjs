@@ -16,6 +16,7 @@ right order, with a preflight that fails fast on misconfiguration (no apply-fail
 gcloud auth application-default login          # authenticate
 gcloud projects create my-sandbox-proj         # or use an existing project
 # → link a billing account to the project in the GCP console (Billing → Link)
+cp infra/.env.example infra/.env.local         # then set PULUMI_CONFIG_PASSPHRASE (see infra/.env.example)
 
 # 1. Set your project in infra/gcp/config.sandbox.ts
 

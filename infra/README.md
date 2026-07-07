@@ -23,6 +23,7 @@ Before deploying to any profile:
 - **CLI tools:** `gcloud`, `aws`, `az` (for Pulumi clouds); `render`, `vercel` (for PaaS)
 - **Billing alerts:** Set up budget alerts at $10, $25, and $50 USD on your cloud account _before_ deploy
 - **Optional:** Separate cloud project/account for sandbox (easy kill switch via project deletion)
+- **Infra operator env:** `cp infra/.env.example infra/.env.local` — GCP needs `PULUMI_CONFIG_PASSPHRASE`; AWS/Azure use `PULUMI_ACCESS_TOKEN` (see file). Not the same as root `.env` for app dev.
 
 ## Startup credits
 

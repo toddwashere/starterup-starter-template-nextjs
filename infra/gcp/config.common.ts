@@ -14,16 +14,16 @@ export const commonConfig = {
   schemaVersion: 1,
   gcp: { region: "us-central1" },
   domains: {
-    base: "example.com",
+    base: "intermission-health.com",
     stagingPrefix: "staging",
     sandboxPrefix: "sandbox",
   },
   database: { version: "POSTGRES_16" },
   bootstrap: {
     vpcCidr: "10.10.0.0/24",
-    billingAccountId: "",
-    githubRepo: "",
-    securityContactEmail: "",
+    billingAccountId: "01168C-A16561-C2E826",
+    githubRepo: "https://github.com/toddwashere/starterup-starter-template-nextjs",
+    securityContactEmail: "todd+security@intermission.health",
   },
   messaging: {
     enableRedis: false,
