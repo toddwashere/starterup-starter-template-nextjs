@@ -33,4 +33,10 @@ describe("database keys", () => {
     process.env.DATABASE_URL = "not-a-url";
     expect(() => keys()).toThrow();
   });
+
+  it("rejects a malformed DIRECT_URL", () => {
+    process.env.DATABASE_URL = "postgresql://u:p@host:6543/db";
+    process.env.DIRECT_URL = "not-a-url";
+    expect(() => keys()).toThrow();
+  });
 });
