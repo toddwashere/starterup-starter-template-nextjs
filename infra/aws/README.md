@@ -279,7 +279,7 @@ aws budgets create-budget \
   --account-id <AWS_ACCOUNT_ID> \
   --budget '{
     "BudgetName": "starter-aws-budget",
-    "BudgetLimit": { "Amount": "50", "Unit": "USD" },
+    "BudgetLimit": { "Amount": "100", "Unit": "USD" },
     "TimeUnit": "MONTHLY",
     "BudgetType": "COST"
   }' \

@@ -29,6 +29,12 @@ const region = new pulumi.Config("aws").get("region") ?? cfg.aws.region;
 const namePrefix = `starter-${stack}`;
 const baseTags = { Project: "starter", Stack: stack, ManagedBy: "pulumi" };
 
+// Production must never lose persisted data: keep RDS deletion protection, a
+// final snapshot, Pulumi resource protection, and Secrets Manager recovery
+// windows. Non-production stacks are disposable so `pulumi destroy` tears down
+// cleanly and leaves no orphaned RDS instances, snapshots, secrets, or buckets.
+const isProduction = env === "production";
+
 // --- Compliance -------------------------------------------------------------
 // resolveCompliance derives the per-feature flags (cmek, auditLogs, …) from the
 // coarse complianceMode; buildComplianceResources materialises the always-safe
@@ -221,14 +227,17 @@ const db = new aws.rds.Instance(
     publiclyAccessible: false,
     storageEncrypted: true,
     kmsKeyId: cmekKeyId,
-    skipFinalSnapshot: false,
-    finalSnapshotIdentifier: `${namePrefix}-db-final`,
-    deletionProtection: true,
+    // Non-prod: skip the final snapshot so destroy completes without leaving a
+    // lingering snapshot artifact. Prod: always take a final snapshot.
+    skipFinalSnapshot: !isProduction,
+    finalSnapshotIdentifier: isProduction ? `${namePrefix}-db-final` : undefined,
+    deletionProtection: isProduction,
     backupRetentionPeriod: 7,
     tags: { ...baseTags, Name: `${namePrefix}-db` },
   },
   {
-    protect: true,
+    // Only guard production against accidental deletion; non-prod is disposable.
+    protect: isProduction,
     deleteBeforeReplace: false,
   },
 );
@@ -237,7 +246,9 @@ const db = new aws.rds.Instance(
 // Auth secret in the {username,password} shape RDS Proxy expects.
 const proxyAuthSecret = new aws.secretsmanager.Secret("rds-proxy-auth", {
   name: `/starter/${stack}/rds-proxy-auth`,
-  recoveryWindowInDays: 7,
+  // Non-prod: 0 = force delete without a recovery window so the same secret
+  // name can be re-created immediately on the next deploy. Prod: 7-day recovery.
+  recoveryWindowInDays: isProduction ? 7 : 0,
   kmsKeyId: cmekKeyId,
 });
 new aws.secretsmanager.SecretVersion("rds-proxy-auth-v1", {
@@ -336,6 +347,8 @@ const jobsQueue = new aws.sqs.Queue("jobs", {
 // --- S3 uploads bucket ------------------------------------------------------
 const uploadsBucketResource = new aws.s3.BucketV2("uploads", {
   bucketPrefix: `${namePrefix}-uploads-`,
+  // Non-prod: allow destroy to delete a non-empty bucket. Prod: retain objects.
+  forceDestroy: !isProduction,
   tags: { ...baseTags, Name: `${namePrefix}-uploads` },
 });
 
@@ -376,7 +389,7 @@ const directUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@$
 
 const dbUrlSecret = new aws.secretsmanager.Secret("database-url", {
   name: `/starter/${stack}/database-url`,
-  recoveryWindowInDays: 7,
+  recoveryWindowInDays: isProduction ? 7 : 0,
   kmsKeyId: cmekKeyId,
 });
 new aws.secretsmanager.SecretVersion("database-url-v1", {
@@ -386,7 +399,7 @@ new aws.secretsmanager.SecretVersion("database-url-v1", {
 
 const directUrlSecret = new aws.secretsmanager.Secret("direct-url", {
   name: `/starter/${stack}/direct-url`,
-  recoveryWindowInDays: 7,
+  recoveryWindowInDays: isProduction ? 7 : 0,
   kmsKeyId: cmekKeyId,
 });
 new aws.secretsmanager.SecretVersion("direct-url-v1", {
