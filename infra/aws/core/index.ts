@@ -7,6 +7,7 @@ import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
 import { resolveCompliance } from "../../shared/compliance";
 import { buildComplianceResources } from "./compliance-resources";
+import { buildVercelAccess } from "./vercel-access";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -407,6 +408,25 @@ new aws.secretsmanager.SecretVersion("direct-url-v1", {
   secretString: directUrl,
 });
 
+// --- Vercel OIDC access (hybrid: Vercel apps -> AWS data/AI plane) -----------
+// Keyless, least-privilege role Vercel assumes via OIDC. Only created when a
+// team slug is configured (the hybrid profile); pure-AWS deploys leave it unset.
+let vercelAccessRoleArn: pulumi.Output<string> | undefined;
+if (cfg.access.vercelOidc.teamSlug.trim()) {
+  const vercelAccess = buildVercelAccess({
+    namePrefix,
+    vercelOidc: cfg.access.vercelOidc,
+    uploadsBucketArn: uploadsBucketResource.arn,
+    jobsQueueArn: jobsQueue.arn,
+    secretArns: [dbUrlSecret.arn, directUrlSecret.arn],
+    bedrockRegion: cfg.ai.bedrockRegion,
+    bedrockModels: cfg.ai.bedrockModels,
+    cmekKeyArn: cmekKeyId,
+    tags: baseTags,
+  });
+  vercelAccessRoleArn = vercelAccess.roleArn;
+}
+
 // --- Exports ----------------------------------------------------------------
 // Required by Task 7 (apps layer) via StackReference — names are load-bearing.
 export const vpcId = vpc.id;
@@ -425,3 +445,6 @@ export { kmsKeyArn, privateSubnetIds };
 export const regionOutput = region;
 export const sqsDlqUrl = dlq.url;
 export const dbInstanceEndpoint = db.endpoint;
+// ARN of the Vercel OIDC access role (undefined for pure-AWS deploys). Paste
+// into the Vercel project as AWS_ROLE_ARN.
+export const vercelAccessRoleArnOutput = vercelAccessRoleArn;
