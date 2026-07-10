@@ -81,6 +81,26 @@ const kmsDecryptStatements = compliance.cmek
     ]
   : [];
 
+// Bedrock InvokeModel, scoped to the configured foundation models. Applied to
+// the App Runner instance role and the workers Lambda role so server-side AI
+// calls work from either runtime.
+const bedrockStatements =
+  cfg.ai.bedrockModels.length > 0
+    ? [
+        {
+          Effect: "Allow",
+          Action: [
+            "bedrock:InvokeModel",
+            "bedrock:InvokeModelWithResponseStream",
+          ],
+          Resource: cfg.ai.bedrockModels.map(
+            (model) =>
+              `arn:aws:bedrock:${cfg.ai.bedrockRegion}::foundation-model/${model}`,
+          ),
+        },
+      ]
+    : [];
+
 // ===========================================================================
 // App Runner: dashboard, www, public-api, public-mcp
 // ===========================================================================
@@ -147,6 +167,7 @@ new aws.iam.RolePolicy("apprunner-instance-policy", {
         ],
         Resource: [uploadsBucketArn, uploadsObjectsArn],
       },
+      ...bedrockStatements,
       ...kmsDecryptStatements,
     ],
   }),
@@ -185,6 +206,9 @@ for (const app of apprunnerApps) {
             PORT: String(app.port),
             WORKER_QUEUE_ADAPTER: "sqs",
             SQS_QUEUE_URL: sqsQueueUrl,
+            // The AI SDK's Bedrock provider reads AWS_REGION; App Runner does
+            // not set it automatically (Lambda does, as a reserved var).
+            AWS_REGION: cfg.ai.bedrockRegion,
           },
           runtimeEnvironmentSecrets: {
             DATABASE_URL: databaseUrlSecretArn,
@@ -283,6 +307,7 @@ new aws.iam.RolePolicy("workers-inline", {
         ],
         Resource: [uploadsBucketArn, uploadsObjectsArn],
       },
+      ...bedrockStatements,
       ...kmsDecryptStatements,
     ],
   }),

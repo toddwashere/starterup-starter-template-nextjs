@@ -186,6 +186,14 @@ export function buildComplianceResources(
     );
   }
 
+  // --- (e2) Bedrock model-invocation logging. --------------------------------
+  // NOTE: capturing Bedrock prompt/completion data-plane events requires the
+  // PutModelInvocationLoggingConfiguration API. The pinned @pulumi/aws (7.35)
+  // does not yet expose `bedrock.ModelInvocationLoggingConfiguration`, so this
+  // is enabled as a one-time deploy step (see infra/aws/README.md) until the
+  // provider ships the resource. CloudTrail (block c) already records Bedrock
+  // control-plane management events.
+
   // --- (e) AWS Config managed rules (org-policy equivalent). -----------------
   if (compliance.orgPolicies) {
     new aws.cfg.Rule(
