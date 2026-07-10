@@ -88,6 +88,66 @@ Add to `apps/dashboard/vercel.json`:
 
 Vercel Cron sends `Authorization: Bearer <VERCEL_AUTOMATION_BYPASS_SECRET>` — update `authorized()` or map the header accordingly.
 
+## Hybrid: Vercel apps + AWS data/AI plane (no Secure Compute)
+
+Run the apps on Vercel while the data/AI plane (Postgres, S3, SQS, Bedrock) lives
+in AWS — without Vercel Secure Compute. S3, SQS, Bedrock, and Secrets are public
+AWS APIs consumed with short-lived credentials from an assumed IAM role (Vercel
+OIDC federation). Postgres is reached through a public PgBouncer NLB that fronts
+a **private** RDS. See the design spec:
+[`docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md`](../../docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md).
+
+### 1. Provision the AWS side
+
+Set the Vercel team/project in the AWS env config so the OIDC role is created:
+
+```ts
+// infra/aws/config.<env>.ts (composed over config.common.ts)
+access: { vercelOidc: { teamSlug: "<your-team>", projectName: "<your-project>" } }
+```
+
+Then `cd infra/aws/core && pulumi up`. Relevant stack outputs:
+
+| Output | Use in Vercel |
+|--------|---------------|
+| `vercelAccessRoleArnOutput` | `AWS_ROLE_ARN` |
+| `vercelDatabaseUrlSecretArn` | pooled `DATABASE_URL` (PgBouncer `:6432`) |
+| `poolerEndpointOutput` | PgBouncer NLB DNS (host for `DATABASE_URL`) |
+
+### 2. Connect Vercel's OIDC to AWS
+
+Enable OIDC federation for the Vercel project (Settings → Secure Backend Access /
+OIDC). The IAM provider trusts issuer `https://oidc.vercel.com/<team>` and the
+role's trust policy is scoped to `owner:<team>:project:<project>:environment:*`.
+
+### 3. Set Vercel env vars
+
+| Var | Value |
+|-----|-------|
+| `AWS_ROLE_ARN` | the `vercelAccessRoleArnOutput` role ARN |
+| `AWS_REGION` | e.g. `us-east-1` (also selects the Bedrock region) |
+| `DATABASE_URL` | `postgresql://starter:<pw>@<pooler-nlb-dns>:6432/starter?sslmode=verify-full` |
+| `SQS_QUEUE_URL` | core's `sqsQueueUrl` |
+| `WORKER_QUEUE_ADAPTER` | `sqs` |
+
+No long-lived AWS access keys are stored: the SQS producer and the Bedrock AI
+provider both call `awsCredentialsProvider({ roleArn: AWS_ROLE_ARN })` when
+`AWS_ROLE_ARN` is set, and fall back to the default AWS credential chain in AWS.
+
+### 4. Migrations
+
+Run migrations against the **direct** RDS endpoint (not the pooler) via an SSM
+tunnel or a temporary allow — the pooler is transaction-mode and unsuitable for
+DDL sessions. Use core's `directUrlSecretArn` value for `DIRECT_URL`.
+
+### Compliance / BAAs
+
+Set `complianceMode: "hipaa"` (or `"hipaa+soc2"`) on the PHI environment to turn
+on CloudTrail data events, VPC Flow Logs, CMEK, and the immutable log bucket.
+Accept the **AWS BAA** (AWS Artifact, free) and the **Vercel BAA** (HIPAA plan).
+Bedrock model-invocation (prompt/completion) logging is enabled as a one-time
+deploy step — see [infra/aws/README.md](../aws/README.md).
+
 ## Startup credits
 
 | Service | Program | Link |

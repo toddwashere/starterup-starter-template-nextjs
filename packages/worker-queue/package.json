@@ -21,6 +21,7 @@
     "@aws-sdk/client-sqs": "^3",
     "@azure/service-bus": "^7",
     "@google-cloud/pubsub": "^4",
+    "@vercel/functions": "^3.7.5",
     "bullmq": "^5",
     "zod": "^4.0.0"
   },

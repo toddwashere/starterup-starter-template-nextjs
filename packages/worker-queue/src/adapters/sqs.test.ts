@@ -18,10 +18,16 @@ vi.mock("@aws-sdk/client-sqs", () => ({
   })),
 }));
 
+vi.mock("@vercel/functions/oidc", () => ({
+  awsCredentialsProvider: vi.fn(() => "oidc-cred-provider"),
+}));
+
 vi.mock("../../keys", () => ({
   keys: vi.fn(),
 }));
 
+import { SQSClient } from "@aws-sdk/client-sqs";
+import { awsCredentialsProvider } from "@vercel/functions/oidc";
 import { keys } from "../../keys";
 import { createSqsAdapter } from "./sqs";
 
@@ -44,6 +50,7 @@ beforeEach(() => {
     PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     SQS_QUEUE_URL: QUEUE_URL,
     AWS_REGION: "us-east-1",
+    AWS_ROLE_ARN: undefined,
     SERVICEBUS_CONNECTION_STRING: undefined,
     SERVICEBUS_QUEUE_NAME: "jobs",
   });
@@ -78,10 +85,44 @@ describe("createSqsAdapter.publish", () => {
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
       SQS_QUEUE_URL: undefined,
       AWS_REGION: "us-east-1",
+      AWS_ROLE_ARN: undefined,
       SERVICEBUS_CONNECTION_STRING: undefined,
       SERVICEBUS_QUEUE_NAME: "jobs",
     });
     expect(() => createSqsAdapter()).toThrow(/SQS_QUEUE_URL/);
+  });
+
+  it("uses the default credential chain (no OIDC) when AWS_ROLE_ARN is unset", () => {
+    createSqsAdapter();
+    expect(awsCredentialsProvider).not.toHaveBeenCalled();
+    const clientConfig = vi.mocked(SQSClient).mock.calls[0]![0] as {
+      credentials?: unknown;
+    };
+    expect(clientConfig.credentials).toBeUndefined();
+  });
+
+  it("assumes the Vercel OIDC role when AWS_ROLE_ARN is set", () => {
+    vi.mocked(keys).mockReturnValue({
+      WORKER_QUEUE_ADAPTER: "sqs",
+      BULLMQ_QUEUE_NAME: "jobs",
+      REDIS_URL: undefined,
+      GCP_PROJECT_ID: undefined,
+      PUBSUB_TOPIC_NAME: "jobs",
+      PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
+      SQS_QUEUE_URL: QUEUE_URL,
+      AWS_REGION: "us-east-1",
+      AWS_ROLE_ARN: "arn:aws:iam::123456789012:role/vercel",
+      SERVICEBUS_CONNECTION_STRING: undefined,
+      SERVICEBUS_QUEUE_NAME: "jobs",
+    });
+    createSqsAdapter();
+    expect(awsCredentialsProvider).toHaveBeenCalledWith({
+      roleArn: "arn:aws:iam::123456789012:role/vercel",
+    });
+    const clientConfig = vi.mocked(SQSClient).mock.calls[0]![0] as {
+      credentials?: unknown;
+    };
+    expect(clientConfig.credentials).toBe("oidc-cred-provider");
   });
 });
 

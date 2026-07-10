@@ -5,6 +5,7 @@ import {
   DeleteMessageCommand,
   ChangeMessageVisibilityCommand,
 } from "@aws-sdk/client-sqs";
+import { awsCredentialsProvider } from "@vercel/functions/oidc";
 
 import { keys } from "../../keys";
 import type { JobEnvelope, QueueAdapter, ReceivedMessage } from "../types";
@@ -19,9 +20,16 @@ export interface SqsConsumer {
 export interface SqsAdapter extends QueueAdapter, SqsConsumer {}
 
 export function createSqsAdapter(): SqsAdapter {
-  const { SQS_QUEUE_URL, AWS_REGION } = keys();
+  const { SQS_QUEUE_URL, AWS_REGION, AWS_ROLE_ARN } = keys();
   if (!SQS_QUEUE_URL) throw new Error("SQS_QUEUE_URL is required for the sqs adapter");
-  const client = new SQSClient({ region: AWS_REGION });
+  // On Vercel, AWS_ROLE_ARN drives OIDC-assumed (keyless) credentials; in AWS
+  // the default credential chain (task role) resolves credentials.
+  const client = new SQSClient({
+    region: AWS_REGION,
+    ...(AWS_ROLE_ARN
+      ? { credentials: awsCredentialsProvider({ roleArn: AWS_ROLE_ARN }) }
+      : {}),
+  });
 
   return {
     async publish(_queue, envelope: JobEnvelope) {

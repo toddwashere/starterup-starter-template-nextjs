@@ -114,6 +114,45 @@ Both secrets live in Secrets Manager and are injected at runtime via IAM. The Pr
 
 ---
 
+## Hybrid mode: Vercel apps + AWS data/AI plane
+
+For a Vercel-hosted frontend that uses this AWS data/AI plane **without** Vercel
+Secure Compute, `core` provisions two extra pieces (design spec:
+[`docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md`](../../docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md)):
+
+| Piece | Module | Purpose |
+|-------|--------|---------|
+| Vercel OIDC access role | `core/vercel-access.ts` | Keyless, least-privilege role Vercel assumes (S3 uploads, SQS produce, app secrets, Bedrock InvokeModel). Created when `access.vercelOidc.teamSlug` is set. |
+| Public PgBouncer pooler | `core/pgbouncer.ts` | Transaction-mode PgBouncer (Fargate, private subnets) behind a public NLB on `:6432`. RDS and RDS Proxy stay private — PgBouncer is the only public DB surface. Created when `database.pooler.enabled`. |
+
+Bedrock is a public regional API: the Vercel role and the in-AWS App Runner /
+Lambda roles get `bedrock:InvokeModel*` scoped to `ai.bedrockModels`. See
+[infra/vercel/README.md](../vercel/README.md) for the Vercel-side wiring
+(`AWS_ROLE_ARN`, `AWS_REGION`, pooled `DATABASE_URL`).
+
+### Connection paths
+
+| Consumer | Postgres path | Auth |
+|----------|---------------|------|
+| Vercel apps | public NLB `:6432` → PgBouncer → private RDS | OIDC role + `sslmode=verify-full` |
+| In-AWS App Runner / Lambda | private RDS Proxy `:5432` → RDS | task role |
+
+### Bedrock invocation logging (deploy step)
+
+The pinned `@pulumi/aws` does not expose the model-invocation logging resource,
+so enable prompt/completion logging once per account/region after `pulumi up`:
+
+```sh
+aws bedrock put-model-invocation-logging-configuration --logging-config '{
+  "cloudWatchConfig": { "logGroupName": "/starter/<env>/bedrock-invocations", "roleArn": "<bedrock-logs-role-arn>" },
+  "textDataDeliveryEnabled": true, "embeddingDataDeliveryEnabled": true
+}'
+```
+
+CloudTrail already records Bedrock control-plane management events.
+
+---
+
 ## Per-environment cost estimate
 
 Indicative monthly figures, low traffic, `us-east-1`, single topology.
