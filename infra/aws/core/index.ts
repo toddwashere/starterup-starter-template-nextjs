@@ -8,6 +8,7 @@ import { config as productionConfig } from "../config.production";
 import { resolveCompliance } from "../../shared/compliance";
 import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
+import { buildPgBouncer } from "./pgbouncer";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -408,6 +409,43 @@ new aws.secretsmanager.SecretVersion("direct-url-v1", {
   secretString: directUrl,
 });
 
+// --- Public PgBouncer pooler (Vercel -> pooled Postgres) --------------------
+// RDS Proxy can't be public, so Vercel's pooled path terminates at a PgBouncer
+// NLB (public) backed by Fargate tasks in private subnets. RDS stays private.
+// A separate Vercel-facing DATABASE_URL secret points at the NLB endpoint.
+let poolerEndpoint: pulumi.Output<string> | undefined;
+let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
+if (cfg.database.pooler.enabled) {
+  const pgbouncer = buildPgBouncer({
+    namePrefix,
+    region,
+    vpcId: vpc.id,
+    publicSubnetIds: publicSubnets.map((s) => s.id),
+    privateSubnetIds,
+    dbSecurityGroupId: dbSg.id,
+    dbHost: db.address,
+    dbName: "starter",
+    dbSecretArn: proxyAuthSecret.arn,
+    pooler: cfg.database.pooler,
+    cmekKeyArn: cmekKeyId,
+    tags: baseTags,
+  });
+  poolerEndpoint = pgbouncer.poolerEndpoint;
+
+  // sslmode=verify-full: the client validates PgBouncer's server certificate.
+  const vercelPooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${poolerEndpoint}:6432/starter?sslmode=verify-full`;
+  const vercelDbUrlSecret = new aws.secretsmanager.Secret("vercel-database-url", {
+    name: `/starter/${stack}/vercel-database-url`,
+    recoveryWindowInDays: isProduction ? 7 : 0,
+    kmsKeyId: cmekKeyId,
+  });
+  new aws.secretsmanager.SecretVersion("vercel-database-url-v1", {
+    secretId: vercelDbUrlSecret.id,
+    secretString: vercelPooledUrl,
+  });
+  vercelDbUrlSecretArn = vercelDbUrlSecret.arn;
+}
+
 // --- Vercel OIDC access (hybrid: Vercel apps -> AWS data/AI plane) -----------
 // Keyless, least-privilege role Vercel assumes via OIDC. Only created when a
 // team slug is configured (the hybrid profile); pure-AWS deploys leave it unset.
@@ -418,7 +456,11 @@ if (cfg.access.vercelOidc.teamSlug.trim()) {
     vercelOidc: cfg.access.vercelOidc,
     uploadsBucketArn: uploadsBucketResource.arn,
     jobsQueueArn: jobsQueue.arn,
-    secretArns: [dbUrlSecret.arn, directUrlSecret.arn],
+    // Vercel reads the pooled (PgBouncer) URL; the direct URL is for migrations.
+    secretArns: [
+      ...(vercelDbUrlSecretArn ? [vercelDbUrlSecretArn] : [dbUrlSecret.arn]),
+      directUrlSecret.arn,
+    ],
     bedrockRegion: cfg.ai.bedrockRegion,
     bedrockModels: cfg.ai.bedrockModels,
     cmekKeyArn: cmekKeyId,
@@ -448,3 +490,6 @@ export const dbInstanceEndpoint = db.endpoint;
 // ARN of the Vercel OIDC access role (undefined for pure-AWS deploys). Paste
 // into the Vercel project as AWS_ROLE_ARN.
 export const vercelAccessRoleArnOutput = vercelAccessRoleArn;
+// Public PgBouncer endpoint + the Vercel-facing pooled DATABASE_URL secret.
+export const poolerEndpointOutput = poolerEndpoint;
+export const vercelDatabaseUrlSecretArn = vercelDbUrlSecretArn;
