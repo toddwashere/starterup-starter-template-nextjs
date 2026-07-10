@@ -22,6 +22,12 @@ const schema = z.object({
   // Anthropic
   ANTHROPIC_API_KEY: optionalString,
 
+  // Amazon Bedrock (IAM-based; no API key). AWS_ROLE_ARN is set on Vercel to
+  // drive OIDC-assumed credentials; in AWS the default credential chain (task
+  // role) is used and AWS_ROLE_ARN is left unset.
+  AWS_REGION: optionalString,
+  AWS_ROLE_ARN: optionalString,
+
   // Ollama
   OLLAMA_BASE_URL: optionalString,
 
@@ -43,6 +49,8 @@ export function keys() {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_ROLE_ARN: process.env.AWS_ROLE_ARN,
     OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
     AI_OPENAI_COMPAT_BASE_URL: process.env.AI_OPENAI_COMPAT_BASE_URL,
     AI_OPENAI_COMPAT_API_KEY: process.env.AI_OPENAI_COMPAT_API_KEY,

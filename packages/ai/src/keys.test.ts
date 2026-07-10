@@ -21,6 +21,19 @@ describe("keys() — secrets only (no routing / generation vars)", () => {
     expect(keys().LANGFUSE_PUBLIC_KEY).toBe("pk-lf-test");
   });
 
+  it("reads the Bedrock AWS region and role arn when set", () => {
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/vercel");
+    const config = keys();
+    expect(config.AWS_REGION).toBe("us-east-1");
+    expect(config.AWS_ROLE_ARN).toBe("arn:aws:iam::123456789012:role/vercel");
+  });
+
+  it("treats an empty AWS_ROLE_ARN as undefined (AWS default credential chain)", () => {
+    vi.stubEnv("AWS_ROLE_ARN", "");
+    expect(keys().AWS_ROLE_ARN).toBeUndefined();
+  });
+
   it("no longer exposes model routing or generation env vars", () => {
     const config = keys() as Record<string, unknown>;
     expect(config.AI_AGENT_MAX_STEPS).toBeUndefined();

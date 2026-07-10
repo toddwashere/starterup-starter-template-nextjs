@@ -51,6 +51,34 @@ describe("getModel() with an explicit providerModel", () => {
     expect(getModel({ providerModel: "ollama:llama3.2" })).toBeDefined();
   });
 
+  it("returns a defined bedrock model when AWS_REGION is set", () => {
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    expect(
+      getModel({
+        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+      }),
+    ).toBeDefined();
+  });
+
+  it("throws a readable error naming AWS_REGION when bedrock has no region", () => {
+    vi.stubEnv("AWS_REGION", "");
+    expect(() =>
+      getModel({
+        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+      }),
+    ).toThrow(/AWS_REGION/);
+  });
+
+  it("builds a bedrock model with an assumed-role provider when AWS_ROLE_ARN is set", () => {
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/vercel");
+    expect(
+      getModel({
+        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+      }),
+    ).toBeDefined();
+  });
+
   it("throws when the providerModel value is malformed", () => {
     expect(() =>
       getModel({ providerModel: "garbage" as ProviderModelValue }),

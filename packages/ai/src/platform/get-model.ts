@@ -1,6 +1,9 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { awsCredentialsProvider } from "@vercel/functions/oidc";
 import type { LanguageModel } from "ai";
 import { keys } from "../../keys";
 import {
@@ -91,6 +94,26 @@ export function getModel(input: GetModelInput): LanguageModel {
         apiKey: config.ANTHROPIC_API_KEY,
       });
       return anthropicProvider(modelId);
+    }
+
+    case "bedrock": {
+      if (!config.AWS_REGION) {
+        throw new Error(
+          "AI provider 'bedrock' requires AWS_REGION to be set",
+        );
+      }
+      // On Vercel, AWS_ROLE_ARN drives OIDC-federated (keyless) credentials.
+      // In AWS (App Runner / Lambda) AWS_ROLE_ARN is unset and the standard
+      // credential chain resolves the task/instance role. Neither path makes a
+      // network call here — credentials are fetched lazily on first invocation.
+      const credentialProvider = config.AWS_ROLE_ARN
+        ? awsCredentialsProvider({ roleArn: config.AWS_ROLE_ARN })
+        : fromNodeProviderChain();
+      const bedrock = createAmazonBedrock({
+        region: config.AWS_REGION,
+        credentialProvider,
+      });
+      return bedrock(modelId);
     }
 
     case "ollama": {

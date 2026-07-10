@@ -32,6 +32,17 @@ describe("parseProviderModelValue()", () => {
     expect(parseProviderModelValue("acme:some-model")).toBeNull();
   });
 
+  it("preserves the Bedrock version suffix after the first colon", () => {
+    expect(
+      parseProviderModelValue(
+        "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+      ),
+    ).toEqual({
+      provider: "bedrock",
+      modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    });
+  });
+
   it("returns null for an empty model id", () => {
     expect(parseProviderModelValue("openai:")).toBeNull();
   });
@@ -66,6 +77,15 @@ describe("isKnownCatalogModel()", () => {
 
   it("returns false for a model id not in the provider's list", () => {
     expect(isKnownCatalogModel("openai", "not-a-real-model")).toBe(false);
+  });
+
+  it("recognizes a Bedrock catalog model (colon version suffix included)", () => {
+    expect(
+      isKnownCatalogModel(
+        "bedrock",
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      ),
+    ).toBe(true);
   });
 
   it("returns false for an unknown provider", () => {

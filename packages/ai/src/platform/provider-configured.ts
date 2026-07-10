@@ -23,6 +23,10 @@ export function isProviderConfigured(
       return Boolean(config.OPENAI_API_KEY);
     case "anthropic":
       return Boolean(config.ANTHROPIC_API_KEY);
+    case "bedrock":
+      // IAM-based: usable whenever a region is resolvable. Credentials come from
+      // the AWS chain (task role) or Vercel OIDC (AWS_ROLE_ARN) at call time.
+      return Boolean(config.AWS_REGION);
     case "ollama":
       return true;
     case "openai-compatible":
