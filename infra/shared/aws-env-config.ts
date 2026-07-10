@@ -4,12 +4,25 @@ export type AwsEnvName = "sandbox" | "staging" | "production";
 export const SUPPORTED_SCHEMA_VERSION = 1;
 
 export interface AwsNetworkConfig { vpcCidr: string; multiAzNat: boolean; }
+/**
+ * Public PgBouncer pooler settings. RDS Proxy cannot be public, so Vercel's
+ * pooled path goes through an in-VPC PgBouncer fronted by a public NLB while RDS
+ * itself stays private. `publicListener` exposes the NLB to the internet;
+ * `poolSize` is PgBouncer's per-database backend pool size.
+ */
+export interface AwsPoolerConfig { enabled: boolean; publicListener: boolean; poolSize: number; }
 export interface AwsDatabaseConfig {
   instanceClass: string; allocatedStorage: number; multiAz: boolean; engineVersion: string;
+  pooler: AwsPoolerConfig;
 }
 export interface AwsAppsConfig {
   imageTag: string; minSize: number; maxSize: number; maxConcurrency: number;
 }
+/** Amazon Bedrock region + the model ids IAM policies are scoped to. */
+export interface AwsAiConfig { bedrockRegion: string; bedrockModels: string[]; }
+export interface AwsVercelOidcConfig { teamSlug: string; projectName: string; }
+/** Cross-account access for Vercel-hosted apps via OIDC federation. */
+export interface AwsAccessConfig { vercelOidc: AwsVercelOidcConfig; }
 export interface AwsEnvConfig {
   schemaVersion: number;
   aws: { region: string; accountId: string };
@@ -17,6 +30,8 @@ export interface AwsEnvConfig {
   network: AwsNetworkConfig;
   database: AwsDatabaseConfig;
   apps: AwsAppsConfig;
+  ai: AwsAiConfig;
+  access: AwsAccessConfig;
 }
 
 export type DeepPartialAwsEnvConfig = {
@@ -52,5 +67,11 @@ export function validateEnvConfig(config: AwsEnvConfig, _env: AwsEnvName): Valid
   if (!config.aws.region?.trim()) critical.push("Missing aws.region.");
   if (config.complianceMode !== "none" && !config.aws.accountId?.trim())
     warnings.push("complianceMode set but aws.accountId empty (needed for some ARNs).");
+  if (config.database.pooler.enabled && config.database.pooler.poolSize <= 0)
+    critical.push("database.pooler.enabled but poolSize must be > 0.");
+  if (config.ai.bedrockModels.length === 0)
+    warnings.push("ai.bedrockModels empty — Bedrock IAM will grant no models.");
+  if (config.database.pooler.publicListener && !config.access.vercelOidc.teamSlug.trim())
+    warnings.push("Public pooler enabled but access.vercelOidc.teamSlug empty (needed to build the Vercel access role).");
   return { ok: critical.length === 0, critical, warnings };
 }
