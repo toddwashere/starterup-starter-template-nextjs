@@ -9,6 +9,8 @@ import { resolveCompliance } from "../../shared/compliance";
 import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
 import { buildPgBouncer } from "./pgbouncer";
+import { buildQueues } from "./queues";
+import { buildManualSecrets } from "./manual-secrets";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -328,23 +330,12 @@ new aws.rds.ProxyTarget("db-proxy-target", {
   dbInstanceIdentifier: db.identifier,
 });
 
-// --- SQS (jobs queue + DLQ) -------------------------------------------------
-const dlq = new aws.sqs.Queue("jobs-dlq", {
-  name: pulumi.interpolate`starter-jobs-dlq-${pulumi.getStack()}`,
-  messageRetentionSeconds: 1209600, // 14 days
-  tags: baseTags,
-});
-
-const jobsQueue = new aws.sqs.Queue("jobs", {
-  name: pulumi.interpolate`starter-jobs-${pulumi.getStack()}`,
-  visibilityTimeoutSeconds: 60,
-  messageRetentionSeconds: 345600, // 4 days
-  redrivePolicy: pulumi.jsonStringify({
-    deadLetterTargetArn: dlq.arn,
-    maxReceiveCount: 5,
-  }),
-  tags: baseTags,
-});
+// --- SQS (registry: each queue gets an automatic DLQ) -----------------------
+// Add queues in `core/queues.ts`; every entry gets a matching DLQ + redrive.
+// `jobs` is load-bearing (consumed by the workers Lambda / scheduler in apps).
+const queues = buildQueues({ stack, tags: baseTags });
+const jobsQueue = queues.jobs.queue;
+const dlq = queues.jobs.dlq;
 
 // --- S3 uploads bucket ------------------------------------------------------
 const uploadsBucketResource = new aws.s3.BucketV2("uploads", {
@@ -407,6 +398,17 @@ const directUrlSecret = new aws.secretsmanager.Secret("direct-url", {
 new aws.secretsmanager.SecretVersion("direct-url-v1", {
   secretId: directUrlSecret.id,
   secretString: directUrl,
+});
+
+// --- Manually-managed secrets (empty placeholders) --------------------------
+// Third-party API keys etc. that Pulumi can't derive. Each entry in
+// `core/manual-secrets.ts` becomes an empty `/starter/<stack>/<name>` secret you
+// populate once in the console/CLI; Pulumi never stores or overwrites the value.
+const manualSecrets = buildManualSecrets({
+  stack,
+  isProduction,
+  cmekKeyId,
+  tags: baseTags,
 });
 
 // --- Public PgBouncer pooler (Vercel -> pooled Postgres) --------------------
@@ -479,7 +481,20 @@ export const directUrlSecretArn = directUrlSecret.arn;
 export const sqsQueueUrl = jobsQueue.url;
 export const sqsQueueArn = jobsQueue.arn;
 export const sqsDlqArn = dlq.arn;
+// Every queue in the registry, keyed by QueueSpec.key — wire new consumers in
+// the apps stack off these maps.
+export const queueUrls = Object.fromEntries(
+  Object.entries(queues).map(([key, q]) => [key, q.queue.url]),
+);
+export const queueArns = Object.fromEntries(
+  Object.entries(queues).map(([key, q]) => [key, q.queue.arn]),
+);
 export const uploadsBucket = uploadsBucketResource.bucket;
+// Names + ARNs of the manually-managed placeholder secrets (empty until you set
+// their values in the console/CLI). Grant read access from consumers as needed.
+export const manualSecretArns = Object.fromEntries(
+  manualSecrets.map((s) => [s.name, s.arn]),
+);
 // Re-export the compliance KMS key ARN ("" when CMEK is disabled).
 export { kmsKeyArn, privateSubnetIds };
 
