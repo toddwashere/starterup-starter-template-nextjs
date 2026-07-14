@@ -17,7 +17,7 @@ export const envBaseConfig = defineAwsEnvConfig({
   apps: { imageTag: "latest", minSize: 1, maxSize: 5, maxConcurrency: 100 },
   ai: {
     bedrockRegion: "us-east-1",
-    bedrockModels: ["anthropic.claude-3-5-sonnet-20240620-v1:0"],
+    bedrockModels: ["anthropic.claude-sonnet-5"],
   },
   // teamSlug/projectName come from VERCEL_TEAM_SLUG / VERCEL_PROJECT_NAME
   // (infra/.env.local) so no deployment-specific identifiers live in git.

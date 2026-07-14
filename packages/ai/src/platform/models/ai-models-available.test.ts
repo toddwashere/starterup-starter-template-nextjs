@@ -35,11 +35,11 @@ describe("parseProviderModelValue()", () => {
   it("preserves the Bedrock version suffix after the first colon", () => {
     expect(
       parseProviderModelValue(
-        "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "bedrock:anthropic.claude-3-haiku-20240307-v1:0",
       ),
     ).toEqual({
       provider: "bedrock",
-      modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      modelId: "anthropic.claude-3-haiku-20240307-v1:0",
     });
   });
 
@@ -79,11 +79,11 @@ describe("isKnownCatalogModel()", () => {
     expect(isKnownCatalogModel("openai", "not-a-real-model")).toBe(false);
   });
 
-  it("recognizes a Bedrock catalog model (colon version suffix included)", () => {
+  it("recognizes the current Claude Sonnet Bedrock model", () => {
     expect(
       isKnownCatalogModel(
         "bedrock",
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-sonnet-5",
       ),
     ).toBe(true);
   });

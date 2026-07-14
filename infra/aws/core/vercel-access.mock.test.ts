@@ -44,7 +44,7 @@ async function build() {
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:/starter/sandbox/database-url",
     ],
     bedrockRegion: "us-east-1",
-    bedrockModels: ["anthropic.claude-3-5-sonnet-20240620-v1:0"],
+    bedrockModels: ["anthropic.claude-sonnet-5"],
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 200));
   return result;
@@ -124,7 +124,7 @@ describe("buildVercelAccess", () => {
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:/starter/sandbox/database-url",
     );
     expect(bySid.BedrockInvoke.Resource).toEqual([
-      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-5",
     ]);
     expect(bySid.UploadsObjects.Resource).toMatch(/uploads\/\*$/);
   });

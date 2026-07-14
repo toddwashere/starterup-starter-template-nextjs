@@ -54,8 +54,8 @@ export const ANTHROPIC_MODELS: AiModelOption[] = [
 // prefix parses correctly and the version suffix is preserved in the model id.
 export const BEDROCK_MODELS: AiModelOption[] = [
   {
-    id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    label: "Claude 3.5 Sonnet (Bedrock)",
+    id: "anthropic.claude-sonnet-5",
+    label: "Claude Sonnet 5 (Bedrock)",
   },
   {
     id: "anthropic.claude-3-haiku-20240307-v1:0",

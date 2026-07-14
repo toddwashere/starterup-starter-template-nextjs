@@ -17,7 +17,7 @@ const base: AwsEnvConfig = {
     pooler: { enabled: true, publicListener: true, poolSize: 25 },
   },
   apps: { imageTag: "latest", minSize: 1, maxSize: 5, maxConcurrency: 100 },
-  ai: { bedrockRegion: "us-east-1", bedrockModels: ["anthropic.claude-3-5-sonnet-20240620-v1:0"] },
+  ai: { bedrockRegion: "us-east-1", bedrockModels: ["anthropic.claude-sonnet-5"] },
   access: { vercelOidc: { teamSlug: "", projectName: "" } },
 };
 

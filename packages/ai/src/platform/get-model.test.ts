@@ -55,7 +55,7 @@ describe("getModel() with an explicit providerModel", () => {
     vi.stubEnv("AWS_REGION", "us-east-1");
     expect(
       getModel({
-        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+        providerModel: "bedrock:anthropic.claude-sonnet-5",
       }),
     ).toBeDefined();
   });
@@ -64,7 +64,7 @@ describe("getModel() with an explicit providerModel", () => {
     vi.stubEnv("AWS_REGION", "");
     expect(() =>
       getModel({
-        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+        providerModel: "bedrock:anthropic.claude-sonnet-5",
       }),
     ).toThrow(/AWS_REGION/);
   });
@@ -74,7 +74,7 @@ describe("getModel() with an explicit providerModel", () => {
     vi.stubEnv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/vercel");
     expect(
       getModel({
-        providerModel: "bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0",
+        providerModel: "bedrock:anthropic.claude-sonnet-5",
       }),
     ).toBeDefined();
   });
