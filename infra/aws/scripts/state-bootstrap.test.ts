@@ -31,7 +31,7 @@ describe("executeStateBootstrap", () => {
           return JSON.stringify([
             {
               OutputKey: "StateBucketName",
-              OutputValue: "inthealth-cross-account-state-sandbox-444455556666-us-east-2",
+              OutputValue: "myapp-cross-account-state-sandbox-444455556666-us-east-2",
             },
             {
               OutputKey: "KmsKeyArn",
@@ -49,7 +49,7 @@ describe("executeStateBootstrap", () => {
     const config = resolveStateBootstrapConfig(["init", "sandbox"], {
       AWS_STATE_ACCOUNT_ID: "444455556666",
       AWS_STATE_PROFILE: "starter-state",
-      AWS_STATE_RESOURCE_PREFIX: "inthealth-cross-account-state",
+      AWS_STATE_RESOURCE_PREFIX: "myapp-cross-account-state",
       AWS_SANDBOX_ACCOUNT_ID: "111122223333",
     });
 
@@ -100,7 +100,7 @@ describe("executeStateBootstrap", () => {
     const config = resolveStateBootstrapConfig(["init", "sandbox"], {
       AWS_STATE_ACCOUNT_ID: "444455556666",
       AWS_STATE_PROFILE: "starter-state",
-      AWS_STATE_RESOURCE_PREFIX: "inthealth-cross-account-state",
+      AWS_STATE_RESOURCE_PREFIX: "myapp-cross-account-state",
       AWS_SANDBOX_ACCOUNT_ID: "111122223333",
     });
 

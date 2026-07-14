@@ -21,7 +21,7 @@ describe("aws bootstrap layer (mocked)", () => {
 
   beforeAll(async () => {
     vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
-    vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "inthealth-cross-account-state");
+    vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "myapp-cross-account-state");
     pulumi.runtime.setMocks(
       {
         newResource: (args) => {
@@ -103,10 +103,10 @@ describe("aws bootstrap layer (mocked)", () => {
       pulumi.output(policies[0].inputs.policy as string).apply(resolve),
     );
     expect(policy).toContain(
-      "arn:aws:s3:::inthealth-cross-account-state-sandbox-444455556666-us-east-2",
+      "arn:aws:s3:::myapp-cross-account-state-sandbox-444455556666-us-east-2",
     );
     expect(policy).toContain("arn:aws:kms:us-east-2:444455556666:key/*");
-    expect(policy).toContain("alias/inthealth-cross-account-state-sandbox");
+    expect(policy).toContain("alias/myapp-cross-account-state-sandbox");
     expect(policy).not.toContain('"Resource":"*"');
   });
 

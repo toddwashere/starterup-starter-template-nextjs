@@ -18,7 +18,7 @@ import {
 const ENV = {
   AWS_STATE_ACCOUNT_ID: "444455556666",
   AWS_STATE_PROFILE: "starter-state",
-  AWS_STATE_RESOURCE_PREFIX: "inthealth-cross-account-state",
+  AWS_STATE_RESOURCE_PREFIX: "myapp-cross-account-state",
   AWS_SANDBOX_ACCOUNT_ID: "111122223333",
 };
 
@@ -36,7 +36,7 @@ describe("resolveStateBootstrapConfig", () => {
       stateProfile: "starter-state",
       workloadAccountId: "111122223333",
       workloadProfile: "starter-sandbox",
-      resourcePrefix: "inthealth-cross-account-state",
+      resourcePrefix: "myapp-cross-account-state",
     });
   });
 
@@ -106,16 +106,16 @@ describe("state resource derivation", () => {
     expect(
       stateNames({
         environment: "sandbox",
-        resourcePrefix: "inthealth-cross-account-state",
+        resourcePrefix: "myapp-cross-account-state",
         stateAccountId: "444455556666",
         region: "us-east-2",
       }),
     ).toEqual({
-      stackName: "inthealth-cross-account-state-sandbox",
-      stateBucketName: "inthealth-cross-account-state-sandbox-444455556666-us-east-2",
-      auditBucketName: "inthealth-cross-account-state-sandbox-audit-444455556666",
-      kmsAliasName: "alias/inthealth-cross-account-state-sandbox",
-      trailName: "inthealth-cross-account-state-sandbox-access",
+      stackName: "myapp-cross-account-state-sandbox",
+      stateBucketName: "myapp-cross-account-state-sandbox-444455556666-us-east-2",
+      auditBucketName: "myapp-cross-account-state-sandbox-audit-444455556666",
+      kmsAliasName: "alias/myapp-cross-account-state-sandbox",
+      trailName: "myapp-cross-account-state-sandbox-access",
     });
   });
 
@@ -158,7 +158,7 @@ describe("cross-account principals and Pulumi URLs", () => {
     expect(args).toContain("--no-fail-on-empty-changeset");
     expect(args).toContain("StateVersionRetentionDays=90");
     expect(args).toContain("AuditRetentionDays=90");
-    expect(args).toContain("Project=inthealth-cross-account-state");
+    expect(args).toContain("Project=myapp-cross-account-state");
     expect(args).toContain("Environment=sandbox");
     expect(args).toContain("ManagedBy=CloudFormation");
     expect(args.some((arg) => arg.startsWith("Key="))).toBe(false);
@@ -173,9 +173,9 @@ describe("cross-account principals and Pulumi URLs", () => {
 
   it("builds profile-independent backend and cross-account KMS URLs", () => {
     expect(
-      backendUrl("inthealth-cross-account-state-sandbox-444455556666-us-east-2", "us-east-2"),
+      backendUrl("myapp-cross-account-state-sandbox-444455556666-us-east-2", "us-east-2"),
     ).toBe(
-      "s3://inthealth-cross-account-state-sandbox-444455556666-us-east-2?region=us-east-2&awssdk=v2",
+      "s3://myapp-cross-account-state-sandbox-444455556666-us-east-2?region=us-east-2&awssdk=v2",
     );
     expect(secretsProviderUrl("arn:aws:kms:us-east-2:444455556666:key/1234", "us-east-2")).toBe(
       "awskms:///arn:aws:kms:us-east-2:444455556666:key/1234?region=us-east-2&awssdk=v2",
