@@ -125,7 +125,7 @@ role's trust policy is scoped to `owner:<team>:project:<project>:environment:*`.
 | Var | Value |
 |-----|-------|
 | `AWS_ROLE_ARN` | the `vercelAccessRoleArnOutput` role ARN |
-| `AWS_REGION` | e.g. `us-east-1` (also selects the Bedrock region) |
+| `AWS_REGION` | `us-east-2` (also selects the Bedrock region) |
 | `DATABASE_URL` | `postgresql://starter:<pw>@<pooler-nlb-dns>:6432/starter?sslmode=verify-full` |
 | `SQS_QUEUE_URL` | core's `sqsQueueUrl` |
 | `WORKER_QUEUE_ADAPTER` | `sqs` |

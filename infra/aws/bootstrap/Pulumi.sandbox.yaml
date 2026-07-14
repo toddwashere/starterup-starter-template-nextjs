@@ -1,5 +1,5 @@
 config:
-  aws:region: "us-east-1"
+  aws:region: "us-east-2"
   # "owner/repo" — scopes the deploy role's trust policy to your GitHub repo.
   # starter-aws-bootstrap:githubRepo: "your-org/your-repo"
   # Monthly budget alert (USD). Requires budgetNotificationEmail to send alerts.

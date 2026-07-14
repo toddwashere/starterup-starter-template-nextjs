@@ -22,10 +22,10 @@ describe("keys() — secrets only (no routing / generation vars)", () => {
   });
 
   it("reads the Bedrock AWS region and role arn when set", () => {
-    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_REGION", "us-east-2");
     vi.stubEnv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/vercel");
     const config = keys();
-    expect(config.AWS_REGION).toBe("us-east-1");
+    expect(config.AWS_REGION).toBe("us-east-2");
     expect(config.AWS_ROLE_ARN).toBe("arn:aws:iam::123456789012:role/vercel");
   });
 

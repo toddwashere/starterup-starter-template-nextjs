@@ -1,5 +1,5 @@
 config:
-  aws:region: "us-east-1"
+  aws:region: "us-east-2"
   # coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
   # account + region (see infra/aws/apps/index.ts); neither lives here anymore.
   starter-aws-apps:imageTag: "latest"

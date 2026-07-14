@@ -26,7 +26,7 @@ describe("aws bootstrap layer (mocked)", () => {
             state: {
               ...args.inputs,
               arn: `arn:aws:iam::123456789012:${args.name}`,
-              repositoryUrl: `123456789012.dkr.ecr.us-east-1.amazonaws.com/${
+              repositoryUrl: `123456789012.dkr.ecr.us-east-2.amazonaws.com/${
                 (args.inputs.name as string | undefined) ?? args.name
               }`,
             },
@@ -38,7 +38,7 @@ describe("aws bootstrap layer (mocked)", () => {
       "sandbox",
     );
     pulumi.runtime.setAllConfig({
-      "aws:region": "us-east-1",
+      "aws:region": "us-east-2",
       "starter-aws-bootstrap:githubRepo": "acme/starter",
       "starter-aws-bootstrap:budgetAmount": "100",
       "starter-aws-bootstrap:budgetNotificationEmail": "ops@example.com",

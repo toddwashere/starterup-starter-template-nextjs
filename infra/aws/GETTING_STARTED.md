@@ -156,7 +156,7 @@ Codifies the GitHub OIDC deploy role, the ECR repo, and the budget.
 ```bash
 cd infra/aws/bootstrap && pnpm install && cd -
 pnpm infra:aws bootstrap stack init sandbox
-pnpm infra:aws bootstrap config set aws:region us-east-1
+pnpm infra:aws bootstrap config set aws:region us-east-2
 pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
 pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
@@ -172,7 +172,7 @@ account + region at runtime.
 ```bash
 cd infra/aws/core && pnpm install && cd -
 pnpm infra:aws core stack init sandbox
-pnpm infra:aws core config set aws:region us-east-1
+pnpm infra:aws core config set aws:region us-east-2
 AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```
 
@@ -181,7 +181,7 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```bash
 cd infra/aws/apps && pnpm install && cd -
 pnpm infra:aws apps stack init sandbox
-pnpm infra:aws apps config set aws:region us-east-1
+pnpm infra:aws apps config set aws:region us-east-2
 # coreStackRef comes from PULUMI_ORG; imageRegistry from the deploy account —
 # no per-stack config to set here.
 AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox

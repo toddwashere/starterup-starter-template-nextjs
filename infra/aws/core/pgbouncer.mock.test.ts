@@ -19,7 +19,7 @@ function installMocks() {
           state: {
             ...args.inputs,
             name: (args.inputs.name as string | undefined) ?? args.name,
-            arn: `arn:aws:mock:us-east-1:123456789012:${args.name}`,
+            arn: `arn:aws:mock:us-east-2:123456789012:${args.name}`,
             dnsName: `${args.name}.elb.amazonaws.com`,
           },
         };
@@ -38,7 +38,7 @@ async function build() {
   const mod = await import("./pgbouncer.js");
   const result = mod.buildPgBouncer({
     namePrefix: "starter-sandbox",
-    region: "us-east-1",
+    region: "us-east-2",
     vpcId: "vpc-123",
     publicSubnetIds: ["subnet-pub-a", "subnet-pub-b"],
     privateSubnetIds: ["subnet-priv-a", "subnet-priv-b"],
@@ -46,7 +46,7 @@ async function build() {
     dbHost: "starter-sandbox-db.rds.amazonaws.com",
     dbName: "starter",
     dbSecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:/starter/sandbox/rds-proxy-auth",
+      "arn:aws:secretsmanager:us-east-2:123456789012:secret:/starter/sandbox/rds-proxy-auth",
     pooler: { poolSize: 25, publicListener: true },
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 200));

@@ -178,7 +178,7 @@ CloudTrail already records Bedrock control-plane management events.
 
 ## Per-environment cost estimate
 
-Indicative monthly figures, low traffic, `us-east-1`, single topology.
+Indicative monthly figures, low traffic, `us-east-2`, single topology.
 
 | Component | sandbox (`none`) | staging (`soc2`) | production (`soc2`/`hipaa`) |
 |-----------|------------------|------------------|------------------------------|
@@ -241,19 +241,19 @@ These projects are not in the pnpm workspace root. Install deps inside each proj
 cd infra/aws/bootstrap
 pnpm install
 pulumi stack init sandbox
-pulumi config set aws:region us-east-1
+pulumi config set aws:region us-east-2
 pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
 
 cd ../core
 pnpm install
 pulumi stack init sandbox
-pulumi config set aws:region us-east-1
+pulumi config set aws:region us-east-2
 pulumi config set starter-aws-core:env sandbox
 
 cd ../apps
 pnpm install
 pulumi stack init sandbox
-pulumi config set aws:region us-east-1
+pulumi config set aws:region us-east-2
 pulumi config set starter-aws-apps:env sandbox
 # coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
 # account + region (infra/.env.local) — no per-stack config needed for those.
@@ -312,8 +312,8 @@ Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate ste
 
 | Variable | Example |
 |----------|---------|
-| `AWS_REGION` | `us-east-1` |
-| `AWS_ECR_REGISTRY` | `123456789012.dkr.ecr.us-east-1.amazonaws.com/starter` |
+| `AWS_REGION` | `us-east-2` |
+| `AWS_ECR_REGISTRY` | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
 
 ### GitHub OIDC with AWS IAM
 

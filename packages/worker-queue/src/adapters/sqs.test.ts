@@ -37,7 +37,7 @@ const envelope: JobEnvelope = {
   enqueuedAt: "2026-05-29T00:00:00.000Z",
 };
 
-const QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/123456789/starter-jobs-sandbox";
+const QUEUE_URL = "https://sqs.us-east-2.amazonaws.com/123456789/starter-jobs-sandbox";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -49,7 +49,7 @@ beforeEach(() => {
     PUBSUB_TOPIC_NAME: "jobs",
     PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
     SQS_QUEUE_URL: QUEUE_URL,
-    AWS_REGION: "us-east-1",
+    AWS_REGION: "us-east-2",
     AWS_ROLE_ARN: undefined,
     SERVICEBUS_CONNECTION_STRING: undefined,
     SERVICEBUS_QUEUE_NAME: "jobs",
@@ -84,7 +84,7 @@ describe("createSqsAdapter.publish", () => {
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
       SQS_QUEUE_URL: undefined,
-      AWS_REGION: "us-east-1",
+      AWS_REGION: "us-east-2",
       AWS_ROLE_ARN: undefined,
       SERVICEBUS_CONNECTION_STRING: undefined,
       SERVICEBUS_QUEUE_NAME: "jobs",
@@ -110,7 +110,7 @@ describe("createSqsAdapter.publish", () => {
       PUBSUB_TOPIC_NAME: "jobs",
       PUBSUB_SUBSCRIPTION_NAME: "jobs-sub",
       SQS_QUEUE_URL: QUEUE_URL,
-      AWS_REGION: "us-east-1",
+      AWS_REGION: "us-east-2",
       AWS_ROLE_ARN: "arn:aws:iam::123456789012:role/vercel",
       SERVICEBUS_CONNECTION_STRING: undefined,
       SERVICEBUS_QUEUE_NAME: "jobs",

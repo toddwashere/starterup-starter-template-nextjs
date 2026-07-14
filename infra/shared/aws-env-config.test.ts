@@ -6,7 +6,7 @@ import { config as productionConfig } from "../aws/config.production";
 
 const base: AwsEnvConfig = {
   schemaVersion: 1,
-  aws: { region: "us-east-1", accountId: "" },
+  aws: { region: "us-east-2", accountId: "" },
   complianceMode: "none",
   network: { vpcCidr: "10.30.0.0/16", multiAzNat: false },
   database: {
@@ -17,7 +17,7 @@ const base: AwsEnvConfig = {
     pooler: { enabled: true, publicListener: true, poolSize: 25 },
   },
   apps: { imageTag: "latest", minSize: 1, maxSize: 5, maxConcurrency: 100 },
-  ai: { bedrockRegion: "us-east-1", bedrockModels: ["anthropic.claude-sonnet-5"] },
+  ai: { bedrockRegion: "us-east-2", bedrockModels: ["anthropic.claude-sonnet-5"] },
   access: { vercelOidc: { teamSlug: "", projectName: "" } },
 };
 

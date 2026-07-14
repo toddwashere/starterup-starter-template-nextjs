@@ -3,7 +3,7 @@ import { vercelOidcFromEnv } from "./env";
 
 export const envBaseConfig = defineAwsEnvConfig({
   schemaVersion: 1,
-  aws: { region: "us-east-1", accountId: "" },
+  aws: { region: "us-east-2", accountId: "" },
   complianceMode: "none",
   network: { vpcCidr: "10.30.0.0/16", multiAzNat: false },
   database: {
@@ -16,7 +16,7 @@ export const envBaseConfig = defineAwsEnvConfig({
   },
   apps: { imageTag: "latest", minSize: 1, maxSize: 5, maxConcurrency: 100 },
   ai: {
-    bedrockRegion: "us-east-1",
+    bedrockRegion: "us-east-2",
     bedrockModels: ["anthropic.claude-sonnet-5"],
   },
   // teamSlug/projectName come from VERCEL_TEAM_SLUG / VERCEL_PROJECT_NAME

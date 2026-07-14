@@ -18,7 +18,7 @@ import * as aws from "@pulumi/aws";
 // ---------------------------------------------------------------------------
 
 const config = new pulumi.Config();
-const region = new pulumi.Config("aws").get("region") ?? "us-east-1";
+const region = new pulumi.Config("aws").get("region") ?? "us-east-2";
 const stack = pulumi.getStack();
 const namePrefix = `starter-${stack}`;
 const baseTags = {

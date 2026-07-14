@@ -18,7 +18,7 @@ function installMocks() {
           id: `${args.name}-id`,
           state: {
             ...args.inputs,
-            arn: `arn:aws:secretsmanager:us-east-1:123456789012:secret:${args.name}`,
+            arn: `arn:aws:secretsmanager:us-east-2:123456789012:secret:${args.name}`,
           },
         };
       },

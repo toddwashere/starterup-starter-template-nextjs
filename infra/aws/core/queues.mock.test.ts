@@ -18,8 +18,8 @@ function installMocks() {
           id: `${args.name}-id`,
           state: {
             ...args.inputs,
-            arn: `arn:aws:sqs:us-east-1:123456789012:${args.name}`,
-            url: `https://sqs.us-east-1.amazonaws.com/123456789012/${args.name}`,
+            arn: `arn:aws:sqs:us-east-2:123456789012:${args.name}`,
+            url: `https://sqs.us-east-2.amazonaws.com/123456789012/${args.name}`,
           },
         };
       },

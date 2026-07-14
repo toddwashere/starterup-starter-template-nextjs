@@ -52,7 +52,7 @@ describe("getModel() with an explicit providerModel", () => {
   });
 
   it("returns a defined bedrock model when AWS_REGION is set", () => {
-    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_REGION", "us-east-2");
     expect(
       getModel({
         providerModel: "bedrock:anthropic.claude-sonnet-5",
@@ -70,7 +70,7 @@ describe("getModel() with an explicit providerModel", () => {
   });
 
   it("builds a bedrock model with an assumed-role provider when AWS_ROLE_ARN is set", () => {
-    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_REGION", "us-east-2");
     vi.stubEnv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/vercel");
     expect(
       getModel({

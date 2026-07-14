@@ -39,11 +39,11 @@ async function build() {
     namePrefix: "starter-sandbox",
     vercelOidc: { teamSlug: "acme", projectName: "starter" },
     uploadsBucketArn: "arn:aws:s3:::starter-sandbox-uploads",
-    jobsQueueArn: "arn:aws:sqs:us-east-1:123456789012:starter-jobs-sandbox",
+    jobsQueueArn: "arn:aws:sqs:us-east-2:123456789012:starter-jobs-sandbox",
     secretArns: [
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:/starter/sandbox/database-url",
+      "arn:aws:secretsmanager:us-east-2:123456789012:secret:/starter/sandbox/database-url",
     ],
-    bedrockRegion: "us-east-1",
+    bedrockRegion: "us-east-2",
     bedrockModels: ["anthropic.claude-sonnet-5"],
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 200));
@@ -121,10 +121,10 @@ describe("buildVercelAccess", () => {
       "DeleteMessage",
     );
     expect(bySid.AppSecretsRead.Resource).toContain(
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:/starter/sandbox/database-url",
+      "arn:aws:secretsmanager:us-east-2:123456789012:secret:/starter/sandbox/database-url",
     );
     expect(bySid.BedrockInvoke.Resource).toEqual([
-      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-5",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-5",
     ]);
     expect(bySid.UploadsObjects.Resource).toMatch(/uploads\/\*$/);
   });

@@ -21,7 +21,7 @@ function installMocks() {
           state: {
             ...args.inputs,
             name: (args.inputs.name as string | undefined) ?? args.name,
-            arn: `arn:aws:mock:us-east-1:123456789012:${args.name}`,
+            arn: `arn:aws:mock:us-east-2:123456789012:${args.name}`,
             bucket: (args.inputs.bucket as string | undefined) ?? args.name,
             keyId: `${args.name}-key-id`,
           },
@@ -41,7 +41,7 @@ async function buildWith(compliance: ComplianceConfig) {
   const mod = await import("./compliance-resources.js");
   const result = mod.buildComplianceResources({
     namePrefix: "test",
-    region: "us-east-1",
+    region: "us-east-2",
     compliance,
   });
   // Yield so all microtask-queued resource registrations complete.
