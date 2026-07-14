@@ -9,7 +9,7 @@ export const envBaseConfig = defineAwsEnvConfig({
     instanceClass: "db.t4g.micro",
     allocatedStorage: 20,
     multiAz: false,
-    engineVersion: "16",
+    engineVersion: "18",
     // Public PgBouncer in front of private RDS, in every env (hybrid decision).
     pooler: { enabled: true, publicListener: true, poolSize: 25 },
   },
