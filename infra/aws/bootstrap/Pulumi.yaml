@@ -1,0 +1,3 @@
+name: starter-aws-bootstrap
+runtime: nodejs
+description: Per-account foundations (GitHub OIDC deploy role, ECR repo, budget) — run once per AWS account with admin credentials

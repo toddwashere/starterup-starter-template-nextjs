@@ -1,0 +1,6 @@
+config:
+  aws:region: "us-east-1"
+  # starter-aws-bootstrap:githubRepo: "your-org/your-repo"
+  starter-aws-bootstrap:budgetAmount: "500"
+  # starter-aws-bootstrap:budgetNotificationEmail: "you@example.com"
+  starter-aws-bootstrap:complianceMode: "hipaa+soc2"

@@ -1,0 +1,10 @@
+config:
+  aws:region: "us-east-1"
+  # "owner/repo" — scopes the deploy role's trust policy to your GitHub repo.
+  # starter-aws-bootstrap:githubRepo: "your-org/your-repo"
+  # Monthly budget alert (USD). Requires budgetNotificationEmail to send alerts.
+  starter-aws-bootstrap:budgetAmount: "100"
+  # starter-aws-bootstrap:budgetNotificationEmail: "you@example.com"
+  # "none" | "soc2" | "hipaa" | "hipaa+soc2" — grants the deploy role the extra
+  # KMS/CloudTrail/WAF/Config permissions the compliant stacks need.
+  starter-aws-bootstrap:complianceMode: "none"
