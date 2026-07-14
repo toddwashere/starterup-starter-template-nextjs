@@ -1,5 +1,2 @@
 config:
   aws:region: "us-east-1"
-  starter-aws-core:dbInstanceClass: "db.t4g.micro"
-  starter-aws-core:dbEngineVersion: "16"
-  starter-aws-core:dbAllocatedStorage: "20"
