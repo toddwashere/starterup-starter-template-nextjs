@@ -255,8 +255,8 @@ pnpm install
 pulumi stack init sandbox
 pulumi config set aws:region us-east-1
 pulumi config set starter-aws-apps:env sandbox
-pulumi config set starter-aws-apps:coreStackRef <org>/starter-aws-core/sandbox
-pulumi config set starter-aws-apps:imageRegistry <account-id>.dkr.ecr.us-east-1.amazonaws.com/starter
+# coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
+# account + region (infra/.env.local) — no per-stack config needed for those.
 ```
 
 Repeat for `staging` and `production` stacks. Resource sizing and compliance features derive from the typed config files — no manual `pulumi config set` per resource needed beyond the above.

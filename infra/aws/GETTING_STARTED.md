@@ -61,20 +61,48 @@ Record each environment's 12-digit account id in the **gitignored**
 since this is a template repo:
 
 ```bash
-# infra/.env.local
-AWS_SANDBOX_ACCOUNT_ID=249415163391
-AWS_STAGING_ACCOUNT_ID=325771765394
-AWS_PRODUCTION_ACCOUNT_ID=789890000503
+# infra/.env.local  (gitignored)
+AWS_SANDBOX_ACCOUNT_ID=1111...
+AWS_STAGING_ACCOUNT_ID=2222...
+AWS_PRODUCTION_ACCOUNT_ID=3333...
+
+# Pulumi org that owns the stacks — apps builds its core StackReference from this.
+PULUMI_ORG=my-pulumi-org
+
+# Vercel OIDC identifiers for the hybrid access role (core reads these).
+VERCEL_TEAM_SLUG=my-team
+VERCEL_PROJECT_NAME=my-project
 ```
 
-`config.<env>.ts` reads these via `infra/aws/env.ts`. Load them before deploying
-(`set -a && source infra/.env.local && set +a`, or use the `pnpm infra:*`
-scripts). Note the account id is only a **sanity-check** value — the real deploy
-account is whatever your credentials point at. Always confirm before applying:
+`config.<env>.ts` and the stack programs read these via `infra/aws/env.ts`. Load
+them before deploying (`set -a && source infra/.env.local && set +a`), or just
+use the `pnpm infra:aws` wrapper, which auto-loads `infra/.env.local`. Note the
+account id is only a **sanity-check** value — the real deploy account is whatever
+your credentials point at. Always confirm before applying:
 
 ```bash
 aws sts get-caller-identity   # verify Account matches the stack you're deploying
 ```
+
+---
+
+## The config model: three places, three jobs
+
+Configuration is deliberately split so a template repo commits **no** account
+ids or deployment-specific identifiers:
+
+| Where | Committed? | Holds | Read by |
+|-------|-----------|-------|---------|
+| `infra/.env.local` | **No** (gitignored) | Account ids, `PULUMI_ORG`, `VERCEL_*` | `infra/aws/env.ts` → `config.*.ts` and the stack programs |
+| `infra/aws/config.<env>.ts` | Yes | Sizing, compliance mode, feature flags | The stack programs at deploy time |
+| `infra/aws/<layer>/Pulumi.<env>.yaml` | Yes | `aws:region`, `imageTag` | Pulumi/AWS provider |
+
+Rules of thumb: **secrets and identifiers → `.env.local`**; **shape of the
+environment (sizes, compliance) → `config.<env>.ts`**; **deploy-time knobs the
+Pulumi/AWS provider needs → `Pulumi.<env>.yaml`**. Values that used to be pasted
+into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
+`coreStackRef`) are now derived at runtime from `getCallerIdentity` and
+`PULUMI_ORG`, so nothing account-specific lives in committed YAML.
 
 ---
 
@@ -115,44 +143,48 @@ aws sts get-caller-identity   # verify Account matches the stack you're deployin
 
 Run the stacks in this order, each while authenticated to the target account.
 
+The `pnpm infra:aws <layer> <pulumi args…>` wrapper runs `pulumi` inside the
+layer directory with `infra/.env.local` loaded (so `PULUMI_ORG` / `VERCEL_*` /
+account ids are present). Set `AWS_PROFILE` to match the target account. You can
+also `cd` into a layer and run `pulumi` directly if you source `.env.local`
+yourself.
+
 ### 0. Bootstrap (once per account, admin credentials)
 
 Codifies the GitHub OIDC deploy role, the ECR repo, and the budget.
 
 ```bash
-cd infra/aws/bootstrap
-pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-1
-pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
-pulumi config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+cd infra/aws/bootstrap && pnpm install && cd -
+pnpm infra:aws bootstrap stack init sandbox
+pnpm infra:aws bootstrap config set aws:region us-east-1
+pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
 ```
 
-Note the outputs — `deployRoleArn`, `ecrRepositoryUrl` — you'll feed them into
-GitHub Actions (`AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_REGISTRY`) and the apps stack's
-`imageRegistry` config.
+Note the outputs — `deployRoleArn`, `ecrRepositoryUrl` — you'll feed the role/URL
+into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_REGISTRY`). The apps stack
+no longer needs the ECR URL as config: it derives the registry from the deploy
+account + region at runtime.
 
 ### 1. Core
 
 ```bash
-cd ../core
-pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-1
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+cd infra/aws/core && pnpm install && cd -
+pnpm infra:aws core stack init sandbox
+pnpm infra:aws core config set aws:region us-east-1
+AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```
 
 ### 2. Apps
 
 ```bash
-cd ../apps
-pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-1
-pulumi config set starter-aws-apps:coreStackRef <org>/starter-aws-core/sandbox
-pulumi config set starter-aws-apps:imageRegistry <ecrRepositoryUrl-from-bootstrap>
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+cd infra/aws/apps && pnpm install && cd -
+pnpm infra:aws apps stack init sandbox
+pnpm infra:aws apps config set aws:region us-east-1
+# coreStackRef comes from PULUMI_ORG; imageRegistry from the deploy account —
+# no per-stack config to set here.
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
 ```
 
 Repeat 0–2 for `staging` and `production`, each with the matching `AWS_PROFILE`.
@@ -230,7 +262,10 @@ Non-production stacks are disposable (no deletion protection, `forceDestroy` on
 S3, 0-day secret recovery), so:
 
 ```bash
-AWS_PROFILE=starter-sandbox pulumi destroy -s sandbox   # apps, then core, then bootstrap
+# apps, then core, then bootstrap
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps destroy -s sandbox
+AWS_PROFILE=starter-sandbox pnpm infra:aws core destroy -s sandbox
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap destroy -s sandbox
 ```
 
 If anything is left behind, the account-per-environment layout is your safety
