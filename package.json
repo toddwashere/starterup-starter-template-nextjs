@@ -27,6 +27,7 @@
     "infra:preview": "dotenv -e infra/.env.local -- tsx infra/scripts/infra.ts preview",
     "infra:destroy": "dotenv -e infra/.env.local -- tsx infra/scripts/infra.ts destroy",
     "infra:test:ephemeral": "dotenv -e infra/.env.local -- tsx infra/scripts/infra.ts ephemeral",
+    "infra:aws": "dotenv -e infra/.env.local -- tsx infra/aws/scripts/aws.ts",
     "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
