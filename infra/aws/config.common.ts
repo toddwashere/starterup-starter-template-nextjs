@@ -1,4 +1,5 @@
 import { defineAwsEnvConfig } from "../shared/aws-env-config";
+import { vercelOidcFromEnv } from "./env";
 
 export const envBaseConfig = defineAwsEnvConfig({
   schemaVersion: 1,
@@ -18,6 +19,7 @@ export const envBaseConfig = defineAwsEnvConfig({
     bedrockRegion: "us-east-1",
     bedrockModels: ["anthropic.claude-3-5-sonnet-20240620-v1:0"],
   },
-  // Populate teamSlug/projectName per deployment to build the Vercel OIDC role.
-  access: { vercelOidc: { teamSlug: "", projectName: "" } },
+  // teamSlug/projectName come from VERCEL_TEAM_SLUG / VERCEL_PROJECT_NAME
+  // (infra/.env.local) so no deployment-specific identifiers live in git.
+  access: { vercelOidc: vercelOidcFromEnv() },
 });

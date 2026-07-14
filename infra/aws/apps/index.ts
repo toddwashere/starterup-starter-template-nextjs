@@ -4,6 +4,7 @@ import * as aws from "@pulumi/aws";
 import { config as sandboxConfig } from "../config.sandbox";
 import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
+import { coreStackRefFromEnv } from "../env";
 import { resolveCompliance } from "../../shared/compliance";
 
 // --- Config loading ---------------------------------------------------------
@@ -20,11 +21,15 @@ const stack = pulumi.getStack();
 const env = stack as keyof typeof CONFIGS;
 const cfg = CONFIGS[env] ?? sandboxConfig;
 
-// Deploy-time values still come from pulumi.Config (not baked into the env
-// config): the core stack reference and the ECR registry URL.
 const config = new pulumi.Config();
-const coreStackRef = config.require("coreStackRef");
-const imageRegistry = config.require("imageRegistry"); // ECR registry URL
+
+// The core stack reference is derived from PULUMI_ORG (infra/.env.local) instead
+// of committed stack config: `<org>/starter-aws-core/<env>`.
+const coreStackRef = coreStackRefFromEnv(env);
+
+// The ECR registry URL is derived from the *deploy* account (getCallerIdentity)
+// and region, so no account-id-bearing value lives in committed stack config.
+const registryAccountId = aws.getCallerIdentityOutput({}).accountId;
 
 // CI passes the deploy-time image tag via `pulumi up --config imageTag=<sha>`
 // (see .github/workflows/deploy-aws.yml). Honor that override first so App
@@ -35,6 +40,9 @@ const imageTag = config.get("imageTag") ?? cfg.apps.imageTag;
 // The AWS provider reads `aws:region` from stack config; fall back to the env
 // config's region so both stay in sync (kept identical to core).
 const region = new pulumi.Config("aws").get("region") ?? cfg.aws.region;
+
+// ECR registry URL: `<account>.dkr.ecr.<region>.amazonaws.com/starter`.
+const imageRegistry = pulumi.interpolate`${registryAccountId}.dkr.ecr.${region}.amazonaws.com/starter`;
 
 const namePrefix = `starter-${stack}`;
 const baseTags = { Project: "starter", Stack: stack, ManagedBy: "pulumi" };
