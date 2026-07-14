@@ -158,7 +158,10 @@ describe("cross-account principals and Pulumi URLs", () => {
     expect(args).toContain("--no-fail-on-empty-changeset");
     expect(args).toContain("StateVersionRetentionDays=90");
     expect(args).toContain("AuditRetentionDays=90");
-    expect(args).toContain("Key=ManagedBy,Value=CloudFormation");
+    expect(args).toContain("Project=inthealth-cross-account-state");
+    expect(args).toContain("Environment=sandbox");
+    expect(args).toContain("ManagedBy=CloudFormation");
+    expect(args.some((arg) => arg.startsWith("Key="))).toBe(false);
     expect(args.join(" ")).not.toContain("pulumi stack");
   });
 

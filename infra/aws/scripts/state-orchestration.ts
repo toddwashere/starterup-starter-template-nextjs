@@ -222,9 +222,9 @@ export function cloudFormationDeployArgs(
     `StateVersionRetentionDays=${retention.stateVersionDays}`,
     `AuditRetentionDays=${retention.auditDays}`,
     "--tags",
-    `Key=Project,Value=${config.resourcePrefix}`,
-    `Key=Environment,Value=${config.environment}`,
-    "Key=ManagedBy,Value=CloudFormation",
+    `Project=${config.resourcePrefix}`,
+    `Environment=${config.environment}`,
+    "ManagedBy=CloudFormation",
   ];
 }
 

@@ -4,8 +4,6 @@
 
 **Goal:** Make `apps/public-api` a complete, documented, and test-covered HTTP surface for mobile clients built on the [Infinite Red Ignite](https://github.com/infinitered/ignite) boilerplate (apisauce, MMKV, secure token storage) — registration, post-login profile/org routes, and org-scoped route readiness. Mobile authenticates via PKCE on the auth server, then calls public-api with OAuth Bearer tokens.
 
-**Sibling plan (mobile app, external repo):** `int-health-mobile-ignite/.ai/plans/2026-05-29-mobile-auth-phase-0.md` — PKCE client, org picker UI, local `orgId` storage (MMKV). Not in this monorepo.
-
 **Out of scope for this plan (auth server / mobile repo):**
 
 - Login UI and **OAuth authorize/token/refresh** flows (Better Auth on `BETTER_AUTH_URL`, PKCE in mobile repo).
