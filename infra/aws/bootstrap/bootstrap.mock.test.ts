@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import * as pulumi from "@pulumi/pulumi";
+import { validatedGithubRepo } from "./bootstrap-config";
 
 interface RecordedResource {
   type: string;
@@ -12,7 +13,15 @@ const recorded: RecordedResource[] = [];
 describe("aws bootstrap layer (mocked)", () => {
   let infra: typeof import("./index");
 
+  it("rejects a missing or malformed GitHub repository scope", () => {
+    expect(() => validatedGithubRepo(undefined)).toThrow(/required/);
+    expect(() => validatedGithubRepo("owner")).toThrow(/owner\/repo/);
+    expect(validatedGithubRepo("acme/starter")).toBe("acme/starter");
+  });
+
   beforeAll(async () => {
+    vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
+    vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "inthealth-cross-account-state");
     pulumi.runtime.setMocks(
       {
         newResource: (args) => {
@@ -53,9 +62,7 @@ describe("aws bootstrap layer (mocked)", () => {
       (r) => r.type === "aws:iam/openIdConnectProvider:OpenIdConnectProvider",
     );
     expect(providers).toHaveLength(1);
-    expect(providers[0].inputs.url).toBe(
-      "https://token.actions.githubusercontent.com",
-    );
+    expect(providers[0].inputs.url).toBe("https://token.actions.githubusercontent.com");
     expect(providers[0].inputs.clientIdLists).toEqual(["sts.amazonaws.com"]);
   });
 
@@ -70,9 +77,7 @@ describe("aws bootstrap layer (mocked)", () => {
   });
 
   it("provisions an ECR repository with scan-on-push", () => {
-    const repos = recorded.filter(
-      (r) => r.type === "aws:ecr/repository:Repository",
-    );
+    const repos = recorded.filter((r) => r.type === "aws:ecr/repository:Repository");
     expect(repos).toHaveLength(1);
     expect(repos[0].inputs.name).toBe("starter");
     expect(repos[0].inputs.imageScanningConfiguration).toEqual({
@@ -88,27 +93,33 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(attachments).toHaveLength(9);
     const arns = attachments.map((a) => a.inputs.policyArn);
     expect(arns).toContain("arn:aws:iam::aws:policy/AWSAppRunnerFullAccess");
-    expect(arns).not.toContain(
-      "arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser",
+    expect(arns).not.toContain("arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser");
+  });
+
+  it("grants the GitHub role access only to its central state bucket and KMS alias", async () => {
+    const policies = recorded.filter((r) => r.type === "aws:iam/rolePolicy:RolePolicy");
+    expect(policies).toHaveLength(1);
+    const policy = await new Promise<string>((resolve) =>
+      pulumi.output(policies[0].inputs.policy as string).apply(resolve),
     );
+    expect(policy).toContain(
+      "arn:aws:s3:::inthealth-cross-account-state-sandbox-444455556666-us-east-2",
+    );
+    expect(policy).toContain("arn:aws:kms:us-east-2:444455556666:key/*");
+    expect(policy).toContain("alias/inthealth-cross-account-state-sandbox");
+    expect(policy).not.toContain('"Resource":"*"');
   });
 
   it("creates a monthly budget when a notification email is set", () => {
-    const budgets = recorded.filter(
-      (r) => r.type === "aws:budgets/budget:Budget",
-    );
+    const budgets = recorded.filter((r) => r.type === "aws:budgets/budget:Budget");
     expect(budgets).toHaveLength(1);
     expect(budgets[0].inputs.timeUnit).toBe("MONTHLY");
     expect(budgets[0].inputs.limitAmount).toBe("100");
   });
 
   it("exports the deploy role ARN and ECR repository url", async () => {
-    const roleArn = await new Promise<string>((res) =>
-      infra.deployRoleArn.apply(res),
-    );
-    const repoUrl = await new Promise<string>((res) =>
-      infra.ecrRepositoryUrl.apply(res),
-    );
+    const roleArn = await new Promise<string>((res) => infra.deployRoleArn.apply(res));
+    const repoUrl = await new Promise<string>((res) => infra.ecrRepositoryUrl.apply(res));
     expect(roleArn).toContain("arn:aws:iam::");
     expect(repoUrl).toContain("dkr.ecr");
   });

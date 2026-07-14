@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 // Thin AWS Pulumi wrapper. Unlike the GCP orchestrator, the AWS profile uses the
-// Pulumi Cloud backend and derives its per-env identifiers (account ids, Vercel
-// slug/project, PULUMI_ORG) from the environment — so all this needs to do is
-// load infra/.env.local (done by the `pnpm infra:aws` dotenv wrapper) and run
-// `pulumi` inside the requested layer directory with those vars present.
+// dedicated-account S3/KMS backend and derives its per-env identifiers (account
+// ids, Vercel slug/project, PULUMI_ORG) from the environment — so all this needs
+// to do is load infra/.env.local (done by the `pnpm infra:aws` dotenv wrapper)
+// and run `pulumi` inside the requested layer directory with those vars present.
 //
 // Usage:
 //   pnpm infra:aws <layer> <pulumi args...>
@@ -46,10 +46,10 @@ function main(): void {
   const awsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const cwd = path.join(awsRoot, layer);
 
-  if (!process.env.PULUMI_ORG?.trim()) {
+  if (process.env.PULUMI_ORG?.trim() !== "organization") {
     console.warn(
-      "⚠ PULUMI_ORG is unset — the apps layer needs it to resolve the core StackReference. " +
-        "Set it in infra/.env.local.",
+      "⚠ The AWS S3 backend requires PULUMI_ORG=organization so the apps layer " +
+        "can resolve the core StackReference. Set it in infra/.env.local.",
     );
   }
 

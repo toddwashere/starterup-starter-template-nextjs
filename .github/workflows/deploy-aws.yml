@@ -21,17 +21,23 @@ on:
   workflow_dispatch:
     inputs:
       stack:
-        description: "Pulumi stack (sandbox or production)"
+        description: "Pulumi stack (sandbox, staging, or production)"
         required: true
+        type: choice
         default: sandbox
+        options:
+          - sandbox
+          - staging
+          - production
 
 permissions:
   contents: read
-  id-token: write   # required for OIDC
-  pull-requests: write  # for posting preview comments
+  id-token: write # required for OIDC
+  pull-requests: write # for posting preview comments
 
 env:
   PULUMI_SKIP_UPDATE_CHECK: "true"
+  PULUMI_ORG: organization
 
 # ---------------------------------------------------------------------------
 # preview — runs on pull_request; posts pulumi preview as PR comment
@@ -42,6 +48,7 @@ jobs:
     name: Pulumi preview (sandbox)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: sandbox-aws
     steps:
       - uses: actions/checkout@v4
 
@@ -68,16 +75,23 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Verify AWS account
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          test "$actual" = "${{ vars.AWS_ACCOUNT_ID }}" || {
+            echo "Expected AWS account ${{ vars.AWS_ACCOUNT_ID }}, got $actual" >&2
+            exit 1
+          }
+
       - name: Pulumi preview (core)
         uses: pulumi/actions@v6
         with:
           command: preview
           stack-name: sandbox
           work-dir: infra/aws/core
+          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           comment-on-pr: true
           policy-pack: ../../shared/policies
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
       - name: Pulumi preview (apps)
         uses: pulumi/actions@v6
@@ -85,31 +99,31 @@ jobs:
           command: preview
           stack-name: sandbox
           work-dir: infra/aws/apps
+          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           comment-on-pr: true
           policy-pack: ../../shared/policies
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
-# ---------------------------------------------------------------------------
-# build-images — builds and pushes all app containers to ECR
-# runs on push to main or workflow_dispatch
-# ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # build-images — builds and pushes all app containers to ECR
+  # runs on push to main or workflow_dispatch
+  # ---------------------------------------------------------------------------
   build-images:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     name: Build and push container images
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    environment: ${{ github.event_name == 'workflow_dispatch' && format('{0}-aws', inputs.stack) || 'production-aws' }}
     permissions:
       contents: read
       id-token: write
     strategy:
       matrix:
         app:
-          - { name: dashboard,   dockerfile: infra/shared/docker/Dockerfile.dashboard }
-          - { name: www,         dockerfile: infra/shared/docker/Dockerfile.www }
-          - { name: public-api,  dockerfile: infra/shared/docker/Dockerfile.public-api }
-          - { name: public-mcp,  dockerfile: infra/shared/docker/Dockerfile.public-mcp }
-          - { name: workers,        dockerfile: apps/workers/Dockerfile }
+          - { name: dashboard, dockerfile: infra/shared/docker/Dockerfile.dashboard }
+          - { name: www, dockerfile: infra/shared/docker/Dockerfile.www }
+          - { name: public-api, dockerfile: infra/shared/docker/Dockerfile.public-api }
+          - { name: public-mcp, dockerfile: infra/shared/docker/Dockerfile.public-mcp }
+          - { name: workers, dockerfile: apps/workers/Dockerfile }
           - { name: workers-lambda, dockerfile: apps/workers/Dockerfile.lambda }
     steps:
       - uses: actions/checkout@v4
@@ -119,6 +133,14 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS account
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          test "$actual" = "${{ vars.AWS_ACCOUNT_ID }}" || {
+            echo "Expected AWS account ${{ vars.AWS_ACCOUNT_ID }}, got $actual" >&2
+            exit 1
+          }
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -135,17 +157,17 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.app.name }}
           cache-to: type=gha,scope=${{ matrix.app.name }},mode=max
 
-# ---------------------------------------------------------------------------
-# deploy — migrate → pulumi up (core) → pulumi up (apps) → smoke test
-# gated by GitHub Environment "production-aws" (manual approval required)
-# ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # deploy — migrate → pulumi up (core) → pulumi up (apps) → smoke test
+  # gated by GitHub Environment "production-aws" (manual approval required)
+  # ---------------------------------------------------------------------------
   deploy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     name: Deploy (Pulumi up)
     needs: [build-images]
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: production-aws   # GitHub Environment — add required reviewers to gate this
+    environment: ${{ github.event_name == 'workflow_dispatch' && format('{0}-aws', inputs.stack) || 'production-aws' }}
     permissions:
       contents: read
       id-token: write
@@ -167,7 +189,15 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      # production for push to main; let workflow_dispatch choose sandbox or production
+      - name: Verify AWS account
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          test "$actual" = "${{ vars.AWS_ACCOUNT_ID }}" || {
+            echo "Expected AWS account ${{ vars.AWS_ACCOUNT_ID }}, got $actual" >&2
+            exit 1
+          }
+
+      # production for push to main; workflow_dispatch uses its constrained choice.
       - name: Resolve stack name
         id: stack
         run: |
@@ -201,8 +231,7 @@ jobs:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
           work-dir: infra/aws/core
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
 
       # Deploy app services: App Runner rolling update (dashboard, www, public-api, public-mcp)
       # + workers Lambda (Function + EventSourceMapping) — all managed by the apps stack.
@@ -217,15 +246,15 @@ jobs:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
           work-dir: infra/aws/apps
+          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           config-map: |
             imageTag: { value: "${{ github.sha }}" }
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
       - name: Smoke test dashboard health
         working-directory: infra/aws/apps
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_BACKEND_URL: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
         run: |
+          pulumi login "$PULUMI_BACKEND_URL"
           URL=$(pulumi stack output dashboardUrl --stack ${{ steps.stack.outputs.name }})
           curl --fail --retry 5 --retry-all-errors --retry-delay 15 "https://$URL/api/health"

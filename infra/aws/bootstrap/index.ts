@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
+import { validatedGithubRepo } from "./bootstrap-config";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -28,10 +29,9 @@ const baseTags = {
   Layer: "bootstrap",
 };
 
-// "owner/repo" — scopes the deploy role trust policy to your repository. Without
-// it the role + provider are still created, but the role trusts no repo (so it
-// can't be assumed until you set this and re-run).
-const githubRepo = config.get("githubRepo");
+// Required "owner/repo" scope. Failing closed prevents an unscoped OIDC role
+// from granting arbitrary GitHub repositories workload and state access.
+const githubRepo = validatedGithubRepo(config.get("githubRepo"));
 const budgetAmount = config.get("budgetAmount") ?? "100";
 const budgetNotificationEmail = config.get("budgetNotificationEmail");
 const complianceMode = config.get("complianceMode") ?? "none";
@@ -94,13 +94,9 @@ const deployRole = new aws.iam.Role("github-deploy", {
             },
             // Scope to the specific repo (any branch/tag/PR). Tighten to
             // `repo:<owner>/<repo>:ref:refs/heads/main` for prod-only accounts.
-            ...(githubRepo
-              ? {
-                  StringLike: {
-                    "token.actions.githubusercontent.com:sub": `repo:${githubRepo}:*`,
-                  },
-                }
-              : {}),
+            StringLike: {
+              "token.actions.githubusercontent.com:sub": `repo:${githubRepo}:*`,
+            },
           },
         },
       ],
@@ -131,15 +127,73 @@ const COMPLIANCE_POLICIES = [
   "AWSConfigUserAccess",
 ];
 
-const deployPolicies = [
-  ...BASE_POLICIES,
-  ...(isCompliant ? COMPLIANCE_POLICIES : []),
-];
+const deployPolicies = [...BASE_POLICIES, ...(isCompliant ? COMPLIANCE_POLICIES : [])];
 deployPolicies.forEach((policyName, i) => {
   new aws.iam.RolePolicyAttachment(`deploy-policy-${i}`, {
     role: deployRole.name,
     policyArn: `arn:aws:iam::aws:policy/${policyName}`,
   });
+});
+
+// The Pulumi backend lives in a dedicated state account. Its resource policies
+// grant this deterministic role cross-account access; this identity policy is
+// the matching workload-account half of that authorization.
+const stateAccountId = process.env.AWS_STATE_ACCOUNT_ID?.trim();
+const stateResourcePrefix = process.env.AWS_STATE_RESOURCE_PREFIX?.trim();
+const stateRegion = process.env.AWS_STATE_REGION?.trim() ?? "us-east-2";
+if (!stateAccountId || !/^\d{12}$/.test(stateAccountId)) {
+  throw new Error("AWS_STATE_ACCOUNT_ID must be a 12-digit account ID.");
+}
+if (
+  !stateResourcePrefix ||
+  stateResourcePrefix.length > 29 ||
+  !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(stateResourcePrefix)
+) {
+  throw new Error("AWS_STATE_RESOURCE_PREFIX must be 1-29 lowercase letters, numbers, or hyphens.");
+}
+if (stateRegion !== "us-east-2") {
+  throw new Error("AWS_STATE_REGION must be us-east-2.");
+}
+const stateBucketName = `${stateResourcePrefix}-${stack}-${stateAccountId}-${stateRegion}`;
+const stateKmsAlias = `alias/${stateResourcePrefix}-${stack}`;
+new aws.iam.RolePolicy("github-state-access", {
+  role: deployRole.name,
+  policy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "PulumiStateBucket",
+        Effect: "Allow",
+        Action: ["s3:ListBucket"],
+        Resource: [`arn:aws:s3:::${stateBucketName}`],
+      },
+      {
+        Sid: "PulumiStateObjects",
+        Effect: "Allow",
+        Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        Resource: [`arn:aws:s3:::${stateBucketName}/*`],
+      },
+      {
+        Sid: "PulumiStateKms",
+        Effect: "Allow",
+        Action: [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo",
+        ],
+        Resource: [`arn:aws:kms:${stateRegion}:${stateAccountId}:key/*`],
+        Condition: {
+          "ForAnyValue:StringEquals": {
+            "kms:ResourceAliases": stateKmsAlias,
+          },
+        },
+      },
+    ],
+  }),
 });
 
 // --- 3. Monthly cost budget + alerts ----------------------------------------

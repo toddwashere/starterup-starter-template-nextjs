@@ -9,11 +9,11 @@ App Runner + Lambda + RDS Postgres + RDS Proxy across three environments: sandbo
 
 Three Pulumi projects live here:
 
-| Project | Path | What it owns |
-|---------|------|--------------|
-| `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget. Run once per account with admin credentials. |
-| `starter-aws-core` | `infra/aws/core/` | VPC, RDS Postgres, RDS Proxy, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries (derived + manual placeholders), EventBridge Scheduler rules, compliance resources |
-| `starter-aws-apps` | `infra/aws/apps/` | 4 App Runner services (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector |
+| Project                 | Path                   | What it owns                                                                                                                                                                                       |
+| ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget. Run once per account with admin credentials.                                                                        |
+| `starter-aws-core`      | `infra/aws/core/`      | VPC, RDS Postgres, RDS Proxy, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries (derived + manual placeholders), EventBridge Scheduler rules, compliance resources |
+| `starter-aws-apps`      | `infra/aws/apps/`      | 4 App Runner services (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector                                                                                           |
 
 `apps` depends on `core` via `pulumi.StackReference`. Deploy order: `bootstrap` → `core` → `apps`.
 
@@ -50,13 +50,13 @@ graph TD
 
 ### Component mapping
 
-| App | Target | Public | Needs DB | Needs SQS | Needs S3 |
-|-----|--------|--------|----------|-----------|----------|
-| `dashboard` | App Runner | ✓ | ✓ | ✓ (producer) | ✓ |
-| `www` | App Runner | ✓ | — | — | — |
-| `public-api` | App Runner | ✓ | ✓ | ✓ (producer) | ✓ |
-| `public-mcp` | App Runner | ✓ | ✓ | — | — |
-| `workers` | Lambda (SQS-triggered) | — | ✓ | ✓ (consumer) | ✓ |
+| App          | Target                 | Public | Needs DB | Needs SQS    | Needs S3 |
+| ------------ | ---------------------- | ------ | -------- | ------------ | -------- |
+| `dashboard`  | App Runner             | ✓      | ✓        | ✓ (producer) | ✓        |
+| `www`        | App Runner             | ✓      | —        | —            | —        |
+| `public-api` | App Runner             | ✓      | ✓        | ✓ (producer) | ✓        |
+| `public-mcp` | App Runner             | ✓      | ✓        | —            | —        |
+| `workers`    | Lambda (SQS-triggered) | —      | ✓        | ✓ (consumer) | ✓        |
 
 ### Workers Lambda
 
@@ -70,16 +70,16 @@ An EventBridge Scheduler rule enqueues the `cleanup.expired-sessions` job to SQS
 
 ## Network topology (same in every environment)
 
-**All environments — sandbox, staging, and production — share one network topology.** RDS is always private, RDS Proxy is always in-VPC, App Runner always uses a VPC egress connector, and Lambda always runs in private subnets. A NAT gateway (plus a free S3 gateway endpoint) handles egress. `complianceMode` toggles compliance *features* layered on top of this constant topology; it never changes how the app connects, so a deploy that passes in sandbox exercises the same network paths as production.
+**All environments — sandbox, staging, and production — share one network topology.** RDS is always private, RDS Proxy is always in-VPC, App Runner always uses a VPC egress connector, and Lambda always runs in private subnets. A NAT gateway (plus a free S3 gateway endpoint) handles egress. `complianceMode` toggles compliance _features_ layered on top of this constant topology; it never changes how the app connects, so a deploy that passes in sandbox exercises the same network paths as production.
 
-| Aspect | All environments (constant) | Extra when `complianceMode != none` |
-|--------|-----------------------------|--------------------------------------|
-| RDS | Private subnets, RDS Proxy in-VPC | Multi-AZ, CMEK at rest |
-| App Runner → DB | VPC egress connector → RDS Proxy | WAF WebACL (see known limitations) |
-| Lambda | In-VPC, private subnets | — |
-| Egress | Single NAT gateway + free S3 gateway endpoint | Per-AZ HA NAT + interface VPC endpoints (SQS / Secrets Manager / KMS / ECR / Logs) |
-| Encryption in transit | TLS (`sslmode=require`), HTTPS | Enforced via policy |
-| Audit / logging | Baseline CloudWatch | CloudTrail data events, VPC Flow Logs, Object-Lock log bucket |
+| Aspect                | All environments (constant)                   | Extra when `complianceMode != none`                                                |
+| --------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------- |
+| RDS                   | Private subnets, RDS Proxy in-VPC             | Multi-AZ, CMEK at rest                                                             |
+| App Runner → DB       | VPC egress connector → RDS Proxy              | WAF WebACL (see known limitations)                                                 |
+| Lambda                | In-VPC, private subnets                       | —                                                                                  |
+| Egress                | Single NAT gateway + free S3 gateway endpoint | Per-AZ HA NAT + interface VPC endpoints (SQS / Secrets Manager / KMS / ECR / Logs) |
+| Encryption in transit | TLS (`sslmode=require`), HTTPS                | Enforced via policy                                                                |
+| Audit / logging       | Baseline CloudWatch                           | CloudTrail data events, VPC Flow Logs, Object-Lock log bucket                      |
 
 Accepted trade-off: the single topology adds ~$32/mo (one NAT gateway) to sandbox/staging compared with a two-topology design; production already carried NAT and is unchanged.
 
@@ -89,15 +89,15 @@ Accepted trade-off: the single topology adds ~$32/mo (one NAT gateway) to sandbo
 
 `complianceMode` is set per environment in `infra/aws/config.<env>.ts`. It layers features onto the constant topology but does **not** change network connectivity.
 
-| `ComplianceConfig` flag | AWS mapping |
-|-------------------------|-------------|
-| `cmek` | KMS CMKs for RDS, S3 (SSE-KMS), SQS, Secrets Manager, CloudWatch Logs |
-| `auditLogs` | CloudTrail trail with data events (S3, Secrets Manager); VPC Flow Logs |
-| `immutableLogSink` | S3 log bucket with Object Lock (compliance mode), retention = `logRetentionDays` |
-| `logRetentionDays` | CloudWatch Logs retention + S3 Object Lock retention |
-| `orgPolicies` | AWS Config managed rules (deny public RDS, require encryption, etc.) |
-| `cloudArmor` | AWS WAF WebACL (see known limitations below) |
-| `vpcServiceControls` | Interface VPC endpoints (PrivateLink) for AWS APIs |
+| `ComplianceConfig` flag | AWS mapping                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `cmek`                  | KMS CMKs for RDS, S3 (SSE-KMS), SQS, Secrets Manager, CloudWatch Logs            |
+| `auditLogs`             | CloudTrail trail with data events (S3, Secrets Manager); VPC Flow Logs           |
+| `immutableLogSink`      | S3 log bucket with Object Lock (compliance mode), retention = `logRetentionDays` |
+| `logRetentionDays`      | CloudWatch Logs retention + S3 Object Lock retention                             |
+| `orgPolicies`           | AWS Config managed rules (deny public RDS, require encryption, etc.)             |
+| `cloudArmor`            | AWS WAF WebACL (see known limitations below)                                     |
+| `vpcServiceControls`    | Interface VPC endpoints (PrivateLink) for AWS APIs                               |
 
 When `complianceMode: "none"` (sandbox default) the compliance module is a no-op and registers no extra resources.
 
@@ -111,10 +111,10 @@ When `complianceMode: "none"` (sandbox default) the compliance module is a no-op
 
 Runtime traffic uses a **pooled** connection through RDS Proxy; schema migrations use a **direct** connection to the RDS instance:
 
-| Secret | Endpoint | Used by |
-|--------|----------|---------|
+| Secret         | Endpoint                   | Used by                                |
+| -------------- | -------------------------- | -------------------------------------- |
 | `DATABASE_URL` | RDS Proxy `:5432` (pooled) | App Runner services, Lambda at runtime |
-| `DIRECT_URL` | RDS instance (direct) | `prisma migrate deploy` only |
+| `DIRECT_URL`   | RDS instance (direct)      | `prisma migrate deploy` only           |
 
 Both secrets live in Secrets Manager and are injected at runtime via IAM. The Prisma client uses `DATABASE_URL`; Prisma Migrate uses `DIRECT_URL`. Cap the pg pool `max` per process to bound connections through the proxy.
 
@@ -143,10 +143,10 @@ For a Vercel-hosted frontend that uses this AWS data/AI plane **without** Vercel
 Secure Compute, `core` provisions two extra pieces (design spec:
 [`docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md`](../../docs/superpowers/specs/2026-07-10-vercel-aws-hybrid-data-ai-plane-design.md)):
 
-| Piece | Module | Purpose |
-|-------|--------|---------|
-| Vercel OIDC access role | `core/vercel-access.ts` | Keyless, least-privilege role Vercel assumes (S3 uploads, SQS produce, app secrets, Bedrock InvokeModel). Created when `access.vercelOidc.teamSlug` is set. |
-| Public PgBouncer pooler | `core/pgbouncer.ts` | Transaction-mode PgBouncer (Fargate, private subnets) behind a public NLB on `:6432`. RDS and RDS Proxy stay private — PgBouncer is the only public DB surface. Created when `database.pooler.enabled`. |
+| Piece                   | Module                  | Purpose                                                                                                                                                                                                 |
+| ----------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vercel OIDC access role | `core/vercel-access.ts` | Keyless, least-privilege role Vercel assumes (S3 uploads, SQS produce, app secrets, Bedrock InvokeModel). Created when `access.vercelOidc.teamSlug` is set.                                             |
+| Public PgBouncer pooler | `core/pgbouncer.ts`     | Transaction-mode PgBouncer (Fargate, private subnets) behind a public NLB on `:6432`. RDS and RDS Proxy stay private — PgBouncer is the only public DB surface. Created when `database.pooler.enabled`. |
 
 Bedrock is a public regional API: the Vercel role and the in-AWS App Runner /
 Lambda roles get `bedrock:InvokeModel*` scoped to `ai.bedrockModels`. See
@@ -155,10 +155,10 @@ Lambda roles get `bedrock:InvokeModel*` scoped to `ai.bedrockModels`. See
 
 ### Connection paths
 
-| Consumer | Postgres path | Auth |
-|----------|---------------|------|
-| Vercel apps | public NLB `:6432` → PgBouncer → private RDS | OIDC role + `sslmode=verify-full` |
-| In-AWS App Runner / Lambda | private RDS Proxy `:5432` → RDS | task role |
+| Consumer                   | Postgres path                                | Auth                              |
+| -------------------------- | -------------------------------------------- | --------------------------------- |
+| Vercel apps                | public NLB `:6432` → PgBouncer → private RDS | OIDC role + `sslmode=verify-full` |
+| In-AWS App Runner / Lambda | private RDS Proxy `:5432` → RDS              | task role                         |
 
 ### Bedrock invocation logging (deploy step)
 
@@ -180,16 +180,16 @@ CloudTrail already records Bedrock control-plane management events.
 
 Indicative monthly figures, low traffic, `us-east-2`, single topology.
 
-| Component | sandbox (`none`) | staging (`soc2`) | production (`soc2`/`hipaa`) |
-|-----------|------------------|------------------|------------------------------|
-| App Runner ×4 | ~$20 | ~$30 | ~$60–100 |
-| RDS | ~$14 (micro, 1-AZ) | ~$27 (small, 1-AZ) | ~$100+ (medium, Multi-AZ) |
-| RDS Proxy | ~$22 | ~$22 | ~$22 |
-| NAT gateway | ~$32 (single) | ~$32 (single) | ~$65 (per-AZ HA) |
-| Interface VPC endpoints | — | ~$22 | ~$44–88 |
-| WAF / CloudTrail / KMS | — | ~$15 | ~$25 |
-| Lambda + SQS + S3 | ~$2 | ~$3 | ~$10 |
-| **≈ Total** | **~$90/mo** | **~$150/mo** | **~$300–380/mo** |
+| Component               | sandbox (`none`)   | staging (`soc2`)   | production (`soc2`/`hipaa`) |
+| ----------------------- | ------------------ | ------------------ | --------------------------- |
+| App Runner ×4           | ~$20               | ~$30               | ~$60–100                    |
+| RDS                     | ~$14 (micro, 1-AZ) | ~$27 (small, 1-AZ) | ~$100+ (medium, Multi-AZ)   |
+| RDS Proxy               | ~$22               | ~$22               | ~$22                        |
+| NAT gateway             | ~$32 (single)      | ~$32 (single)      | ~$65 (per-AZ HA)            |
+| Interface VPC endpoints | —                  | ~$22               | ~$44–88                     |
+| WAF / CloudTrail / KMS  | —                  | ~$15               | ~$25                        |
+| Lambda + SQS + S3       | ~$2                | ~$3                | ~$10                        |
+| **≈ Total**             | **~$90/mo**        | **~$150/mo**       | **~$300–380/mo**            |
 
 Source: `docs/superpowers/specs/2026-07-07-aws-apprunner-deploy-profile-design.md`. Cost is dominated by the RDS tier, which is tunable per env. No ALB, no cluster, no always-on compute beyond App Runner minimum instances.
 
@@ -199,11 +199,11 @@ Source: `docs/superpowers/specs/2026-07-07-aws-apprunner-deploy-profile-design.m
 
 Environments are defined in typed config files that mirror the GCP profile's pattern:
 
-| File | Purpose |
-|------|---------|
-| `infra/aws/config.common.ts` | Shared invariants (region, domains, DB version), `complianceMode: "none"` base |
-| `infra/aws/config.sandbox.ts` | `complianceMode: "none"`, smallest RDS (single-AZ), single NAT |
-| `infra/aws/config.staging.ts` | `complianceMode: "soc2"`, single-AZ RDS, single NAT |
+| File                             | Purpose                                                                             |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| `infra/aws/config.common.ts`     | Shared invariants (region, domains, DB version), `complianceMode: "none"` base      |
+| `infra/aws/config.sandbox.ts`    | `complianceMode: "none"`, smallest RDS (single-AZ), single NAT                      |
+| `infra/aws/config.staging.ts`    | `complianceMode: "soc2"`, single-AZ RDS, single NAT                                 |
 | `infra/aws/config.production.ts` | `complianceMode: "soc2"` or `"hipaa"`, Multi-AZ RDS, per-AZ HA NAT, WAF, monitoring |
 
 Config type is defined in `infra/shared/aws-env-config.ts`. Config files are secret-free and safe to commit; real secrets live in Secrets Manager.
@@ -230,36 +230,44 @@ See [infra/README.md](../README.md) for AWS startup credits and credit programs.
 ## First-time setup
 
 > Full walkthrough (accounts, identity, BAA, deploy order) lives in
-> [`GETTING_STARTED.md`](./GETTING_STARTED.md). The `bootstrap` stack should be
-> deployed first (per account): it creates the ECR repo + GitHub OIDC deploy role
-> that `core`/`apps` and CI assume already exist.
+> [`GETTING_STARTED.md`](./GETTING_STARTED.md). Initialize the selected
+> environment's retained S3/KMS backend first, then deploy `bootstrap` to create
+> the ECR repo + GitHub OIDC deploy role that `core`/`apps` and CI assume.
 
 These projects are not in the pnpm workspace root. Install deps inside each project directory:
 
 ```sh
-# 0. Bootstrap (once per account, admin creds) — ECR repo, OIDC deploy role, budget
+# 0. State foundation (creates no workload resources or Pulumi stacks)
+pnpm infra:aws:state init sandbox
+# Copy the printed awskms:///... URL for the stack-init commands below.
+
+# 1. Bootstrap (once per account, admin creds) — ECR repo, OIDC deploy role, budget
 cd infra/aws/bootstrap
 pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-2
-pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
 
 cd ../core
 pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-2
-pulumi config set starter-aws-core:env sandbox
+AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pulumi config set starter-aws-core:env sandbox
 
 cd ../apps
 pnpm install
-pulumi stack init sandbox
-pulumi config set aws:region us-east-2
-pulumi config set starter-aws-apps:env sandbox
+AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pulumi config set starter-aws-apps:env sandbox
 # coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
 # account + region (infra/.env.local) — no per-stack config needed for those.
 ```
 
 Repeat for `staging` and `production` stacks. Resource sizing and compliance features derive from the typed config files — no manual `pulumi config set` per resource needed beyond the above.
+
+The state command is idempotent and must be run separately for each environment
+you choose to configure. State buckets, KMS keys, audit buckets, and trails are
+retained when application stacks are destroyed.
 
 ---
 
@@ -296,24 +304,29 @@ The workflow at `.github/workflows/deploy-aws.yml` automates image builds and de
 4. **deploy apps** — `pulumi up` apps stack (App Runner rolling deploys pinned to `github.sha`, Lambda update + publish).
 5. **smoke test** — `GET /api/health` on the dashboard App Runner service.
 
-Production deploys are gated by the `production-aws` GitHub Environment (required reviewers).
+Each deploy uses its matching `<stack>-aws` GitHub Environment so credentials,
+account IDs, state settings, and migration secrets cannot cross environments.
+Add required reviewers to `production-aws`.
 
 ### Required secrets
 
-| Secret | Description |
-|--------|-------------|
+| Secret                | Description                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
 | `AWS_DEPLOY_ROLE_ARN` | ARN of the IAM role GitHub Actions assumes via OIDC, e.g. `arn:aws:iam::123456789012:role/github-deploy` |
-| `PULUMI_ACCESS_TOKEN` | Pulumi Cloud personal/org access token |
-| `DIRECT_URL_DEPLOY` | Direct Postgres connection string (RDS instance, not proxy) used by `prisma migrate deploy` |
+| `DIRECT_URL_DEPLOY`   | Direct Postgres connection string (RDS instance, not proxy) used by `prisma migrate deploy`              |
 
 Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate step requires a direct connection to the RDS instance (`DIRECT_URL_DEPLOY`).
 
 ### Required variables
 
-| Variable | Example |
-|----------|---------|
-| `AWS_REGION` | `us-east-2` |
-| `AWS_ECR_REGISTRY` | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
+| Variable                    | Example                                                |
+| --------------------------- | ------------------------------------------------------ |
+| `AWS_ACCOUNT_ID`            | Selected workload environment's 12-digit ID            |
+| `AWS_REGION`                | `us-east-2`                                            |
+| `AWS_ECR_REGISTRY`          | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
+| `AWS_STATE_ACCOUNT_ID`      | Dedicated state account's 12-digit ID                  |
+| `AWS_STATE_RESOURCE_PREFIX` | `my-company-cross-account-state`                       |
+| `AWS_STATE_REGION`          | `us-east-2`                                            |
 
 ### GitHub OIDC with AWS IAM
 
@@ -332,6 +345,8 @@ Create an IAM OIDC identity provider for `token.actions.githubusercontent.com`. 
 - `AWSWAFFullAccess` (when `complianceMode != none`)
 - `AWSConfigUserAccess` (when `complianceMode != none`)
 - `IAMFullAccess` (or a narrower custom policy for role/policy management)
+- Inline cross-account state policy scoped to the environment's exact S3 bucket
+  and KMS alias
 
 Setup guide: <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html>
 
@@ -341,9 +356,13 @@ Setup guide: <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_provider
 gh workflow run deploy-aws.yml -f stack=sandbox
 ```
 
-### GitHub Environment: `production-aws`
+### GitHub Environments
 
-Create the environment at **Settings → Environments → New environment** and add required reviewers. The deploy job pauses for approval before applying changes to production.
+Create `sandbox-aws`, `staging-aws`, and `production-aws` at
+**Settings → Environments → New environment**. Store each workload account's
+role, account ID, registry, and migration secret only in its matching
+environment. Add required reviewers to production so deployment pauses before
+applying changes.
 
 ---
 

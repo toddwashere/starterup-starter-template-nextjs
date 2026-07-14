@@ -1,0 +1,293 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Retained cross-account Pulumi state foundation for one environment
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [sandbox, staging, production]
+  ResourcePrefix:
+    Type: String
+  StateBucketName:
+    Type: String
+  AuditBucketName:
+    Type: String
+  KmsAliasName:
+    Type: String
+  TrailName:
+    Type: String
+  WorkloadAccountId:
+    Type: String
+    AllowedPattern: '^\d{12}$'
+  WorkloadAdminRoleArn:
+    Type: String
+  GithubDeployRoleName:
+    Type: String
+  StateVersionRetentionDays:
+    Type: Number
+  AuditRetentionDays:
+    Type: Number
+
+Resources:
+  StateKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub Pulumi state encryption for ${Environment}
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableStateAccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+          - Sid: AllowSelectedWorkloadRoles
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:root
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:GenerateDataKey
+              - kms:GenerateDataKeyWithoutPlaintext
+              - kms:ReEncryptFrom
+              - kms:ReEncryptTo
+            Resource: "*"
+            Condition:
+              ArnLike:
+                aws:PrincipalArn:
+                  - !Ref WorkloadAdminRoleArn
+                  - !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${GithubDeployRoleName}
+          - Sid: AllowCloudTrailEncryption
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action:
+              - kms:DescribeKey
+              - kms:GenerateDataKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub arn:${AWS::Partition}:cloudtrail:*:${AWS::AccountId}:trail/*
+      Tags:
+        - Key: Project
+          Value: !Ref ResourcePrefix
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  StateKmsAlias:
+    Type: AWS::KMS::Alias
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AliasName: !Ref KmsAliasName
+      TargetKeyId: !Ref StateKmsKey
+
+  StateBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref StateBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StateKmsKey.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentStateVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref StateVersionRetentionDays
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: !Ref ResourcePrefix
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  StateBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref StateBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt StateBucket.Arn
+              - !Sub ${StateBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AllowSelectedWorkloadBucketAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:root
+            Action: s3:ListBucket
+            Resource: !GetAtt StateBucket.Arn
+            Condition:
+              ArnLike:
+                aws:PrincipalArn:
+                  - !Ref WorkloadAdminRoleArn
+                  - !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${GithubDeployRoleName}
+          - Sid: AllowSelectedWorkloadObjectAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:root
+            Action:
+              - s3:DeleteObject
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub ${StateBucket.Arn}/*
+            Condition:
+              ArnLike:
+                aws:PrincipalArn:
+                  - !Ref WorkloadAdminRoleArn
+                  - !Sub arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${GithubDeployRoleName}
+
+  AuditBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref AuditBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt StateKmsKey.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireAuditLogs
+            Status: Enabled
+            ExpirationInDays: !Ref AuditRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: COMPLIANCE
+            Days: !Ref AuditRetentionDays
+      ObjectLockEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: !Ref ResourcePrefix
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  AuditBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref AuditBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt AuditBucket.Arn
+              - !Sub ${AuditBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt AuditBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub ${AuditBucket.Arn}/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+                s3:x-amz-acl: bucket-owner-full-control
+
+  StateAccessTrail:
+    Type: AWS::CloudTrail::Trail
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    DependsOn: AuditBucketPolicy
+    Properties:
+      TrailName: !Ref TrailName
+      EnableLogFileValidation: true
+      EventSelectors:
+        - IncludeManagementEvents: false
+          ReadWriteType: All
+          DataResources:
+            - Type: AWS::S3::Object
+              Values:
+                - !Sub arn:${AWS::Partition}:s3:::${StateBucketName}/
+      IncludeGlobalServiceEvents: false
+      IsLogging: true
+      IsMultiRegionTrail: false
+      KMSKeyId: !GetAtt StateKmsKey.Arn
+      S3BucketName: !Ref AuditBucket
+      Tags:
+        - Key: Project
+          Value: !Ref ResourcePrefix
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  StateBucketName:
+    Value: !Ref StateBucket
+  AuditBucketName:
+    Value: !Ref AuditBucket
+  KmsKeyArn:
+    Value: !GetAtt StateKmsKey.Arn
+  KmsAliasName:
+    Value: !Ref StateKmsAlias
+  TrailArn:
+    Value: !GetAtt StateAccessTrail.Arn

@@ -4,6 +4,7 @@ import * as readline from "node:readline";
 
 import { QUEUE_PROFILES, type ProfileName } from "../infra/shared/queue-profiles";
 import { buildEnv } from "../infra/shared/env-manifest";
+import { formatAwsNextSteps } from "./infra-init-next-steps";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -108,18 +109,7 @@ export function formatNextSteps(
       break;
 
     case "aws":
-      lines.push(
-        "  1. Apply Pulumi core stack:",
-        `     cd infra/aws/core && pulumi up -s ${variant}`,
-        "",
-        "  2. Apply apps stack:",
-        `     cd infra/aws/apps && pulumi up -s ${variant}`,
-        "",
-        "  3. Verify smoke:",
-        "     pulumi stack output dashboardUrl",
-        "",
-        "  Note: Phase 6.1 is the canonical implementation — see infra/aws/README.md when ready.",
-      );
+      lines.push(...formatAwsNextSteps(variant));
       break;
 
     case "azure":

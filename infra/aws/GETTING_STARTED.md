@@ -8,8 +8,8 @@ run the Pulumi stacks. For the resource/config reference, see
 > [!IMPORTANT]
 > **Your AWS credentials — not any config file — decide which account gets the
 > resources.** Pulumi deploys to whatever account your active credentials point
-> at. The `Pulumi.<env>.yaml` and `config.<env>.ts` files only pick *sizing and
-> compliance*, never the account. So the golden rule is: **the AWS profile you
+> at. The `Pulumi.<env>.yaml` and `config.<env>.ts` files only pick _sizing and
+> compliance_, never the account. So the golden rule is: **the AWS profile you
 > authenticate with must match the environment stack you deploy.** See
 > [The golden rule](#the-golden-rule-credentials--account) below.
 
@@ -26,6 +26,7 @@ accounts:
 
 ```
 mgmt (root, no workloads)
+├── starter-state        → retained S3/KMS Pulumi state for every environment
 ├── starter-sandbox      → deploy stack: sandbox
 ├── starter-staging      → deploy stack: staging
 ├── starter-production   → deploy stack: production
@@ -66,8 +67,13 @@ AWS_SANDBOX_ACCOUNT_ID=1111...
 AWS_STAGING_ACCOUNT_ID=2222...
 AWS_PRODUCTION_ACCOUNT_ID=3333...
 
-# Pulumi org that owns the stacks — apps builds its core StackReference from this.
-PULUMI_ORG=my-pulumi-org
+# DIY Pulumi backends always use this literal StackReference org segment.
+PULUMI_ORG=organization
+
+# Dedicated state account + required globally unique resource prefix.
+AWS_STATE_ACCOUNT_ID=4444...
+AWS_STATE_PROFILE=starter-state
+AWS_STATE_RESOURCE_PREFIX=my-company-cross-account-state
 
 # Vercel OIDC identifiers for the hybrid access role (core reads these).
 VERCEL_TEAM_SLUG=my-team
@@ -91,11 +97,11 @@ aws sts get-caller-identity   # verify Account matches the stack you're deployin
 Configuration is deliberately split so a template repo commits **no** account
 ids or deployment-specific identifiers:
 
-| Where | Committed? | Holds | Read by |
-|-------|-----------|-------|---------|
-| `infra/.env.local` | **No** (gitignored) | Account ids, `PULUMI_ORG`, `VERCEL_*` | `infra/aws/env.ts` → `config.*.ts` and the stack programs |
-| `infra/aws/config.<env>.ts` | Yes | Sizing, compliance mode, feature flags | The stack programs at deploy time |
-| `infra/aws/<layer>/Pulumi.<env>.yaml` | Yes | `aws:region`, `imageTag` | Pulumi/AWS provider |
+| Where                                 | Committed?          | Holds                                  | Read by                                                   |
+| ------------------------------------- | ------------------- | -------------------------------------- | --------------------------------------------------------- |
+| `infra/.env.local`                    | **No** (gitignored) | Account ids, `PULUMI_ORG`, `VERCEL_*`  | `infra/aws/env.ts` → `config.*.ts` and the stack programs |
+| `infra/aws/config.<env>.ts`           | Yes                 | Sizing, compliance mode, feature flags | The stack programs at deploy time                         |
+| `infra/aws/<layer>/Pulumi.<env>.yaml` | Yes                 | `aws:region`, `imageTag`               | Pulumi/AWS provider                                       |
 
 Rules of thumb: **secrets and identifiers → `.env.local`**; **shape of the
 environment (sizes, compliance) → `config.<env>.ts`**; **deploy-time knobs the
@@ -108,33 +114,42 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 
 ## What is manual vs. in code
 
-| Concern | Where | Why |
-|---------|-------|-----|
-| Org + member accounts | **Manual (console)** | Account lifecycle is a human decision; enables "close to clean up" |
-| Human/CLI access (IAM Identity Center / SSO) | **Manual (console)** | Generates the `AWS_PROFILE`s above |
-| BAA acceptance (AWS Artifact) | **Manual (console)** | Legal step; required before any PHI in staging/production |
-| Bedrock model access request | **Manual (console)** | Per-account/region model opt-in |
-| Root user hardening (MFA, no keys) | **Manual (console)** | One-time account security |
-| GitHub OIDC provider + deploy role | **`bootstrap` stack** | Codified, repeatable per account |
-| ECR repository | **`bootstrap` stack** | Codified |
-| Cost budget + alerts | **`bootstrap` stack** | Codified |
-| VPC, RDS, Proxy, PgBouncer, SQS, S3, Secrets, EventBridge, compliance | **`core` stack** | Codified |
-| App Runner services, workers Lambda, VPC connector | **`apps` stack** | Codified |
-| Bedrock invocation logging | **Manual (one CLI call)** | Pulumi provider gap (see README) |
-| Third-party secret *values* | **Manual (console/CLI)** | Never in git — see [Secrets](#secrets) |
+| Concern                                                               | Where                                    | Why                                                                      |
+| --------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| Org + member accounts                                                 | **Manual (console)**                     | Account lifecycle is a human decision; enables "close to clean up"       |
+| Human/CLI access (IAM Identity Center / SSO)                          | **Manual (console)**                     | Generates the `AWS_PROFILE`s above                                       |
+| BAA acceptance (AWS Artifact)                                         | **Manual (console)**                     | Legal step; required before any PHI in staging/production                |
+| Anthropic first-time-use form                                         | **Manual (console)**                     | Submit once from the management account; organization members inherit it |
+| Root user hardening (MFA, no keys)                                    | **Manual (console)**                     | One-time account security                                                |
+| Central Pulumi state foundation                                       | **CloudFormation via `infra:aws:state`** | Must exist independently of the Pulumi stacks it stores                  |
+| GitHub OIDC provider + deploy role                                    | **`bootstrap` stack**                    | Codified, repeatable per account                                         |
+| ECR repository                                                        | **`bootstrap` stack**                    | Codified                                                                 |
+| Cost budget + alerts                                                  | **`bootstrap` stack**                    | Codified                                                                 |
+| VPC, RDS, Proxy, PgBouncer, SQS, S3, Secrets, EventBridge, compliance | **`core` stack**                         | Codified                                                                 |
+| App Runner services, workers Lambda, VPC connector                    | **`apps` stack**                         | Codified                                                                 |
+| Bedrock invocation logging                                            | **Manual (one CLI call)**                | Pulumi provider gap (see README)                                         |
+| Third-party secret _values_                                           | **Manual (console/CLI)**                 | Never in git — see [Secrets](#secrets)                                   |
 
 ---
 
 ## One-time manual checklist (per account)
 
+Before workload deployment, create a no-workload Organization member account
+for state, assign the Identity Center administrator group, and configure a
+`starter-state` SSO profile. Record only its account ID and profile name in
+`infra/.env.local`; do not create IAM users or access keys. The state account is
+created manually, while its retained S3/KMS/CloudTrail resources are created by
+`pnpm infra:aws:state`.
+
 1. **Create the account** as an Organization member (or standalone).
 2. **Enable IAM Identity Center** and create a permission set; note the
    `AWS_PROFILE` name you'll use.
 3. **Harden the root user**: enable MFA, delete any root access keys.
-4. **Accept the BAA** in AWS Artifact — **required** for staging/production
-   (any account that will hold PHI). Do not put PHI in an account without it.
-5. **Request Bedrock model access** for the models in `ai.bedrockModels`
-   (Bedrock console → Model access), in `ai.bedrockRegion`.
+4. **Accept the organization BAA** in AWS Artifact before PHI enters any member
+   account.
+5. **Submit Anthropic's first-time-use form** once from the management account.
+   Bedrock model access is otherwise enabled on first use; the configured model
+   and region are in `ai.bedrockModels` / `ai.bedrockRegion`.
 6. Everything else is codified — continue to [Deploy order](#deploy-order).
 
 ---
@@ -149,16 +164,39 @@ account ids are present). Set `AWS_PROFILE` to match the target account. You can
 also `cd` into a layer and run `pulumi` directly if you source `.env.local`
 yourself.
 
-### 0. Bootstrap (once per account, admin credentials)
+### 0. Central state foundation (once per environment)
+
+The state script verifies both SSO profiles, deploys retained S3/KMS/CloudTrail
+resources to the dedicated state account, verifies cross-account
+write/read/delete and KMS cryptographic access with temporary probes, and logs
+Pulumi into that environment's backend. It does **not** initialize or deploy
+any Pulumi layer.
+
+Run only the environments you intend to configure:
+
+```bash
+pnpm infra:aws:state init sandbox
+pnpm infra:aws:state init staging
+pnpm infra:aws:state init production
+```
+
+The command prints the exact AWS KMS secrets-provider URL and follow-up commands.
+Re-run the corresponding state command whenever you switch Pulumi between
+environment backends.
+
+### 1. Bootstrap (once per account, admin credentials)
 
 Codifies the GitHub OIDC deploy role, the ECR repo, and the budget.
 
 ```bash
 cd infra/aws/bootstrap && pnpm install && cd -
-pnpm infra:aws bootstrap stack init sandbox
-pnpm infra:aws bootstrap config set aws:region us-east-2
-pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
-pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
+PULUMI_SECRETS_PROVIDER='<printed awskms:///... URL>'
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox \
+  --secrets-provider="$PULUMI_SECRETS_PROVIDER"
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
 ```
 
@@ -167,29 +205,35 @@ into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_REGISTRY`). The apps stack
 no longer needs the ECR URL as config: it derives the registry from the deploy
 account + region at runtime.
 
-### 1. Core
+### 2. Core
 
 ```bash
 cd infra/aws/core && pnpm install && cd -
-pnpm infra:aws core stack init sandbox
-pnpm infra:aws core config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pnpm infra:aws core stack init sandbox \
+  --secrets-provider="$PULUMI_SECRETS_PROVIDER"
+AWS_PROFILE=starter-sandbox pnpm infra:aws core config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```
 
-### 2. Apps
+### 3. Apps
 
 ```bash
 cd infra/aws/apps && pnpm install && cd -
-pnpm infra:aws apps stack init sandbox
-pnpm infra:aws apps config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps stack init sandbox \
+  --secrets-provider="$PULUMI_SECRETS_PROVIDER"
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set aws:region us-east-2
 # coreStackRef comes from PULUMI_ORG; imageRegistry from the deploy account —
 # no per-stack config to set here.
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
 ```
 
-Repeat 0–2 for `staging` and `production`, each with the matching `AWS_PROFILE`.
+Repeat 0–3 for `staging` and `production`, each with the matching profile and
+that environment's printed KMS provider URL. If a stack already exists, use
+`stack select` instead of `stack init`.
 
-### 3. Bedrock invocation logging (manual, once per account/region)
+### 4. Bedrock invocation logging (manual, once per account/region)
 
 The pinned `@pulumi/aws` can't manage this yet, so enable it by hand — see the
 command in [`README.md`](./README.md) (§Bedrock invocation logging).

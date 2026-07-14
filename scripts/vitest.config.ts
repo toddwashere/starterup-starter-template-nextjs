@@ -7,6 +7,7 @@ export default defineConfig({
       "scripts/**/*.test.ts",
       "infra/shared/**/*.test.ts",
       "infra/scripts/**/*.test.ts",
+      "infra/aws/scripts/**/*.test.ts",
     ],
   },
 });
