@@ -15,7 +15,117 @@ run the Pulumi stacks. For the resource/config reference, see
 
 ---
 
-## Recommended layout: one AWS account per environment
+## Part 1 — Quick runbook
+
+Use this section when you want the shortest safe path. Stop immediately if an
+account ID, profile, or Pulumi backend does not match the environment you intend
+to change.
+
+### A. Complete the one-time AWS setup
+
+- [ ] Create the management, state, sandbox, staging, and production accounts
+      in AWS Organizations.
+- [ ] Enable IAM Identity Center and record its home region.
+- [ ] Create your Identity Center user, administrator group, and permission set.
+- [ ] Assign that group and permission set to all four member accounts.
+- [ ] Accept the organization BAA and submit Anthropic's first-time-use form.
+- [ ] Harden every root user with MFA and no access keys.
+
+### B. Configure local SSO profiles
+
+Create these profiles with `aws configure sso`:
+
+| Account       | Local profile        |
+| ------------- | -------------------- |
+| Central state | `starter-state`      |
+| Sandbox       | `starter-sandbox`    |
+| Staging       | `starter-staging`    |
+| Production    | `starter-production` |
+
+Authenticate and verify the two accounts involved in a sandbox state deployment:
+
+```bash
+aws sso login --profile starter-state
+aws sso login --profile starter-sandbox
+aws sts get-caller-identity --profile starter-state
+aws sts get-caller-identity --profile starter-sandbox
+```
+
+The first identity query must report the state account ID; the second must
+report the sandbox account ID.
+
+### C. Configure `infra/.env.local`
+
+Copy `infra/.env.example` to the gitignored `infra/.env.local`, then define:
+
+```dotenv
+PULUMI_ORG=organization
+
+AWS_STATE_ACCOUNT_ID=<state-account-id>
+AWS_STATE_PROFILE=starter-state
+AWS_STATE_RESOURCE_PREFIX=<1-29-lowercase-letters-numbers-hyphens>
+AWS_STATE_REGION=us-east-2
+AWS_SSO_REGION=<identity-center-home-region>
+
+AWS_SANDBOX_ACCOUNT_ID=<sandbox-account-id>
+AWS_STAGING_ACCOUNT_ID=<staging-account-id>
+AWS_PRODUCTION_ACCOUNT_ID=<production-account-id>
+```
+
+Workload profiles default to `starter-<environment>`. Override them with
+`AWS_SANDBOX_PROFILE`, `AWS_STAGING_PROFILE`, or `AWS_PRODUCTION_PROFILE` only
+when your local profile names differ.
+
+### D. Create and verify the sandbox state foundation
+
+```bash
+pnpm infra:aws:state init sandbox
+```
+
+Success means all of the following appear:
+
+- CloudFormation reports `Successfully created/updated stack`.
+- The script reports `State foundation is ready`.
+- The reported state account and workload account IDs are correct.
+- `AWS_PROFILE=starter-sandbox pulumi whoami -v` reports the new S3 backend.
+
+To spot-check in the browser:
+
+1. Open the **AWS access portal**.
+2. Expand the **state account**, then choose the administrator permission set
+   and **Management console**.
+3. Confirm the state account name/ID in the top-right corner.
+4. Select **United States (Ohio) / `us-east-2`**.
+5. Open S3 and confirm the state and audit buckets are present.
+6. Open CloudFormation and confirm `<prefix>-sandbox` is `CREATE_COMPLETE`.
+
+The sandbox workload account is still expected to be mostly empty at this
+point. State resources intentionally live in the dedicated state account.
+
+### E. Deploy the sandbox layers in order
+
+Use the exact KMS secrets-provider URL printed by the state command:
+
+1. Initialize, preview, and deploy `bootstrap`.
+2. Initialize, preview, and deploy `core`.
+3. Initialize, preview, and deploy `apps`.
+
+Before deploying `bootstrap`, set its required repository scope:
+
+```bash
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set \
+  starter-aws-bootstrap:githubRepo <owner>/<repo>
+```
+
+Never run `up` until its preceding `preview` targets the expected account,
+stack, and region. The complete commands and explanations are in
+[Deploy order](#deploy-order).
+
+---
+
+## Part 2 — Detailed guide and mental model
+
+### Recommended layout: one AWS account per environment
 
 Isolating each environment in its own AWS account gives you a hard blast-radius
 boundary and a clean escape hatch: **closing an account tears down every lingering
@@ -38,9 +148,45 @@ account closure, per-account budgets, and Service Control Policy (SCP)
 guardrails (e.g. org-wide "deny public RDS", "deny disabling CloudTrail"). You
 still get full isolation.
 
+#### Which account contains what?
+
+AWS accounts are hard visibility and permission boundaries. Being signed into
+the management account does not make member-account resources appear there.
+
+| Account    | Enter through                                                        | Resources you should expect                                                                           |
+| ---------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Management | Root only for root-required work; otherwise delegated administration | Organizations, consolidated billing, agreements                                                       |
+| State      | Access Portal → state account                                        | Pulumi state/audit S3 buckets, KMS keys, CloudFormation state stacks, CloudTrail                      |
+| Sandbox    | Access Portal → sandbox                                              | Sandbox ECR/IAM/budget after `bootstrap`; VPC/RDS/SQS/app buckets after `core`; services after `apps` |
+| Staging    | Access Portal → staging                                              | Staging copies of workload resources                                                                  |
+| Production | Access Portal → production                                           | Production copies of workload resources                                                               |
+
+The **AWS access portal is only a launcher**, not the full AWS console. Expand
+an account, select its permission set, then choose **Management console**. In
+the console tab that opens, always confirm the account name and 12-digit ID in
+the top-right corner before inspecting or changing anything.
+
+Using a dedicated browser profile or separate private window for administrative
+sessions helps prevent confusion between management, state, and workload
+accounts.
+
+#### Global services versus regional services
+
+- **IAM and AWS Organizations are global.** An IAM URL containing
+  `region=us-east-1` is console routing context, not the location of an IAM role.
+- **IAM Identity Center has a home region.** `AWS_SSO_REGION` must match it
+  because Identity Center role ARNs include the home-region path outside
+  `us-east-1`.
+- **This project's regional AWS resources use `us-east-2` (Ohio).** That
+  includes the state CloudFormation stack, KMS key, CloudTrail trail, and the
+  regional location of each S3 bucket.
+- The console's **Global** label identifies a global service. Lock icons in the
+  region menu mean those regions are disabled for the account; the lock icon
+  alone does not determine whether the current service is global.
+
 ---
 
-## The golden rule: credentials = account
+### The golden rule: credentials = account
 
 Set up one named profile per account (via IAM Identity Center / SSO is cleanest),
 then **always pair the profile with the matching stack**:
@@ -92,7 +238,7 @@ aws sts get-caller-identity   # verify Account matches the stack you're deployin
 
 ---
 
-## The config model: three places, three jobs
+### The config model: three places, three jobs
 
 Configuration is deliberately split so a template repo commits **no** account
 ids or deployment-specific identifiers:
@@ -112,7 +258,7 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 
 ---
 
-## What is manual vs. in code
+### What is manual vs. in code
 
 | Concern                                                               | Where                                    | Why                                                                      |
 | --------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
@@ -132,7 +278,7 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 
 ---
 
-## One-time manual checklist (per account)
+### One-time manual checklist (per account)
 
 Before workload deployment, create a no-workload Organization member account
 for state, assign the Identity Center administrator group, and configure a
@@ -154,7 +300,7 @@ created manually, while its retained S3/KMS/CloudTrail resources are created by
 
 ---
 
-## Deploy order
+### Deploy order
 
 Run the stacks in this order, each while authenticated to the target account.
 
@@ -164,7 +310,7 @@ account ids are present). Set `AWS_PROFILE` to match the target account. You can
 also `cd` into a layer and run `pulumi` directly if you source `.env.local`
 yourself.
 
-### 0. Central state foundation (once per environment)
+#### 0. Central state foundation (once per environment)
 
 The state script verifies both SSO profiles, deploys retained S3/KMS/CloudTrail
 resources to the dedicated state account, verifies cross-account
@@ -184,7 +330,38 @@ The command prints the exact AWS KMS secrets-provider URL and follow-up commands
 Re-run the corresponding state command whenever you switch Pulumi between
 environment backends.
 
-### 1. Bootstrap (once per account, admin credentials)
+##### Verify and connect to the state resources
+
+The CLI is the most reliable way to confirm both ownership and access:
+
+```bash
+# State-account ownership and CloudFormation status
+aws cloudformation describe-stacks \
+  --stack-name <resource-prefix>-sandbox \
+  --region us-east-2 \
+  --profile starter-state
+
+# State-account view of both buckets
+aws s3 ls --profile starter-state
+
+# Workload-account cross-account access and current Pulumi backend
+aws s3 ls s3://<state-bucket-name>/.pulumi/ --profile starter-sandbox
+AWS_PROFILE=starter-sandbox pulumi whoami -v
+```
+
+Immediately after state initialization, `.pulumi/meta.yaml` may be the only
+object in the state bucket. Stack state appears after the first `stack init`.
+Do not manually edit or delete anything under `.pulumi`; use the Pulumi CLI.
+
+For a browser spot-check, enter the state account through the Access Portal and
+inspect:
+
+- **CloudFormation**: `<resource-prefix>-sandbox` is `CREATE_COMPLETE`.
+- **S3**: one state bucket and one audit bucket exist.
+- **KMS**: alias `alias/<resource-prefix>-sandbox` has rotation enabled.
+- **CloudTrail**: `<resource-prefix>-sandbox-access` is logging.
+
+#### 1. Bootstrap (once per account, admin credentials)
 
 Codifies the GitHub OIDC deploy role, the ECR repo, and the budget.
 
@@ -205,7 +382,7 @@ into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_REGISTRY`). The apps stack
 no longer needs the ECR URL as config: it derives the registry from the deploy
 account + region at runtime.
 
-### 2. Core
+#### 2. Core
 
 ```bash
 cd infra/aws/core && pnpm install && cd -
@@ -216,7 +393,7 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```
 
-### 3. Apps
+#### 3. Apps
 
 ```bash
 cd infra/aws/apps && pnpm install && cd -
@@ -233,25 +410,80 @@ Repeat 0–3 for `staging` and `production`, each with the matching profile and
 that environment's printed KMS provider URL. If a stack already exists, use
 `stack select` instead of `stack init`.
 
-### 4. Bedrock invocation logging (manual, once per account/region)
+#### 4. Bedrock invocation logging (manual, once per account/region)
 
 The pinned `@pulumi/aws` can't manage this yet, so enable it by hand — see the
 command in [`README.md`](./README.md) (§Bedrock invocation logging).
 
 ---
 
-## Secrets
+### Troubleshooting account, region, and backend confusion
+
+**“I created the state foundation, but the Sandbox S3 page is empty.”**
+
+That is expected. The state and audit buckets live in the dedicated state
+account. Sandbox receives workload resources only after its `bootstrap`, `core`,
+and `apps` deployments.
+
+**“The AWS access portal does not show services such as S3.”**
+
+The portal is only a launcher. Expand the account, choose the permission set,
+and select **Management console** to open the full account-scoped AWS UI.
+
+**“The IAM or Organizations URL says `us-east-1`.”**
+
+IAM and Organizations are global services. The URL's region parameter is
+console routing context. Confirm the **Global** label in the console header.
+Identity Center is different: its configured home region must match
+`AWS_SSO_REGION`.
+
+**“Regions have lock icons.”**
+
+Those regions are disabled for the account. For this project, select Ohio
+(`us-east-2`). The lock icons do not mean your IAM resources were created in
+another region.
+
+**“The state script rejects cross-account access.”**
+
+Re-authenticate both profiles and verify their account IDs:
+
+```bash
+aws sso login --profile starter-state
+aws sso login --profile starter-sandbox
+aws sts get-caller-identity --profile starter-state
+aws sts get-caller-identity --profile starter-sandbox
+```
+
+Also verify that `AWS_SSO_REGION` matches the Identity Center home region. The
+script intentionally refuses to mutate AWS before both configured account IDs
+match.
+
+**“Pulumi is connected to an old or wrong backend.”**
+
+Check it with:
+
+```bash
+AWS_PROFILE=starter-sandbox pulumi whoami -v
+```
+
+Re-run `pnpm infra:aws:state init sandbox` to verify access and log into the
+correct backend. This is idempotent and does not initialize or deploy workload
+stacks.
+
+---
+
+### Secrets
 
 Two kinds of secrets, both kept out of git:
 
-### Derived (automatic)
+#### Derived (automatic)
 
 `core` generates the RDS password and writes the connection-string secrets —
 `/starter/<env>/database-url`, `/starter/<env>/direct-url`, and (hybrid)
 `/starter/<env>/vercel-database-url`. You never author or commit these; they're
 materialized at deploy time from the generated password and resource endpoints.
 
-### Manually-managed (placeholders)
+#### Manually-managed (placeholders)
 
 For secrets Pulumi can't derive (third-party API keys, webhook signing secrets),
 add an entry to `infra/aws/core/manual-secrets.ts`:
@@ -277,7 +509,7 @@ secret from whichever app role needs it.
 
 ---
 
-## SQS queues
+### SQS queues
 
 Queues live in a registry: `infra/aws/core/queues.ts`. Add one by appending to
 `QUEUES` — each entry gets a **dead-letter queue and redrive policy
@@ -300,7 +532,7 @@ queue's URL/ARN is exported via the `queueUrls` / `queueArns` maps for wiring.
 
 ---
 
-## Tearing down a sandbox
+### Tearing down a sandbox
 
 Non-production stacks are disposable (no deletion protection, `forceDestroy` on
 S3, 0-day secret recovery), so:
@@ -317,7 +549,7 @@ net: close the member account in the Organization to guarantee a clean slate.
 
 ---
 
-## See also
+### See also
 
 - [`README.md`](./README.md) — architecture, full config reference, cost table,
   CI/CD, compliance mapping.

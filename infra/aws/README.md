@@ -230,9 +230,12 @@ See [infra/README.md](../README.md) for AWS startup credits and credit programs.
 ## First-time setup
 
 > Full walkthrough (accounts, identity, BAA, deploy order) lives in
-> [`GETTING_STARTED.md`](./GETTING_STARTED.md). Initialize the selected
-> environment's retained S3/KMS backend first, then deploy `bootstrap` to create
-> the ECR repo + GitHub OIDC deploy role that `core`/`apps` and CI assume.
+> [`GETTING_STARTED.md`](./GETTING_STARTED.md). Start with **Part 1 — Quick
+> runbook** for the shortest safe path; Part 2 explains account navigation,
+> global versus regional services, verification, and troubleshooting. Initialize
+> the selected environment's retained S3/KMS backend first, then deploy
+> `bootstrap` to create the ECR repo + GitHub OIDC deploy role that `core`/`apps`
+> and CI assume.
 
 These projects are not in the pnpm workspace root. Install deps inside each project directory:
 
