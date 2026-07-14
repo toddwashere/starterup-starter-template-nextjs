@@ -2,14 +2,20 @@
 
 App Runner + Lambda + RDS Postgres + RDS Proxy across three environments: sandbox, staging, and production.
 
-Two Pulumi projects live here:
+> [!TIP]
+> **New here?** Start with [`GETTING_STARTED.md`](./GETTING_STARTED.md) — it covers
+> the account-per-environment setup, the "credentials decide the account" golden
+> rule, what's manual vs. codified, and the exact deploy order.
+
+Three Pulumi projects live here:
 
 | Project | Path | What it owns |
 |---------|------|--------------|
-| `starter-aws-core` | `infra/aws/core/` | VPC, RDS Postgres, RDS Proxy, SQS jobs queue + DLQ, S3 uploads bucket, Secrets Manager entries, EventBridge Scheduler rules, compliance resources |
+| `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget. Run once per account with admin credentials. |
+| `starter-aws-core` | `infra/aws/core/` | VPC, RDS Postgres, RDS Proxy, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries (derived + manual placeholders), EventBridge Scheduler rules, compliance resources |
 | `starter-aws-apps` | `infra/aws/apps/` | 4 App Runner services (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector |
 
-`apps` depends on `core` via `pulumi.StackReference`. Deploy `core` first.
+`apps` depends on `core` via `pulumi.StackReference`. Deploy order: `bootstrap` → `core` → `apps`.
 
 ---
 
@@ -114,6 +120,23 @@ Both secrets live in Secrets Manager and are injected at runtime via IAM. The Pr
 
 ---
 
+## Extending: queues & secrets
+
+Both are driven by small registries in `core/` so you add capacity without
+hand-wiring resources (details + examples in [`GETTING_STARTED.md`](./GETTING_STARTED.md)):
+
+- **SQS queues** — append a `QueueSpec` to `core/queues.ts`; each entry gets a
+  dead-letter queue + redrive policy automatically. Names: `starter-<key>-<env>`
+  and `starter-<key>-dlq-<env>`. New queues need a consumer wired in the apps
+  stack. The `jobs` queue is load-bearing — keep its key stable.
+- **Manual secrets** — append a `ManualSecretSpec` to `core/manual-secrets.ts` for
+  third-party keys Pulumi can't derive. Pulumi creates an **empty** placeholder
+  secret; you set the real value once via console/CLI and Pulumi never overwrites
+  it (`ignoreChanges`). Real values never live in git. Derived connection-string
+  secrets remain fully managed by Pulumi.
+
+---
+
 ## Hybrid mode: Vercel apps + AWS data/AI plane
 
 For a Vercel-hosted frontend that uses this AWS data/AI plane **without** Vercel
@@ -185,6 +208,12 @@ Environments are defined in typed config files that mirror the GCP profile's pat
 
 Config type is defined in `infra/shared/aws-env-config.ts`. Config files are secret-free and safe to commit; real secrets live in Secrets Manager.
 
+Per-environment **account ids** are not committed — they're read from
+`AWS_<ENV>_ACCOUNT_ID` (in the gitignored `infra/.env.local`, see
+`infra/.env.example`) via `infra/aws/env.ts`. This keeps the template generic;
+the account id is only a sanity-check value since your credentials determine the
+actual deploy account. See [`GETTING_STARTED.md`](./GETTING_STARTED.md).
+
 ---
 
 ## Prerequisites
@@ -200,10 +229,22 @@ See [infra/README.md](../README.md) for AWS startup credits and credit programs.
 
 ## First-time setup
 
+> Full walkthrough (accounts, identity, BAA, deploy order) lives in
+> [`GETTING_STARTED.md`](./GETTING_STARTED.md). The `bootstrap` stack should be
+> deployed first (per account): it creates the ECR repo + GitHub OIDC deploy role
+> that `core`/`apps` and CI assume already exist.
+
 These projects are not in the pnpm workspace root. Install deps inside each project directory:
 
 ```sh
-cd infra/aws/core
+# 0. Bootstrap (once per account, admin creds) — ECR repo, OIDC deploy role, budget
+cd infra/aws/bootstrap
+pnpm install
+pulumi stack init sandbox
+pulumi config set aws:region us-east-1
+pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+
+cd ../core
 pnpm install
 pulumi stack init sandbox
 pulumi config set aws:region us-east-1
@@ -224,14 +265,21 @@ Repeat for `staging` and `production` stacks. Resource sizing and compliance fea
 
 ## Deploy
 
+Authenticate to the target environment's account first — **the profile you use
+decides the account** (see [`GETTING_STARTED.md`](./GETTING_STARTED.md)).
+
 ```sh
+# 0. Bootstrap (once per account): ECR repo, OIDC deploy role, budget
+cd infra/aws/bootstrap
+AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+
 # 1. Core infrastructure (VPC, RDS, Proxy, SQS, S3, Secrets Manager)
-cd infra/aws/core
-pulumi up -s sandbox
+cd ../core
+AWS_PROFILE=starter-sandbox pulumi up -s sandbox
 
 # 2. App services (App Runner, Lambda — reads outputs from core)
 cd ../apps
-pulumi up -s sandbox
+AWS_PROFILE=starter-sandbox pulumi up -s sandbox
 ```
 
 ---
@@ -311,7 +359,11 @@ Create the environment at **Settings → Environments → New environment** and 
 
 ## Billing alerts (mandatory)
 
-Configure budget alerts before your first deploy. Runaway RDS or NAT costs can accumulate quickly.
+The `bootstrap` stack creates a monthly budget + alerts automatically when you
+set `starter-aws-bootstrap:budgetNotificationEmail` (amount via `budgetAmount`,
+default $100). The equivalent manual command is below if you prefer to run it
+directly. Either way, configure alerts before your first deploy — runaway RDS or
+NAT costs can accumulate quickly.
 
 ```sh
 aws budgets create-budget \
