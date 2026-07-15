@@ -31,6 +31,7 @@ export function createDataTableSelectColumn<TData>(): ColumnDef<TData> {
       <Checkbox
         aria-label="Select row"
         checked={row.getIsSelected()}
+        disabled={!row.getCanSelect()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         onClick={(event) => event.stopPropagation()}
       />
