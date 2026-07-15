@@ -6,6 +6,7 @@ vi.mock("./auth", () => ({
       getSession: vi.fn(),
       hasPermission: vi.fn(),
       updateMemberRole: vi.fn(),
+      createInvitation: vi.fn(),
     },
   },
 }));
@@ -13,6 +14,15 @@ vi.mock("./auth", () => ({
 vi.mock("@workspace/database", () => ({
   prisma: {
     member: { findFirst: vi.fn() },
+    $transaction: vi.fn(),
+  },
+  Prisma: {
+    TransactionIsolationLevel: {
+      ReadUncommitted: "ReadUncommitted",
+      ReadCommitted: "ReadCommitted",
+      RepeatableRead: "RepeatableRead",
+      Serializable: "Serializable",
+    },
   },
 }));
 
@@ -21,19 +31,23 @@ vi.mock("@workspace/observability/capture", () => ({
 }));
 
 import { auth } from "./auth";
-import { prisma } from "@workspace/database";
+import { prisma, Prisma } from "@workspace/database";
 import { captureException } from "@workspace/observability/capture";
 import {
   replaceMemberRoles,
   mutateMemberRoles,
   getMemberManagementContext,
+  inviteMemberWithRoles,
+  transferOrganizationOwnership,
   MemberRoleManagementError,
 } from "./member-role-management";
 
 const mockGetSession = vi.mocked(auth.api.getSession);
 const mockHasPermission = vi.mocked(auth.api.hasPermission);
 const mockUpdateMemberRole = vi.mocked(auth.api.updateMemberRole);
+const mockCreateInvitation = vi.mocked(auth.api.createInvitation);
 const mockFindFirst = vi.mocked(prisma.member.findFirst);
+const mockTransaction = vi.mocked(prisma.$transaction);
 const mockCaptureException = vi.mocked(captureException);
 
 type FakeMember = {
@@ -75,6 +89,61 @@ function installDefaultFindFirst() {
   });
 }
 
+// transferOrganizationOwnership runs entirely against the transactional `tx`
+// client, never the top-level `prisma.member.*` mocks above. This installs
+// prisma.$transaction so it invokes the real callback against a fake `tx`
+// backed by an in-memory `orgMembers` list, capturing the transaction
+// options (isolationLevel) and every write the callback issues so tests can
+// assert on both.
+let orgMembers: FakeMember[];
+let capturedTransactionOptions: unknown;
+let txUpdateCalls: Array<{ id: string; role: string }>;
+
+function installTransactionMock() {
+  capturedTransactionOptions = undefined;
+  txUpdateCalls = [];
+  mockTransaction.mockImplementation((async (
+    callback: (tx: unknown) => unknown,
+    options: unknown,
+  ) => {
+    capturedTransactionOptions = options;
+    const tx = {
+      member: {
+        findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+          if ("id" in where) {
+            return (
+              orgMembers.find(
+                (m) => m.id === where.id && m.organizationId === where.organizationId,
+              ) ?? null
+            );
+          }
+          if ("userId" in where) {
+            return (
+              orgMembers.find(
+                (m) => m.userId === where.userId && m.organizationId === where.organizationId,
+              ) ?? null
+            );
+          }
+          return null;
+        }),
+        findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+          orgMembers
+            .filter((m) => m.organizationId === where.organizationId)
+            .map(({ id, role }) => ({ id, role })),
+        ),
+        update: vi.fn(async ({ where, data }: { where: { id: string }; data: { role: string } }) => {
+          txUpdateCalls.push({ id: where.id, role: data.role });
+          const member = orgMembers.find((m) => m.id === where.id);
+          if (!member) throw new Error(`no member ${where.id}`);
+          member.role = data.role;
+          return { ...member };
+        }),
+      },
+    };
+    return callback(tx);
+  }) as never);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockActor = { id: "member_1", organizationId: "org_1", userId: "user_actor", role: "owner" };
@@ -87,6 +156,9 @@ beforeEach(() => {
   mockHasPermission.mockResolvedValue({ success: true } as never);
   mockUpdateMemberRole.mockResolvedValue({
     member: { id: "member_2", userId: "user_target", organizationId: "org_1", role: "admin" },
+  } as never);
+  mockCreateInvitation.mockResolvedValue({
+    invitation: { id: "inv_1", email: "invitee@example.com", role: "member" },
   } as never);
 
   installDefaultFindFirst();
@@ -573,5 +645,310 @@ describe("MemberRoleManagementError", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.code).toBe("SELF");
     expect(error.message).toBe("cannot edit self");
+  });
+});
+
+describe("inviteMemberWithRoles", () => {
+  it("checks invitation:create permission, not member:update", async () => {
+    mockActor.role = "owner";
+    await inviteMemberWithRoles({
+      headers: new Headers(),
+      organizationId: "org_1",
+      email: "invitee@example.com",
+      roles: ["member"],
+    });
+
+    expect(mockHasPermission).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: { organizationId: "org_1", permissions: { invitation: ["create"] } },
+    });
+  });
+
+  it("lets an owner invite admin and member roles, passing the role array and explicit org id", async () => {
+    mockActor.role = "owner";
+    await inviteMemberWithRoles({
+      headers: new Headers(),
+      organizationId: "org_1",
+      email: "invitee@example.com",
+      roles: ["admin", "member"],
+    });
+
+    expect(mockCreateInvitation).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: {
+        organizationId: "org_1",
+        email: "invitee@example.com",
+        role: ["admin", "member"],
+      },
+    });
+  });
+
+  it("lets an admin invite a member", async () => {
+    mockActor.role = "admin";
+    await inviteMemberWithRoles({
+      headers: new Headers(),
+      organizationId: "org_1",
+      email: "invitee@example.com",
+      roles: ["member"],
+    });
+
+    expect(mockCreateInvitation).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: { organizationId: "org_1", email: "invitee@example.com", role: ["member"] },
+    });
+  });
+
+  it("denies an admin inviting another admin", async () => {
+    mockActor.role = "admin";
+    await expect(
+      inviteMemberWithRoles({
+        headers: new Headers(),
+        organizationId: "org_1",
+        email: "invitee@example.com",
+        roles: ["admin"],
+      }),
+    ).rejects.toMatchObject({ code: "SAME_OR_HIGHER_RANK" });
+    expect(mockCreateInvitation).not.toHaveBeenCalled();
+  });
+
+  it("rejects every invitation that includes the owner role, regardless of actor rank", async () => {
+    mockActor.role = "owner";
+    await expect(
+      inviteMemberWithRoles({
+        headers: new Headers(),
+        organizationId: "org_1",
+        email: "invitee@example.com",
+        roles: ["owner"],
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    expect(mockCreateInvitation).not.toHaveBeenCalled();
+  });
+
+  it("denies inviting when the actor lacks invitation:create, even if role ranks would otherwise allow it", async () => {
+    mockActor.role = "owner";
+    mockHasPermission.mockResolvedValue({ success: false } as never);
+    await expect(
+      inviteMemberWithRoles({
+        headers: new Headers(),
+        organizationId: "org_1",
+        email: "invitee@example.com",
+        roles: ["member"],
+      }),
+    ).rejects.toMatchObject({ code: "MISSING_PERMISSION" });
+    expect(mockCreateInvitation).not.toHaveBeenCalled();
+  });
+});
+
+describe("transferOrganizationOwnership", () => {
+  beforeEach(() => {
+    mockActor = { id: "member_1", organizationId: "org_1", userId: "user_actor", role: "owner" };
+    mockTarget = { id: "member_2", organizationId: "org_1", userId: "user_target", role: "member" };
+    orgMembers = [mockActor, mockTarget];
+    installTransactionMock();
+  });
+
+  it("only allows an actor holding the exact owner role to transfer", async () => {
+    mockActor.role = "admin";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "MISSING_PERMISSION" });
+    expect(txUpdateCalls).toEqual([]);
+  });
+
+  it("rejects self-transfer", async () => {
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_1",
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    expect(txUpdateCalls).toEqual([]);
+  });
+
+  it("rejects a target who already holds the owner role", async () => {
+    mockTarget.role = "owner";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    expect(txUpdateCalls).toEqual([]);
+  });
+
+  it("fails when the actor does not belong to the explicit organization", async () => {
+    mockActor.organizationId = "org_other";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "MEMBER_NOT_FOUND" });
+  });
+
+  it("fails when the target does not belong to the explicit organization", async () => {
+    mockTarget.organizationId = "org_other";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "MEMBER_NOT_FOUND" });
+  });
+
+  it("fails closed when the actor's persisted role field contains an unknown role", async () => {
+    mockActor.role = "owner,legacy-role";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "UNKNOWN_ROLE" });
+  });
+
+  it("fails closed when the target's persisted role field contains an unknown role", async () => {
+    mockTarget.role = "legacy-role";
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "UNKNOWN_ROLE" });
+  });
+
+  it("gives the target the owner role while keeping their existing roles", async () => {
+    mockTarget.role = "member";
+    const result = await transferOrganizationOwnership({
+      headers: new Headers(),
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    expect(result.newOwnerRoles).toEqual(["owner", "member"]);
+    expect(txUpdateCalls).toContainEqual({ id: "member_2", role: "owner,member" });
+  });
+
+  it("lets the old owner keep their other non-owner roles", async () => {
+    mockActor.role = "owner,member";
+    const result = await transferOrganizationOwnership({
+      headers: new Headers(),
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    expect(result.previousOwnerRoles).toEqual(["member"]);
+    expect(txUpdateCalls).toContainEqual({ id: "member_1", role: "member" });
+  });
+
+  it("falls back the former owner to admin when ownership was their only role", async () => {
+    mockActor.role = "owner";
+    const result = await transferOrganizationOwnership({
+      headers: new Headers(),
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    expect(result.previousOwnerRoles).toEqual(["admin"]);
+    expect(txUpdateCalls).toContainEqual({ id: "member_1", role: "admin" });
+  });
+
+  it("fails closed on persisted multiple-owner drift distinct from the acting owner and target", async () => {
+    const driftOwner: FakeMember = {
+      id: "member_3",
+      organizationId: "org_1",
+      userId: "user_drift",
+      role: "owner",
+    };
+    orgMembers = [mockActor, mockTarget, driftOwner];
+
+    await expect(
+      transferOrganizationOwnership({
+        headers: new Headers(),
+        organizationId: "org_1",
+        targetMemberId: "member_2",
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    expect(txUpdateCalls).toEqual([]);
+  });
+
+  it("runs both role updates inside one $transaction configured with Serializable isolation", async () => {
+    await transferOrganizationOwnership({
+      headers: new Headers(),
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    expect(mockTransaction).toHaveBeenCalledTimes(1);
+    expect(capturedTransactionOptions).toEqual({
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    expect(txUpdateCalls).toEqual([
+      { id: "member_1", role: "admin" },
+      { id: "member_2", role: "owner,member" },
+    ]);
+  });
+
+  it("rejects and returns no success value when either update fails inside the transaction", async () => {
+    mockTransaction.mockImplementation((async (
+      callback: (tx: unknown) => unknown,
+      options: unknown,
+    ) => {
+      capturedTransactionOptions = options;
+      const tx = {
+        member: {
+          findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+            if ("id" in where) {
+              return orgMembers.find(
+                (m) => m.id === where.id && m.organizationId === where.organizationId,
+              ) ?? null;
+            }
+            if ("userId" in where) {
+              return orgMembers.find(
+                (m) => m.userId === where.userId && m.organizationId === where.organizationId,
+              ) ?? null;
+            }
+            return null;
+          }),
+          findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+            orgMembers
+              .filter((m) => m.organizationId === where.organizationId)
+              .map(({ id, role }) => ({ id, role })),
+          ),
+          update: vi.fn(async ({ where, data }: { where: { id: string }; data: { role: string } }) => {
+            txUpdateCalls.push({ id: where.id, role: data.role });
+            if (where.id === "member_2") throw new Error("write conflict");
+            const member = orgMembers.find((m) => m.id === where.id);
+            if (!member) throw new Error(`no member ${where.id}`);
+            member.role = data.role;
+            return { ...member };
+          }),
+        },
+      };
+      return callback(tx);
+    }) as never);
+
+    const outcome = transferOrganizationOwnership({
+      headers: new Headers(),
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    await expect(outcome).rejects.toThrow("write conflict");
+    // Both updates were attempted (actor succeeded, target failed), but the
+    // caller never observes a resolved success value.
+    expect(txUpdateCalls).toEqual([
+      { id: "member_1", role: "admin" },
+      { id: "member_2", role: "owner,member" },
+    ]);
   });
 });

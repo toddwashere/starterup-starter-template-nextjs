@@ -1,4 +1,4 @@
-import { prisma } from "@workspace/database";
+import { prisma, Prisma } from "@workspace/database";
 import { parseOrgRoles } from "@workspace/common";
 import { captureException } from "@workspace/observability/capture";
 import { auth } from "./auth";
@@ -6,6 +6,7 @@ import {
   ORG_ROLE_CATALOG,
   InvalidOrgRoleSetError,
   normalizeOrgRoleIds,
+  hasOwnershipRole,
   evaluateMemberManagement,
   evaluateRoleAssignment,
   evaluateOwnershipTransfer,
@@ -90,16 +91,11 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
- * Loads the acting member's identity, roles, and org-wide `member:update`
- * permission — all scoped to the explicit `organizationId`. Only throws for
- * conditions that make it impossible to identify an actor at all
- * (unauthenticated, not a member); a missing permission is surfaced via
- * `canManageMembers` and handled uniformly by the hierarchy evaluators.
+ * Resolves the authenticated session or throws `UNAUTHENTICATED`. Shared by
+ * every entry point that needs to identify the acting user before touching
+ * org-scoped data.
  */
-async function loadActorContext(
-  headers: Headers,
-  organizationId: string,
-): Promise<ActorContext> {
+async function requireSession(headers: Headers) {
   const session = await auth.api.getSession({ headers });
   if (!session) {
     throw new MemberRoleManagementError(
@@ -107,6 +103,26 @@ async function loadActorContext(
       "You must be signed in to manage member roles.",
     );
   }
+  return session;
+}
+
+/**
+ * Loads the acting member's identity, roles, and the org-wide permission
+ * required for the calling operation — all scoped to the explicit
+ * `organizationId`. Callers that manage existing members' roles check
+ * `member:update` (the default); callers that create invitations must pass
+ * `{ invitation: ["create"] }` instead, since inviting is a distinct
+ * permission from updating an existing member's roles. Only throws for
+ * conditions that make it impossible to identify an actor at all
+ * (unauthenticated, not a member); a missing permission is surfaced via
+ * `canManageMembers` and handled uniformly by the hierarchy evaluators.
+ */
+async function loadActorContext(
+  headers: Headers,
+  organizationId: string,
+  permissions: Record<string, string[]> = { member: ["update"] },
+): Promise<ActorContext> {
+  const session = await requireSession(headers);
 
   const actorMember = await prisma.member.findFirst({
     where: { organizationId, userId: session.user.id },
@@ -120,7 +136,7 @@ async function loadActorContext(
 
   const permission = await auth.api.hasPermission({
     headers,
-    body: { organizationId, permissions: { member: ["update"] } },
+    body: { organizationId, permissions },
   });
 
   return {
@@ -430,4 +446,150 @@ export async function mutateMemberRoles(input: {
   );
 
   return { outcomes };
+}
+
+/**
+ * Creates a Better Auth organization invitation carrying one or more org
+ * roles. Every requested role must be `invitationAssignable` — ownership can
+ * never be granted through an invitation — and the full requested role set
+ * must be within the actor's assignment ceiling (an admin cannot invite
+ * another admin). The actor must additionally hold `invitation:create` for
+ * the explicit organization; `member:update` alone does not authorize
+ * sending invitations. Throws `MemberRoleManagementError` for every expected
+ * failure rather than returning an outcome, since there is no existing
+ * target member to attach a per-member result to.
+ */
+export async function inviteMemberWithRoles(input: {
+  headers: Headers;
+  organizationId: string;
+  email: string;
+  roles: readonly string[];
+}) {
+  const actor = await loadActorContext(input.headers, input.organizationId, {
+    invitation: ["create"],
+  });
+  if (!actor.canManageMembers) {
+    throw new MemberRoleManagementError(
+      "MISSING_PERMISSION",
+      "You do not have permission to invite members.",
+    );
+  }
+
+  const roles = normalizeOrgRoleIds(input.roles);
+  if (roles.some((role) => !ORG_ROLE_CATALOG[role].invitationAssignable)) {
+    throw new MemberRoleManagementError(
+      "OWNER_PROTECTED",
+      "Ownership cannot be assigned by invitation.",
+    );
+  }
+
+  const assignment = evaluateRoleAssignment(actor.actorRoles, roles);
+  if (!assignment.allowed) {
+    throw new MemberRoleManagementError(
+      assignment.reason,
+      "You cannot assign one or more selected roles.",
+    );
+  }
+
+  return auth.api.createInvitation({
+    headers: input.headers,
+    body: {
+      organizationId: input.organizationId,
+      email: input.email,
+      role: roles,
+    },
+  });
+}
+
+/**
+ * Atomically transfers organization ownership from the actor to another
+ * member. Better Auth 1.6.14 has no ownership-transfer endpoint, so this
+ * writes both `Member` rows directly through Prisma inside a single
+ * Serializable transaction — the actor/target lookups, the org-wide
+ * multiple-owner drift check, and both role writes all run against the same
+ * transactional client, so a concurrent transfer attempt cannot interleave
+ * and leave the organization with zero or multiple owners. The former owner
+ * keeps any non-owner roles they already held, falling back to `["admin"]`
+ * if ownership was their only role; the target keeps their existing roles
+ * and gains `owner`.
+ */
+export async function transferOrganizationOwnership(input: {
+  headers: Headers;
+  organizationId: string;
+  targetMemberId: string;
+}): Promise<{ previousOwnerRoles: string[]; newOwnerRoles: string[] }> {
+  const session = await requireSession(input.headers);
+  return prisma.$transaction(
+    async (tx) => {
+      const actor = await tx.member.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          userId: session.user.id,
+        },
+      });
+      const target = await tx.member.findFirst({
+        where: {
+          id: input.targetMemberId,
+          organizationId: input.organizationId,
+        },
+      });
+      if (!actor || !target) {
+        throw new MemberRoleManagementError(
+          "MEMBER_NOT_FOUND",
+          "Member not found.",
+        );
+      }
+
+      const actorRoles = normalizeOrgRoleIds(parseOrgRoles(actor.role));
+      const targetRoles = normalizeOrgRoleIds(parseOrgRoles(target.role));
+
+      const organizationMembers = await tx.member.findMany({
+        where: { organizationId: input.organizationId },
+        select: { id: true, role: true },
+      });
+      const otherOwners = organizationMembers.filter(
+        (member) =>
+          member.id !== actor.id &&
+          hasOwnershipRole(normalizeOrgRoleIds(parseOrgRoles(member.role))),
+      );
+      if (otherOwners.length > 0) {
+        throw new MemberRoleManagementError(
+          "OWNER_PROTECTED",
+          "Resolve multiple-owner role data before transferring ownership.",
+        );
+      }
+
+      if (!hasOwnershipRole(actorRoles)) {
+        throw new MemberRoleManagementError(
+          "MISSING_PERMISSION",
+          "Only the current owner can transfer ownership.",
+        );
+      }
+      if (actor.userId === target.userId || hasOwnershipRole(targetRoles)) {
+        throw new MemberRoleManagementError(
+          "OWNER_PROTECTED",
+          "Select a different non-owner member.",
+        );
+      }
+
+      const previousOwnerRoles = normalizeOrgRoleIds(
+        actorRoles.filter((role) => role !== "owner").length > 0
+          ? actorRoles.filter((role) => role !== "owner")
+          : ["admin"],
+      );
+      const newOwnerRoles = normalizeOrgRoleIds([...targetRoles, "owner"]);
+
+      await tx.member.update({
+        where: { id: actor.id },
+        data: { role: previousOwnerRoles.join(",") },
+      });
+      await tx.member.update({
+        where: { id: target.id },
+        data: { role: newOwnerRoles.join(",") },
+      });
+
+      return { previousOwnerRoles, newOwnerRoles };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
