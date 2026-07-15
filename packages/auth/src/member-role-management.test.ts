@@ -471,6 +471,22 @@ describe("mutateMemberRoles", () => {
     expect(mockUpdateMemberRole).not.toHaveBeenCalled();
   });
 
+  it("rejects a non-bulkAssignable requested role up front, at the service level, before touching any target", async () => {
+    await expect(
+      mutateMemberRoles({
+        headers: new Headers(),
+        organizationId: "org_1",
+        memberIds: ["member_2", "member_3"],
+        operation: "add",
+        roles: ["owner"],
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    expect(mockUpdateMemberRole).not.toHaveBeenCalled();
+    expect(mockFindFirst).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "member_2", organizationId: "org_1" } }),
+    );
+  });
+
   it("prevents an admin from using bulk add to promote a member to admin, without blocking other member/functional role adds", async () => {
     mockActor.role = "admin";
     installFindFirst(async ({ where }) => {

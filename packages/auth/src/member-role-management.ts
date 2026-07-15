@@ -432,6 +432,17 @@ export async function mutateMemberRoles(input: {
   const { headers, organizationId, memberIds, operation, roles } = input;
 
   const requestedRoles = normalizeOrgRoleIds(roles);
+
+  const nonBulkAssignable = requestedRoles.find(
+    (role) => !ORG_ROLE_CATALOG[role].bulkAssignable,
+  );
+  if (nonBulkAssignable) {
+    throw new MemberRoleManagementError(
+      "OWNER_PROTECTED",
+      "The owner role cannot be assigned through ordinary role management.",
+    );
+  }
+
   const actor = await loadActorContext(headers, organizationId);
 
   const outcomes = await mapWithConcurrency(memberIds, 4, (memberId) =>
