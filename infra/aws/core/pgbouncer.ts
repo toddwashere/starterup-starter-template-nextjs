@@ -20,6 +20,14 @@ export interface PgBouncerArgs {
   pooler: { poolSize: number; publicListener: boolean };
   /** CMEK ARN for reading the DB secret when compliance.cmek is on. */
   cmekKeyArn?: pulumi.Input<string>;
+  /** CIDRs allowed to connect to the pooler. */
+  allowedCidrs: Array<{ cidr: string; source: "application" | "developer" }>;
+  /** TLS secret ARN holding certificate, certificateChain, and privateKey. */
+  tlsSecretArn: pulumi.Input<string>;
+  /** TLS KMS key ARN for decrypting the TLS secret. */
+  tlsKmsKeyArn: pulumi.Input<string>;
+  /** Initial Lambda invocation that exports TLS material. */
+  initialTlsExport: aws.lambda.Invocation;
   tags?: Record<string, string>;
 }
 
@@ -28,6 +36,16 @@ export interface PgBouncerResult {
   poolerEndpoint: pulumi.Output<string>;
   /** PgBouncer task security group id. */
   securityGroupId: pulumi.Output<string>;
+  /** NLB DNS name for Route 53 alias target. */
+  loadBalancerDnsName: pulumi.Output<string>;
+  /** NLB zone ID for Route 53 alias target. */
+  loadBalancerZoneId: pulumi.Output<string>;
+  /** ECS cluster name. */
+  clusterName: pulumi.Output<string>;
+  /** ECS service name. */
+  serviceName: pulumi.Output<string>;
+  /** ECS service resource for renewal wiring dependency. */
+  service: aws.ecs.Service;
 }
 
 const PGBOUNCER_PORT = 6432;
@@ -60,28 +78,59 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
     dbSecretArn,
     pooler,
     cmekKeyArn,
+    allowedCidrs,
+    tlsSecretArn,
+    tlsKmsKeyArn,
+    initialTlsExport,
     tags,
   } = args;
 
-  // --- Security group: PgBouncer tasks --------------------------------------
+  // --- Security groups -------------------------------------------------------
+
+  // NLB security group (restricted ingress via separate rules)
+  const nlbSg = new aws.ec2.SecurityGroup(`${namePrefix}-pgbouncer-nlb-sg`, {
+    vpcId,
+    description: "Starter PgBouncer NLB security group",
+    egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
+    tags: { ...tags, Name: `${namePrefix}-pgbouncer-nlb-sg` },
+  });
+
+  // One ingress rule per allowed CIDR. The logical name embeds the sanitized
+  // CIDR (and source) so multiple CIDRs sharing a source do not collide on a
+  // duplicate URN, and names stay stable regardless of list ordering.
+  for (const allowed of allowedCidrs) {
+    const cidrSlug = allowed.cidr.replace(/[./]/g, "-");
+    new aws.ec2.SecurityGroupRule(`${namePrefix}-nlb-ingress-${allowed.source}-${cidrSlug}`, {
+      type: "ingress",
+      securityGroupId: nlbSg.id,
+      fromPort: PGBOUNCER_PORT,
+      toPort: PGBOUNCER_PORT,
+      protocol: "tcp",
+      cidrBlocks: [allowed.cidr],
+      description: `PgBouncer from ${allowed.source} egress`,
+    });
+  }
+
+  // PgBouncer task security group (no inline public ingress)
   const pgbouncerSg = new aws.ec2.SecurityGroup(`${namePrefix}-pgbouncer-sg`, {
     vpcId,
     description: "Starter PgBouncer pooler security group",
-    ingress: [
-      {
-        protocol: "tcp",
-        fromPort: PGBOUNCER_PORT,
-        toPort: PGBOUNCER_PORT,
-        // NLB is L4/pass-through, so client source IPs reach the task; the
-        // public listener means Vercel's dynamic egress cannot be IP-allowed.
-        cidrBlocks: pooler.publicListener ? ["0.0.0.0/0"] : [],
-      },
-    ],
     egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
     tags: { ...tags, Name: `${namePrefix}-pgbouncer-sg` },
   });
 
-  // PgBouncer -> RDS on 5432 (RDS stays private in db-sg).
+  // Task ingress from NLB on 6432
+  new aws.ec2.SecurityGroupRule(`${namePrefix}-pgbouncer-ingress-from-nlb`, {
+    type: "ingress",
+    securityGroupId: pgbouncerSg.id,
+    fromPort: PGBOUNCER_PORT,
+    toPort: PGBOUNCER_PORT,
+    protocol: "tcp",
+    sourceSecurityGroupId: nlbSg.id,
+    description: "PgBouncer from NLB",
+  });
+
+  // PgBouncer -> RDS on 5432 (RDS stays private in db-sg)
   new aws.ec2.SecurityGroupRule(`${namePrefix}-db-ingress-from-pgbouncer`, {
     type: "ingress",
     securityGroupId: dbSecurityGroupId,
@@ -101,28 +150,34 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   });
   new aws.iam.RolePolicyAttachment(`${namePrefix}-pgbouncer-exec-attach`, {
     role: executionRole.name,
-    policyArn:
-      "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
   });
   new aws.iam.RolePolicy(`${namePrefix}-pgbouncer-exec-secrets`, {
     role: executionRole.id,
     policy: pulumi
-      .all([pulumi.output(dbSecretArn), pulumi.output(cmekKeyArn ?? "")])
-      .apply(([secretArn, cmek]) => {
+      .all([
+        pulumi.output(dbSecretArn),
+        pulumi.output(cmekKeyArn ?? ""),
+        pulumi.output(tlsSecretArn),
+        pulumi.output(tlsKmsKeyArn),
+      ])
+      .apply(([dbSecret, cmek, tlsSecret, tlsKms]) => {
         const statements: Record<string, unknown>[] = [
           {
             Effect: "Allow",
             Action: ["secretsmanager:GetSecretValue"],
-            Resource: secretArn,
+            Resource: [dbSecret, tlsSecret],
           },
         ];
+        const kmsKeys = [tlsKms];
         if (cmek) {
-          statements.push({
-            Effect: "Allow",
-            Action: ["kms:Decrypt"],
-            Resource: cmek,
-          });
+          kmsKeys.push(cmek);
         }
+        statements.push({
+          Effect: "Allow",
+          Action: ["kms:Decrypt"],
+          Resource: kmsKeys,
+        });
         return JSON.stringify({ Version: "2012-10-17", Statement: statements });
       }),
   });
@@ -140,16 +195,53 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   });
 
   const containerDefinitions = pulumi
-    .all([pulumi.output(dbHost), pulumi.output(dbSecretArn), logGroup.name])
-    .apply(([host, secretArn, logGroupName]) =>
+    .all([
+      pulumi.output(dbHost),
+      pulumi.output(dbSecretArn),
+      pulumi.output(tlsSecretArn),
+      logGroup.name,
+    ])
+    .apply(([host, dbSecret, tlsSecret, logGroupName]) =>
       JSON.stringify([
+        {
+          name: "tls-materializer",
+          image: PGBOUNCER_IMAGE,
+          essential: false,
+          entryPoint: ["/bin/sh", "-c"],
+          command: [
+            // Separate echoes guarantee a newline between the leaf certificate
+            // and the intermediate chain, so the concatenated PEM stays valid
+            // regardless of ACM's trailing-newline formatting.
+            'echo "$TLS_CERTIFICATE" > /tls/server.crt && ' +
+              'echo "$TLS_CERTIFICATE_CHAIN" >> /tls/server.crt && ' +
+              'echo "$TLS_PRIVATE_KEY" > /tls/server.key && ' +
+              "chmod 600 /tls/server.key && " +
+              "exit 0",
+          ],
+          secrets: [
+            { name: "TLS_CERTIFICATE", valueFrom: `${tlsSecret}:certificate::` },
+            {
+              name: "TLS_CERTIFICATE_CHAIN",
+              valueFrom: `${tlsSecret}:certificateChain::`,
+            },
+            { name: "TLS_PRIVATE_KEY", valueFrom: `${tlsSecret}:privateKey::` },
+          ],
+          mountPoints: [{ sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: false }],
+          logConfiguration: {
+            logDriver: "awslogs",
+            options: {
+              "awslogs-group": logGroupName,
+              "awslogs-region": args.region,
+              "awslogs-stream-prefix": "materializer",
+            },
+          },
+        },
         {
           name: "pgbouncer",
           image: PGBOUNCER_IMAGE,
           essential: true,
-          portMappings: [
-            { containerPort: PGBOUNCER_PORT, protocol: "tcp" },
-          ],
+          dependsOn: [{ containerName: "tls-materializer", condition: "SUCCESS" }],
+          portMappings: [{ containerPort: PGBOUNCER_PORT, protocol: "tcp" }],
           environment: [
             { name: "DB_HOST", value: host },
             { name: "DB_PORT", value: "5432" },
@@ -158,15 +250,17 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
             { name: "DEFAULT_POOL_SIZE", value: String(pooler.poolSize) },
             { name: "MAX_CLIENT_CONN", value: "1000" },
             { name: "AUTH_TYPE", value: "scram-sha-256" },
-            // PgBouncer terminates client TLS; RDS requires server TLS.
             { name: "CLIENT_TLS_SSLMODE", value: "require" },
+            { name: "CLIENT_TLS_CERT_FILE", value: "/tls/server.crt" },
+            { name: "CLIENT_TLS_KEY_FILE", value: "/tls/server.key" },
             { name: "SERVER_TLS_SSLMODE", value: "require" },
             { name: "LISTEN_PORT", value: String(PGBOUNCER_PORT) },
           ],
           secrets: [
-            { name: "DB_USER", valueFrom: `${secretArn}:username::` },
-            { name: "DB_PASSWORD", valueFrom: `${secretArn}:password::` },
+            { name: "DB_USER", valueFrom: `${dbSecret}:username::` },
+            { name: "DB_PASSWORD", valueFrom: `${dbSecret}:password::` },
           ],
+          mountPoints: [{ sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: true }],
           logConfiguration: {
             logDriver: "awslogs",
             options: {
@@ -179,19 +273,17 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
       ]),
     );
 
-  const taskDefinition = new aws.ecs.TaskDefinition(
-    `${namePrefix}-pgbouncer-task`,
-    {
-      family: `${namePrefix}-pgbouncer`,
-      cpu: "256",
-      memory: "512",
-      networkMode: "awsvpc",
-      requiresCompatibilities: ["FARGATE"],
-      executionRoleArn: executionRole.arn,
-      containerDefinitions,
-      tags,
-    },
-  );
+  const taskDefinition = new aws.ecs.TaskDefinition(`${namePrefix}-pgbouncer-task`, {
+    family: `${namePrefix}-pgbouncer`,
+    cpu: "256",
+    memory: "512",
+    networkMode: "awsvpc",
+    requiresCompatibilities: ["FARGATE"],
+    executionRoleArn: executionRole.arn,
+    containerDefinitions,
+    volumes: [{ name: "pooler-tls" }],
+    tags,
+  });
 
   // --- Network Load Balancer (public) + target group + listener -------------
   const nlb = new aws.lb.LoadBalancer(`${namePrefix}-pgbouncer-nlb`, {
@@ -199,6 +291,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
     loadBalancerType: "network",
     internal: !pooler.publicListener,
     subnets: pooler.publicListener ? publicSubnetIds : privateSubnetIds,
+    securityGroups: [nlbSg.id],
     tags,
   });
 
@@ -221,7 +314,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   });
 
   // --- ECS service (private subnets, HA) ------------------------------------
-  new aws.ecs.Service(
+  const service = new aws.ecs.Service(
     `${namePrefix}-pgbouncer-service`,
     {
       name: `${namePrefix}-pgbouncer`,
@@ -243,8 +336,16 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
       ],
       tags,
     },
-    { dependsOn: [listener] },
+    { dependsOn: [listener, initialTlsExport] },
   );
 
-  return { poolerEndpoint: nlb.dnsName, securityGroupId: pgbouncerSg.id };
+  return {
+    poolerEndpoint: nlb.dnsName,
+    securityGroupId: pgbouncerSg.id,
+    loadBalancerDnsName: nlb.dnsName,
+    loadBalancerZoneId: nlb.zoneId,
+    clusterName: cluster.name,
+    serviceName: service.name,
+    service,
+  };
 }

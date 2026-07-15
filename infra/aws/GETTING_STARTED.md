@@ -70,11 +70,26 @@ AWS_SSO_REGION=<identity-center-home-region>
 AWS_SANDBOX_ACCOUNT_ID=<sandbox-account-id>
 AWS_STAGING_ACCOUNT_ID=<staging-account-id>
 AWS_PRODUCTION_ACCOUNT_ID=<production-account-id>
+
+AWS_DNS_ROOT_DOMAIN=<your-root-domain>
+AWS_POOLER_APP_EGRESS_CIDRS=<comma-delimited-app-egress-cidrs>
+AWS_POOLER_DEVELOPER_CIDRS=<comma-delimited-developer-cidrs>
 ```
 
 Workload profiles default to `starter-<environment>`. Override them with
 `AWS_SANDBOX_PROFILE`, `AWS_STAGING_PROFILE`, or `AWS_PRODUCTION_PROFILE` only
 when your local profile names differ.
+
+> [!IMPORTANT]
+> **DNS and pooler allowlist configuration:** `AWS_DNS_ROOT_DOMAIN` is your
+> organization's real root domain (e.g., `example.com` not
+> `sandbox.aws.example.com`). `AWS_POOLER_APP_EGRESS_CIDRS` must contain only
+> stable outbound addresses from application hosting providers (Vercel Static
+> IPs, Render stable IPs, etc.) in `/32` notation, comma-delimited.
+> `AWS_POOLER_DEVELOPER_CIDRS` must contain developer workstation IPs in `/32`
+> notation, comma-delimited. The value `0.0.0.0/0` is rejected. These values are
+> **secret** and must remain in the gitignored `infra/.env.local` — never commit
+> real domains, CIDRs, or IP addresses to version control.
 
 ### D. Create and verify the sandbox state foundation
 
@@ -107,8 +122,9 @@ point. State resources intentionally live in the dedicated state account.
 Use the exact KMS secrets-provider URL printed by the state command:
 
 1. Initialize, preview, and deploy `bootstrap`.
-2. Initialize, preview, and deploy `core`.
-3. Initialize, preview, and deploy `apps`.
+2. **CHECKPOINT:** Delegate the Route 53 hosted zone (see below).
+3. Initialize, preview, and deploy `core`.
+4. Initialize, preview, and deploy `apps`.
 
 Before deploying `bootstrap`, set its required repository scope:
 
@@ -120,6 +136,98 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set \
 Never run `up` until its preceding `preview` targets the expected account,
 stack, and region. The complete commands and explanations are in
 [Deploy order](#deploy-order).
+
+#### Route 53 delegation checkpoint (between bootstrap and core)
+
+After deploying `bootstrap`, the stack exports `hostedZoneNameServers` — four
+AWS Route 53 name servers for the delegated zone. **You must create one NS
+record set at your external DNS provider before deploying `core`**; otherwise
+ACM certificate validation will fail.
+
+1. **Read the name servers:**
+
+   ```bash
+   AWS_PROFILE=starter-sandbox pulumi stack output hostedZoneNameServers -s sandbox
+   ```
+
+   This prints an array of four name servers, e.g.:
+
+   ```json
+   [
+     "ns-1234.awsdns-56.org",
+     "ns-789.awsdns-12.com",
+     "ns-345.awsdns-67.net",
+     "ns-901.awsdns-23.co.uk"
+   ]
+   ```
+
+2. **At your external DNS provider** (the registrar or DNS hosting service for
+   your real `AWS_DNS_ROOT_DOMAIN`), create **one NS record set** for the
+   subdomain `sandbox.aws.example.com` (substituting your real root domain)
+   containing all four name server values. Most providers require a trailing dot
+   for FQDN entries; consult your provider's documentation.
+
+   Example (pseudo-syntax):
+
+   ```
+   Type: NS
+   Name: sandbox.aws.example.com
+   Values:
+     ns-1234.awsdns-56.org.
+     ns-789.awsdns-12.com.
+     ns-345.awsdns-67.net.
+     ns-901.awsdns-23.co.uk.
+   TTL: 300
+   ```
+
+3. **Wait for propagation** (typically 1–5 minutes) and verify public delegation:
+
+   ```bash
+   dig NS sandbox.aws.example.com
+   ```
+
+   The answer section must list all four AWS name servers. Repeat for `staging`
+   and `production` as you configure each environment.
+
+4. **Confirm the SNS subscription** (one-time per environment): The bootstrap
+   stack creates an SNS topic for certificate expiration and renewal alerts. AWS
+   sends a confirmation email to the address configured in
+   `core/manual-secrets.ts` (or the bootstrap budget notification email). Click
+   the confirmation link once.
+
+5. **Deploy core:**
+
+   ```bash
+   AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
+   AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+   ```
+
+   The `core` stack creates an ACM certificate for `db.sandbox.aws.example.com`
+   (substituting your real domain), validates it via DNS, provisions the TLS
+   exporter Lambda (which writes exported certificate material to a
+   KMS-encrypted Secrets Manager secret consumed by PgBouncer), and creates the
+   Route 53 alias record pointing to the PgBouncer NLB.
+
+6. **Verify TLS connectivity:**
+
+   ```bash
+   dig A db.sandbox.aws.example.com
+   aws acm list-certificates --profile starter-sandbox --region us-east-2
+   openssl s_client -starttls postgres \
+     -connect db.sandbox.aws.example.com:6432 \
+     -servername db.sandbox.aws.example.com
+   ```
+
+   The `openssl` command should complete the TLS handshake and print the
+   certificate chain. If it reports `Verify return code: 0 (ok)`, TLS is
+   correctly configured.
+
+> [!IMPORTANT]
+> **Substitution required:** Every occurrence of `example.com` in the commands
+> above is a placeholder. You must substitute your organization's real
+> `AWS_DNS_ROOT_DOMAIN` value (from `infra/.env.local`) when running these
+> commands. The domain and CIDRs in `infra/.env.local` are secret and must never
+> be committed to version control.
 
 ---
 
@@ -363,7 +471,8 @@ inspect:
 
 #### 1. Bootstrap (once per account, admin credentials)
 
-Codifies the GitHub OIDC deploy role, the ECR repo, and the budget.
+Codifies the GitHub OIDC deploy role, the ECR repo, the budget, the protected
+Route 53 hosted zone, and the SNS alert topic.
 
 ```bash
 cd infra/aws/bootstrap && pnpm install && cd -
@@ -377,10 +486,16 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
 ```
 
-Note the outputs — `deployRoleArn`, `ecrRepositoryUrl` — you'll feed the role/URL
-into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_REGISTRY`). The apps stack
-no longer needs the ECR URL as config: it derives the registry from the deploy
-account + region at runtime.
+Note the outputs — `deployRoleArn`, `ecrRepositoryUrl`, `hostedZoneNameServers` —
+you'll feed the role/URL into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`,
+`AWS_ECR_REGISTRY`). The apps stack no longer needs the ECR URL as config: it
+derives the registry from the deploy account + region at runtime.
+
+**STOP:** Before deploying `core`, complete the Route 53 delegation checkpoint
+described in [Part 1 — Quick runbook, section E](#e-deploy-the-sandbox-layers-in-order).
+Read `hostedZoneNameServers`, create the NS record set at your external DNS
+provider, verify public delegation with `dig`, and confirm the SNS subscription
+email.
 
 #### 2. Core
 

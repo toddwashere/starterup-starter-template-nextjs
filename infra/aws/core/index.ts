@@ -8,9 +8,10 @@ import { config as productionConfig } from "../config.production";
 import { resolveCompliance } from "../../shared/compliance";
 import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
-import { buildPgBouncer } from "./pgbouncer";
+import { buildPoolerStack } from "./pooler-stack";
 import { buildQueues } from "./queues";
 import { buildManualSecrets } from "./manual-secrets";
+import { poolerConfigFromEnv } from "../env";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -53,9 +54,7 @@ const { kmsKeyArn } = buildComplianceResources({
 
 // When CMEK is on, feed the KMS key to RDS/S3; otherwise use the service
 // default (AWS-managed key for RDS, SSE-S3 for the bucket).
-const cmekKeyId: pulumi.Output<string> | undefined = compliance.cmek
-  ? kmsKeyArn
-  : undefined;
+const cmekKeyId: pulumi.Output<string> | undefined = compliance.cmek ? kmsKeyArn : undefined;
 
 // --- Networking: VPC + subnets + IGW + NAT ----------------------------------
 const azs = aws.getAvailabilityZonesOutput({ state: "available" });
@@ -163,9 +162,7 @@ const privateSubnetIds = pulumi.all(privateSubnets.map((s) => s.id));
 const appSg = new aws.ec2.SecurityGroup("app-sg", {
   vpcId: vpc.id,
   description: "Starter application workloads security group",
-  egress: [
-    { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
-  ],
+  egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
   tags: { ...baseTags, Name: `${namePrefix}-app-sg` },
 });
 
@@ -174,9 +171,7 @@ const appSg = new aws.ec2.SecurityGroup("app-sg", {
 const dbSg = new aws.ec2.SecurityGroup("db-sg", {
   vpcId: vpc.id,
   description: "Starter database security group",
-  egress: [
-    { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
-  ],
+  egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
   tags: { ...baseTags, Name: `${namePrefix}-db-sg` },
 });
 
@@ -312,17 +307,14 @@ const dbProxy = new aws.rds.Proxy("db-proxy", {
   tags: { ...baseTags, Name: `${namePrefix}-db-proxy` },
 });
 
-const dbProxyTargetGroup = new aws.rds.ProxyDefaultTargetGroup(
-  "db-proxy-tg",
-  {
-    dbProxyName: dbProxy.name,
-    connectionPoolConfig: {
-      maxConnectionsPercent: 100,
-      maxIdleConnectionsPercent: 50,
-      connectionBorrowTimeout: 120,
-    },
+const dbProxyTargetGroup = new aws.rds.ProxyDefaultTargetGroup("db-proxy-tg", {
+  dbProxyName: dbProxy.name,
+  connectionPoolConfig: {
+    maxConnectionsPercent: 100,
+    maxIdleConnectionsPercent: 50,
+    connectionBorrowTimeout: 120,
   },
-);
+});
 
 new aws.rds.ProxyTarget("db-proxy-target", {
   dbProxyName: dbProxy.name,
@@ -414,38 +406,63 @@ const manualSecrets = buildManualSecrets({
 // --- Public PgBouncer pooler (Vercel -> pooled Postgres) --------------------
 // RDS Proxy can't be public, so Vercel's pooled path terminates at a PgBouncer
 // NLB (public) backed by Fargate tasks in private subnets. RDS stays private.
-// A separate Vercel-facing DATABASE_URL secret points at the NLB endpoint.
-let poolerEndpoint: pulumi.Output<string> | undefined;
+// The pooler uses a custom Route 53 hostname with verified TLS.
+
+// Resolve pooler configuration and bootstrap resources
+const poolerConfig = poolerConfigFromEnv(env);
+let hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
+let alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
+try {
+  [hostedZone, alertTopic] = await Promise.all([
+    aws.route53.getZone({
+      name: `${poolerConfig.zoneName}.`,
+      privateZone: false,
+    }),
+    aws.sns.getTopic({ name: `${namePrefix}-infra-alerts` }),
+  ]);
+} catch (error) {
+  throw new Error(
+    `Missing ${poolerConfig.zoneName} bootstrap resources. Deploy bootstrap, ` +
+      `delegate its nameservers, and retry core. Cause: ${String(error)}`,
+  );
+}
+
+let poolerHostname: string | undefined;
+let poolerCertificateArn: pulumi.Output<string> | undefined;
+let poolerTlsAlarmName: pulumi.Output<string> | undefined;
+let poolerEndpointOutput: string | undefined;
 let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
+
 if (cfg.database.pooler.enabled) {
-  const pgbouncer = buildPgBouncer({
+  const accountId = aws.getCallerIdentityOutput().accountId;
+
+  const poolerStack = buildPoolerStack({
     namePrefix,
     region,
+    accountId,
+    poolerConfig,
+    hostedZone,
+    alertTopic,
     vpcId: vpc.id,
     publicSubnetIds: publicSubnets.map((s) => s.id),
     privateSubnetIds,
     dbSecurityGroupId: dbSg.id,
     dbHost: db.address,
     dbName: "starter",
+    dbUsername: "starter",
+    dbPassword: dbPassword.result,
     dbSecretArn: proxyAuthSecret.arn,
     pooler: cfg.database.pooler,
     cmekKeyArn: cmekKeyId,
+    isProduction,
     tags: baseTags,
   });
-  poolerEndpoint = pgbouncer.poolerEndpoint;
 
-  // sslmode=verify-full: the client validates PgBouncer's server certificate.
-  const vercelPooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${poolerEndpoint}:6432/starter?sslmode=verify-full`;
-  const vercelDbUrlSecret = new aws.secretsmanager.Secret("vercel-database-url", {
-    name: `/starter/${stack}/vercel-database-url`,
-    recoveryWindowInDays: isProduction ? 7 : 0,
-    kmsKeyId: cmekKeyId,
-  });
-  new aws.secretsmanager.SecretVersion("vercel-database-url-v1", {
-    secretId: vercelDbUrlSecret.id,
-    secretString: vercelPooledUrl,
-  });
-  vercelDbUrlSecretArn = vercelDbUrlSecret.arn;
+  poolerHostname = poolerStack.poolerHostname;
+  poolerCertificateArn = poolerStack.poolerCertificateArn;
+  poolerTlsAlarmName = poolerStack.poolerTlsAlarmName;
+  poolerEndpointOutput = poolerStack.poolerEndpointOutput;
+  vercelDbUrlSecretArn = poolerStack.vercelDatabaseUrlSecretArn;
 }
 
 // --- Vercel OIDC access (hybrid: Vercel apps -> AWS data/AI plane) -----------
@@ -492,9 +509,7 @@ export const queueArns = Object.fromEntries(
 export const uploadsBucket = uploadsBucketResource.bucket;
 // Names + ARNs of the manually-managed placeholder secrets (empty until you set
 // their values in the console/CLI). Grant read access from consumers as needed.
-export const manualSecretArns = Object.fromEntries(
-  manualSecrets.map((s) => [s.name, s.arn]),
-);
+export const manualSecretArns = Object.fromEntries(manualSecrets.map((s) => [s.name, s.arn]));
 // Re-export the compliance KMS key ARN ("" when CMEK is disabled).
 export { kmsKeyArn, privateSubnetIds };
 
@@ -505,6 +520,7 @@ export const dbInstanceEndpoint = db.endpoint;
 // ARN of the Vercel OIDC access role (undefined for pure-AWS deploys). Paste
 // into the Vercel project as AWS_ROLE_ARN.
 export const vercelAccessRoleArnOutput = vercelAccessRoleArn;
-// Public PgBouncer endpoint + the Vercel-facing pooled DATABASE_URL secret.
-export const poolerEndpointOutput = poolerEndpoint;
+// Public PgBouncer pooler outputs (custom hostname, not generated NLB name).
+export { poolerHostname, poolerCertificateArn, poolerTlsAlarmName, poolerEndpointOutput };
+// Vercel-facing pooled DATABASE_URL secret ARN.
 export const vercelDatabaseUrlSecretArn = vercelDbUrlSecretArn;

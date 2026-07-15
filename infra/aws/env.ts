@@ -1,3 +1,5 @@
+import { resolveAwsPoolerConfig, type AwsPoolerConfig } from "../shared/aws-pooler-config";
+
 /**
  * Operator-supplied identifiers for the AWS profile.
  *
@@ -47,4 +49,12 @@ export function coreStackRefFromEnv(env: AwsEnvName | string): string {
     );
   }
   return `${org}/starter-aws-core/${env}`;
+}
+
+export function poolerConfigFromEnv(env: AwsEnvName): AwsPoolerConfig {
+  return resolveAwsPoolerConfig(env, {
+    rootDomain: process.env.AWS_DNS_ROOT_DOMAIN ?? "",
+    appEgressCidrs: process.env.AWS_POOLER_APP_EGRESS_CIDRS ?? "",
+    developerCidrs: process.env.AWS_POOLER_DEVELOPER_CIDRS ?? "",
+  });
 }
