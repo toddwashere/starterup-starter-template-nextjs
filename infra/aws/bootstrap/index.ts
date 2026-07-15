@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { validatedGithubRepo } from "./bootstrap-config";
+import { poolerConfigFromEnv, type AwsEnvName } from "../env";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -28,6 +29,13 @@ const baseTags = {
   ManagedBy: "pulumi",
   Layer: "bootstrap",
 };
+
+// Validate stack is a valid environment and derive pooler config
+const validEnvs: AwsEnvName[] = ["sandbox", "staging", "production"];
+if (!validEnvs.includes(stack as AwsEnvName)) {
+  throw new Error(`Stack must be one of ${validEnvs.join(", ")}; got ${stack}.`);
+}
+const poolerConfig = poolerConfigFromEnv(stack as AwsEnvName);
 
 // Required "owner/repo" scope. Failing closed prevents an unscoped OIDC role
 // from granting arbitrary GitHub repositories workload and state access.
@@ -135,6 +143,20 @@ deployPolicies.forEach((policyName, i) => {
   });
 });
 
+// --- 2a. Delegated hosted zone for environment resources --------------------
+// The core stack will configure Route 53 records for the pooler endpoint and
+// ACM certificates within this zone. Operators must manually delegate this zone
+// from the root domain's authoritative DNS.
+const hostedZone = new aws.route53.Zone(
+  "delegated-zone",
+  {
+    name: poolerConfig.zoneName,
+    comment: `Public delegated zone for ${stack} AWS resources`,
+    tags: baseTags,
+  },
+  { protect: true },
+);
+
 // The Pulumi backend lives in a dedicated state account. Its resource policies
 // grant this deterministic role cross-account access; this identity policy is
 // the matching workload-account half of that authorization.
@@ -196,7 +218,200 @@ new aws.iam.RolePolicy("github-state-access", {
   }),
 });
 
-// --- 3. Monthly cost budget + alerts ----------------------------------------
+// The core stack needs least-privilege access to Route 53, ACM, Lambda,
+// EventBridge, CloudWatch, SNS, Secrets Manager, KMS, and ECS for the pooler
+// deployment. Scope resource-level permissions where AWS supports them.
+new aws.iam.RolePolicy("github-deploy-access", {
+  role: deployRole.name,
+  policy: pulumi.all([hostedZone.arn, hostedZone.zoneId]).apply(([zoneArn, zoneId]) =>
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "Route53RecordChanges",
+          Effect: "Allow",
+          Action: [
+            "route53:ChangeResourceRecordSets",
+            "route53:GetChange",
+            "route53:ListResourceRecordSets",
+          ],
+          Resource: [zoneArn, "arn:aws:route53:::change/*"],
+        },
+        {
+          Sid: "Route53HostedZoneRead",
+          Effect: "Allow",
+          Action: ["route53:GetHostedZone", "route53:ListHostedZones"],
+          Resource: "*",
+        },
+        {
+          Sid: "AcmCertificateManagement",
+          Effect: "Allow",
+          Action: [
+            "acm:RequestCertificate",
+            "acm:DescribeCertificate",
+            "acm:GetCertificate",
+            "acm:ListCertificates",
+            "acm:AddTagsToCertificate",
+            "acm:DeleteCertificate",
+            "acm:ExportCertificate",
+          ],
+          Resource: "*",
+        },
+        {
+          Sid: "LambdaFunctions",
+          Effect: "Allow",
+          Action: [
+            "lambda:CreateFunction",
+            "lambda:UpdateFunctionCode",
+            "lambda:UpdateFunctionConfiguration",
+            "lambda:GetFunction",
+            "lambda:DeleteFunction",
+            "lambda:InvokeFunction",
+            "lambda:TagResource",
+            "lambda:AddPermission",
+            "lambda:RemovePermission",
+          ],
+          Resource: `arn:aws:lambda:${region}:*:function:${namePrefix}-*`,
+        },
+        {
+          Sid: "LambdaList",
+          Effect: "Allow",
+          Action: ["lambda:ListFunctions"],
+          Resource: "*",
+        },
+        {
+          Sid: "EventBridgeRules",
+          Effect: "Allow",
+          Action: [
+            "events:PutRule",
+            "events:DeleteRule",
+            "events:DescribeRule",
+            "events:EnableRule",
+            "events:DisableRule",
+            "events:PutTargets",
+            "events:RemoveTargets",
+            "events:ListTargetsByRule",
+            "events:TagResource",
+          ],
+          Resource: `arn:aws:events:${region}:*:rule/${namePrefix}-*`,
+        },
+        {
+          Sid: "CloudWatchLogs",
+          Effect: "Allow",
+          Action: [
+            "logs:CreateLogGroup",
+            "logs:DeleteLogGroup",
+            "logs:DescribeLogGroups",
+            "logs:PutRetentionPolicy",
+            "logs:TagResource",
+          ],
+          Resource: `arn:aws:logs:${region}:*:log-group:/aws/lambda/${namePrefix}-*`,
+        },
+        {
+          Sid: "CloudWatchLogsList",
+          Effect: "Allow",
+          Action: ["logs:DescribeLogGroups"],
+          Resource: "*",
+        },
+        {
+          Sid: "SnsPublish",
+          Effect: "Allow",
+          Action: ["sns:Publish", "sns:GetTopicAttributes"],
+          Resource: `arn:aws:sns:${region}:*:${namePrefix}-*`,
+        },
+        {
+          Sid: "SecretsManager",
+          Effect: "Allow",
+          Action: [
+            "secretsmanager:CreateSecret",
+            "secretsmanager:GetSecretValue",
+            "secretsmanager:DescribeSecret",
+            "secretsmanager:PutSecretValue",
+            "secretsmanager:DeleteSecret",
+            "secretsmanager:TagResource",
+          ],
+          Resource: `arn:aws:secretsmanager:${region}:*:secret:${namePrefix}/*`,
+        },
+        {
+          Sid: "SecretsManagerList",
+          Effect: "Allow",
+          Action: ["secretsmanager:ListSecrets"],
+          Resource: "*",
+        },
+        {
+          Sid: "KmsKeys",
+          Effect: "Allow",
+          Action: [
+            "kms:CreateKey",
+            "kms:DescribeKey",
+            "kms:GetKeyPolicy",
+            "kms:PutKeyPolicy",
+            "kms:EnableKeyRotation",
+            "kms:TagResource",
+            "kms:CreateAlias",
+            "kms:DeleteAlias",
+            "kms:UpdateAlias",
+            "kms:ScheduleKeyDeletion",
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:GenerateDataKey",
+          ],
+          Resource: "*",
+        },
+        {
+          Sid: "EcsServiceDeployment",
+          Effect: "Allow",
+          Action: [
+            "ecs:CreateService",
+            "ecs:UpdateService",
+            "ecs:DeleteService",
+            "ecs:DescribeServices",
+            "ecs:RegisterTaskDefinition",
+            "ecs:DeregisterTaskDefinition",
+            "ecs:DescribeTaskDefinition",
+            "ecs:TagResource",
+          ],
+          Resource: [
+            `arn:aws:ecs:${region}:*:service/${namePrefix}-*`,
+            `arn:aws:ecs:${region}:*:task-definition/${namePrefix}-*`,
+          ],
+        },
+        {
+          Sid: "EcsList",
+          Effect: "Allow",
+          Action: ["ecs:ListServices", "ecs:ListTaskDefinitions"],
+          Resource: "*",
+        },
+        {
+          Sid: "IamPassRolePooler",
+          Effect: "Allow",
+          Action: ["iam:PassRole"],
+          Resource: `arn:aws:iam::*:role/${namePrefix}-pooler-*`,
+        },
+      ],
+    }),
+  ),
+});
+
+// --- 3. Infrastructure alert topic ------------------------------------------
+// The core stack publishes operational alerts (certificate expiry, pooler
+// health) to this SNS topic. Subscribe additional endpoints (PagerDuty, Slack)
+// as needed.
+const alertTopic = new aws.sns.Topic("infra-alerts", {
+  name: `${namePrefix}-infra-alerts`,
+  kmsMasterKeyId: "alias/aws/sns",
+  tags: baseTags,
+});
+
+if (budgetNotificationEmail) {
+  new aws.sns.TopicSubscription("infra-alerts-email", {
+    topic: alertTopic.arn,
+    protocol: "email",
+    endpoint: budgetNotificationEmail,
+  });
+}
+
+// --- 4. Monthly cost budget + alerts ----------------------------------------
 // Runaway RDS/NAT cost is the biggest sandbox risk. Alerts require an email; the
 // budget itself is created regardless so cost is always tracked.
 if (budgetNotificationEmail) {
@@ -232,3 +447,7 @@ export const ecrRepositoryUrl = ecr.repositoryUrl;
 export const githubOidcProviderArn = githubOidc.arn;
 export const deployRoleArn = deployRole.arn;
 export const regionOut = region;
+export const hostedZoneId = hostedZone.zoneId;
+export const hostedZoneName = hostedZone.name;
+export const hostedZoneNameServers = hostedZone.nameServers;
+export const infraAlertTopicArn = alertTopic.arn;
