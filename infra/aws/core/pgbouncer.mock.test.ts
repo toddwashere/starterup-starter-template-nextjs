@@ -67,6 +67,7 @@ async function build() {
     pooler: { poolSize: 25, publicListener: true },
     allowedCidrs: [
       { cidr: "203.0.113.10/32", source: "application" },
+      { cidr: "203.0.113.11/32", source: "application" },
       { cidr: "198.51.100.20/32", source: "developer" },
     ],
     tlsSecretArn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:pooler-tls",
@@ -197,16 +198,22 @@ describe("buildPgBouncer", () => {
     const inlineIngress = nlbSg?.inputs.ingress as unknown[];
     expect(inlineIngress).toBeUndefined();
 
-    // Should have exactly 2 SecurityGroupRule resources for ingress
+    // One SecurityGroupRule per allowed CIDR (2 application + 1 developer)
     const rules = recorded.filter((r) => r.type === TYPES.sgRule);
     const ingressRules = rules.filter(
       (r) => r.inputs.type === "ingress" && r.inputs.securityGroupId === `${nlbSg?.name}-id`,
     );
-    expect(ingressRules).toHaveLength(2);
+    expect(ingressRules).toHaveLength(3);
+
+    // Multiple CIDRs sharing a source must produce distinct logical names
+    // (regression: a source-only name collided on a duplicate URN).
+    const ruleNames = new Set(ingressRules.map((r) => r.name));
+    expect(ruleNames.size).toBe(3);
 
     // Verify each CIDR has a rule
     const cidrs = ingressRules.map((r) => r.inputs.cidrBlocks).flat();
     expect(cidrs).toContain("203.0.113.10/32");
+    expect(cidrs).toContain("203.0.113.11/32");
     expect(cidrs).toContain("198.51.100.20/32");
 
     // Verify descriptions match source

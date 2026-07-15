@@ -95,9 +95,12 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
     tags: { ...tags, Name: `${namePrefix}-pgbouncer-nlb-sg` },
   });
 
-  // One ingress rule per allowed CIDR
+  // One ingress rule per allowed CIDR. The logical name embeds the sanitized
+  // CIDR (and source) so multiple CIDRs sharing a source do not collide on a
+  // duplicate URN, and names stay stable regardless of list ordering.
   for (const allowed of allowedCidrs) {
-    new aws.ec2.SecurityGroupRule(`${namePrefix}-nlb-ingress-${allowed.source}`, {
+    const cidrSlug = allowed.cidr.replace(/[./]/g, "-");
+    new aws.ec2.SecurityGroupRule(`${namePrefix}-nlb-ingress-${allowed.source}-${cidrSlug}`, {
       type: "ingress",
       securityGroupId: nlbSg.id,
       fromPort: PGBOUNCER_PORT,
