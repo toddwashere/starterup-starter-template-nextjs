@@ -85,6 +85,10 @@ jobs:
 
       - name: Pulumi preview (core)
         uses: pulumi/actions@v6
+        env:
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+          AWS_POOLER_APP_EGRESS_CIDRS: ${{ vars.AWS_POOLER_APP_EGRESS_CIDRS }}
+          AWS_POOLER_DEVELOPER_CIDRS: ${{ vars.AWS_POOLER_DEVELOPER_CIDRS }}
         with:
           command: preview
           stack-name: sandbox
@@ -227,6 +231,10 @@ jobs:
 
       - name: Pulumi up (core)
         uses: pulumi/actions@v6
+        env:
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+          AWS_POOLER_APP_EGRESS_CIDRS: ${{ vars.AWS_POOLER_APP_EGRESS_CIDRS }}
+          AWS_POOLER_DEVELOPER_CIDRS: ${{ vars.AWS_POOLER_DEVELOPER_CIDRS }}
         with:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
