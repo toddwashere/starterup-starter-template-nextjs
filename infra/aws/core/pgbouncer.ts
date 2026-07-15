@@ -44,6 +44,8 @@ export interface PgBouncerResult {
   clusterName: pulumi.Output<string>;
   /** ECS service name. */
   serviceName: pulumi.Output<string>;
+  /** ECS service resource for renewal wiring dependency. */
+  service: aws.ecs.Service;
 }
 
 const PGBOUNCER_PORT = 6432;
@@ -350,5 +352,6 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
     loadBalancerZoneId: nlb.zoneId,
     clusterName: cluster.name,
     serviceName: service.name,
+    service,
   };
 }

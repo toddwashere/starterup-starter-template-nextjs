@@ -108,18 +108,6 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
   });
 
   // --- 3. TLS renewal wiring (depends on service) ----------------------------------
-  // buildPoolerTlsRenewal needs a service resource to establish the dependency.
-  // The actual ECS service is created inside buildPgBouncer and we need to pass
-  // a resource for the EventBridge rule to depend on. We use a ProviderResource
-  // which is a concrete Pulumi resource type that can be instantiated.
-  class ServiceMarker extends pulumi.ComponentResource {
-    constructor(name: string, opts?: pulumi.ComponentResourceOptions) {
-      super("pooler-stack:index:ServiceMarker", name, {}, opts);
-    }
-  }
-  
-  const serviceMarker = new ServiceMarker(`${namePrefix}-pgbouncer-service-marker`);
-
   buildPoolerTlsRenewal({
     certificateArn: tlsFoundation.certificateArn,
     tlsSecretId: tlsFoundation.tlsSecretId,
@@ -127,7 +115,7 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
     alertTopicArn: alertTopic.arn,
     clusterName: poolerClusterName,
     serviceName: poolerServiceName,
-    service: serviceMarker,
+    service: pgbouncer.service,
   });
 
   // --- 4. Route 53 alias (points custom hostname to NLB) --------------------------
