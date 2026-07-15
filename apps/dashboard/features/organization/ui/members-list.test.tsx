@@ -1,13 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MembersList, type MemberRow } from "./members-list";
-
-// The dashboard vitest config does not enable `globals: true` (unlike
-// packages/ui), so testing-library's automatic afterEach cleanup never
-// registers itself. Do it explicitly so each test starts from an empty DOM.
-afterEach(cleanup);
 
 const allowedMemberA: MemberRow = {
   id: "member_a",
