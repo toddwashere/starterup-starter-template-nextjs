@@ -13,7 +13,7 @@ vi.mock("./auth", () => ({
 
 vi.mock("@workspace/database", () => ({
   prisma: {
-    member: { findFirst: vi.fn() },
+    member: { findFirst: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
   Prisma: {
@@ -47,6 +47,7 @@ const mockHasPermission = vi.mocked(auth.api.hasPermission);
 const mockUpdateMemberRole = vi.mocked(auth.api.updateMemberRole);
 const mockCreateInvitation = vi.mocked(auth.api.createInvitation);
 const mockFindFirst = vi.mocked(prisma.member.findFirst);
+const mockFindMany = vi.mocked(prisma.member.findMany);
 const mockTransaction = vi.mocked(prisma.$transaction);
 const mockCaptureException = vi.mocked(captureException);
 
@@ -87,6 +88,23 @@ function installDefaultFindFirst() {
     }
     return null;
   });
+}
+
+// getMemberManagementContext loads all requested members in one findMany
+// (`{ id: { in }, organizationId }`) instead of one findFirst per member, so
+// the default returns whichever of the known members match the requested ids
+// and explicit organization.
+function installDefaultFindMany() {
+  mockFindMany.mockImplementation((async ({
+    where,
+  }: {
+    where: { id?: { in?: string[] }; organizationId?: string };
+  }) => {
+    const ids = where.id?.in ?? [];
+    return [mockActor, mockTarget]
+      .filter((m) => ids.includes(m.id) && m.organizationId === where.organizationId)
+      .map((m) => ({ ...m }));
+  }) as never);
 }
 
 // transferOrganizationOwnership runs entirely against the transactional `tx`
@@ -162,6 +180,7 @@ beforeEach(() => {
   } as never);
 
   installDefaultFindFirst();
+  installDefaultFindMany();
 });
 
 describe("replaceMemberRoles", () => {
@@ -652,6 +671,20 @@ describe("getMemberManagementContext", () => {
   it("omits members that no longer exist in the explicit organization", async () => {
     const context = await getMemberManagementContext(new Headers(), "org_1", ["member_missing"]);
     expect(context.members).toEqual({});
+  });
+
+  it("loads all requested members in a single batched query, not one per member", async () => {
+    await getMemberManagementContext(new Headers(), "org_1", ["member_2", "member_3"]);
+
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ["member_2", "member_3"] }, organizationId: "org_1" },
+    });
+    // No per-member findFirst by id — only the actor lookup (by userId) remains.
+    const idLookups = mockFindFirst.mock.calls.filter(
+      (call) => call[0]?.where && "id" in call[0].where,
+    );
+    expect(idLookups).toHaveLength(0);
   });
 });
 

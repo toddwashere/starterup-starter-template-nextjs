@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.12.4",
+    "@workspace/tooling": "workspace:*",
     "dotenv": "^16",
     "dotenv-cli": "^11.0.0",
     "prettier": "^3.4",
