@@ -193,12 +193,17 @@ export async function getMemberManagementContext(
   const actor = await loadActorContext(headers, organizationId);
   const members: MemberManagementContext["members"] = {};
 
-  for (const memberId of memberIds) {
-    const target = await prisma.member.findFirst({
-      where: { id: memberId, organizationId },
-    });
-    if (!target) continue;
+  // Load every requested member in one query scoped to the explicit
+  // organization, rather than a findFirst per member (which was up to
+  // memberIds.length sequential round trips on each members-page load).
+  const targets =
+    memberIds.length > 0
+      ? await prisma.member.findMany({
+          where: { id: { in: [...memberIds] }, organizationId },
+        })
+      : [];
 
+  for (const target of targets) {
     const targetRoles = parseOrgRoles(target.role);
 
     const managementDecision = evaluateMemberManagement({
@@ -216,7 +221,7 @@ export async function getMemberManagementContext(
       targetRoles,
     });
 
-    members[memberId] = {
+    members[target.id] = {
       allowed: managementDecision.allowed,
       reason: managementDecision.allowed ? null : managementDecision.reason,
       canTransferOwnership: ownershipDecision.allowed,
