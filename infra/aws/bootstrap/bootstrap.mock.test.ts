@@ -175,6 +175,28 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(policy).toContain("ecs:CreateService");
     expect(policy).toContain("iam:PassRole");
     expect(policy).toContain("starter-sandbox-pooler-*");
+    // KMS data-plane actions must be region-scoped, not bare "*"
+    const parsed = JSON.parse(policy);
+    const kmsStatements = parsed.Statement.filter((s: { Action?: string[] }) =>
+      s.Action?.some((a: string) => a.includes("kms:")),
+    );
+    const dataPlaneActions = kmsStatements.flatMap((s: { Action: string[] }) =>
+      s.Action.filter((a: string) =>
+        ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"].includes(a),
+      ),
+    );
+    expect(dataPlaneActions.length).toBeGreaterThan(0);
+    kmsStatements.forEach((s: { Action: string[]; Resource: string | string[] }) => {
+      const hasDataAction = s.Action.some((a: string) =>
+        ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"].includes(a),
+      );
+      if (hasDataAction) {
+        expect(s.Resource).not.toBe("*");
+        expect(typeof s.Resource === "string" ? s.Resource : s.Resource[0]).toContain(
+          "arn:aws:kms:",
+        );
+      }
+    });
   });
 
   it("exports the hosted zone id, name, name servers, and alert topic ARN", async () => {
