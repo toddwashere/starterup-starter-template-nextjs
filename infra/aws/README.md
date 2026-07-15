@@ -160,6 +160,76 @@ Lambda roles get `bedrock:InvokeModel*` scoped to `ai.bedrockModels`. See
 | Vercel apps                | public NLB `:6432` → PgBouncer → private RDS | OIDC role + `sslmode=verify-full` |
 | In-AWS App Runner / Lambda | private RDS Proxy `:5432` → RDS              | task role                         |
 
+### Public pooler allowlist configuration
+
+The public PgBouncer pooler is protected by a network load balancer security
+group that allowlists specific CIDR blocks. Only addresses in
+`AWS_POOLER_APP_EGRESS_CIDRS` and `AWS_POOLER_DEVELOPER_CIDRS` (defined in
+`infra/.env.local`) can connect to `:6432`.
+
+#### Application hosting provider requirements
+
+**Hosting providers must supply stable outbound addresses.** Dynamic egress
+addresses (such as ephemeral NAT IPs, rotating proxies, or shared pools without
+static allocation) cannot be reliably allowlisted and will result in intermittent
+connection failures.
+
+- The current deployment purchases **Vercel Static IPs** only for `dashboard`
+  and `patient-account`. Enter every assigned Vercel Static IP address as a
+  `/32` entry in `AWS_POOLER_APP_EGRESS_CIDRS`, comma-delimited.
+- **Render**, **Fly.io**, and other providers work the same way when they
+  expose stable outbound addresses. Consult your provider's documentation for
+  static IP offerings.
+- **Vercel OIDC** continues to provide temporary AWS credentials and scoped AWS
+  API access (S3, SQS, Bedrock), but it does **not** authenticate PostgreSQL or
+  replace the network allowlist. TLS and SCRAM credentials remain required.
+- **Vercel Static IPs use shared infrastructure** provisioned for multiple
+  customers. TLS (`sslmode=verify-full`), SCRAM credentials, credential
+  rotation, OIDC scoping, and audit controls remain required. Static IP
+  allowlisting is one control layer, not proof of HIPAA compliance.
+- **Production database credentials must not be exposed to preview
+  deployments.** Use environment-specific secrets and ensure preview branches
+  cannot access production database credentials or connection strings.
+- **Keep Vercel build traffic outside the Static IP path** unless a reviewed
+  build step genuinely needs database connectivity. Most builds should use
+  stubbed or mock data rather than production pooler access.
+- **AWS Lambda workers** connect privately through RDS Proxy and require
+  neither Static IPs nor public PgBouncer access. Lambda functions run in
+  private subnets and use the in-VPC RDS Proxy endpoint.
+
+#### Developer workstation access
+
+Multiple developers append comma-delimited `/32` entries to
+`AWS_POOLER_DEVELOPER_CIDRS`. Each developer's residential or VPN IP must be
+listed individually in `/32` notation. A changed residential IP requires editing
+`AWS_POOLER_DEVELOPER_CIDRS` in `infra/.env.local` and rerunning:
+
+```bash
+AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+```
+
+The deployment **rejects** `0.0.0.0/0` and any CIDR block larger than a `/24`.
+This is enforced at deploy time to prevent accidental public exposure.
+
+#### Credential rotation
+
+Database credentials must be rotated through the existing secret-management
+procedure. **Do not print connection URLs or secret values** in build logs, CI
+output, or terminal commands. Credentials are injected at runtime via Secrets
+Manager; manual rotation requires updating the secret value in Secrets Manager
+and restarting services.
+
+To rotate the RDS password:
+
+1. Generate a new password and update the RDS instance via console or CLI.
+2. Update the Secrets Manager secrets (`/starter/<env>/database-url`,
+   `/starter/<env>/direct-url`, `/starter/<env>/vercel-database-url`) with the
+   new password.
+3. Restart App Runner services and redeploy Lambda functions to pick up the new
+   credentials.
+
+**Never commit connection strings or credentials to version control.**
+
 ### Bedrock invocation logging (deploy step)
 
 The pinned `@pulumi/aws` does not expose the model-invocation logging resource,
@@ -173,6 +243,77 @@ aws bedrock put-model-invocation-logging-configuration --logging-config '{
 ```
 
 CloudTrail already records Bedrock control-plane management events.
+
+### Certificate renewal and incident checks
+
+The ACM certificate for `db.<env>.aws.<root-domain>` renews automatically when
+DNS validation succeeds. The TLS delivery Lambda polls ACM every 6 hours and
+updates the NLB listener with the latest certificate ARN. An SNS topic alerts
+the configured email address when certificate expiration is approaching or when
+renewal fails.
+
+#### Routine checks
+
+Run these commands to verify certificate and pooler health:
+
+```bash
+# ACM certificate status
+aws acm list-certificates --profile starter-<env> --region us-east-2
+aws acm describe-certificate --certificate-arn <cert-arn> \
+  --profile starter-<env> --region us-east-2
+
+# Lambda function errors (TLS delivery)
+aws logs tail /aws/lambda/<function-name> --follow \
+  --profile starter-<env> --region us-east-2
+
+# CloudWatch alarms (certificate expiration, Lambda errors)
+aws cloudwatch describe-alarms --profile starter-<env> --region us-east-2
+
+# Current ECS deployment (PgBouncer Fargate service)
+aws ecs describe-services --cluster <cluster-name> \
+  --services <service-name> --profile starter-<env> --region us-east-2
+
+# Certificate expiration date
+openssl s_client -starttls postgres \
+  -connect db.<env>.aws.example.com:6432 \
+  -servername db.<env>.aws.example.com < /dev/null 2>/dev/null | \
+  openssl x509 -noout -dates
+```
+
+Replace `<env>` with `sandbox`, `staging`, or `production`, and substitute your
+real `AWS_DNS_ROOT_DOMAIN` for `example.com`.
+
+#### Incident response
+
+If certificate validation fails, verify:
+
+1. The Route 53 hosted zone `<env>.aws.<root-domain>` is delegated correctly at
+   the external DNS provider (see [GETTING_STARTED.md](./GETTING_STARTED.md)).
+2. The NS record set at the external provider contains all four AWS name servers.
+3. Public DNS resolution works: `dig NS <env>.aws.example.com` and
+   `dig A db.<env>.aws.example.com` (substituting your real domain).
+4. The SNS topic subscription is confirmed; check the configured email address
+   for confirmation and alert messages.
+
+If the TLS delivery Lambda reports errors, check CloudWatch Logs for the
+function and verify the IAM role has `acm:DescribeCertificate`,
+`acm:GetCertificate`, and `elasticloadbalancing:ModifyListener` permissions.
+
+#### PHI and compliance
+
+**DNS labels, resource tags, CloudWatch log groups, and CloudWatch alarms must
+not contain Protected Health Information (PHI).** Use only environment names
+(`sandbox`, `staging`, `production`), resource types (`pooler`, `tls-delivery`),
+and generic identifiers. Violation of this constraint can result in PHI exposure
+in DNS query logs, CloudTrail logs, and third-party monitoring tools.
+
+Acceptable DNS label: `db.production.aws.example.com`\
+Unacceptable DNS label: `db-patient-john-doe.production.aws.example.com`
+
+Acceptable log group: `/starter/production/pgbouncer`\
+Unacceptable log group: `/starter/production/patient-12345-queries`
+
+When in doubt, use only the environment name and resource type.
 
 ---
 
