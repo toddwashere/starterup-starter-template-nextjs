@@ -206,7 +206,11 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
           essential: false,
           entryPoint: ["/bin/sh", "-c"],
           command: [
-            'echo "$TLS_CERTIFICATE$TLS_CERTIFICATE_CHAIN" > /tls/server.crt && ' +
+            // Separate echoes guarantee a newline between the leaf certificate
+            // and the intermediate chain, so the concatenated PEM stays valid
+            // regardless of ACM's trailing-newline formatting.
+            'echo "$TLS_CERTIFICATE" > /tls/server.crt && ' +
+              'echo "$TLS_CERTIFICATE_CHAIN" >> /tls/server.crt && ' +
               'echo "$TLS_PRIVATE_KEY" > /tls/server.key && ' +
               "chmod 600 /tls/server.key && " +
               "exit 0",

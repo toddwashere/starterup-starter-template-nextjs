@@ -204,8 +204,9 @@ ACM certificate validation will fail.
 
    The `core` stack creates an ACM certificate for `db.sandbox.aws.example.com`
    (substituting your real domain), validates it via DNS, provisions the TLS
-   delivery Lambda, and creates the Route 53 alias record pointing to the
-   PgBouncer NLB.
+   exporter Lambda (which writes exported certificate material to a
+   KMS-encrypted Secrets Manager secret consumed by PgBouncer), and creates the
+   Route 53 alias record pointing to the PgBouncer NLB.
 
 6. **Verify TLS connectivity:**
 

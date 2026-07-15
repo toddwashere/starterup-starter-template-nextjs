@@ -261,7 +261,8 @@ describe("buildPoolerStack integration", () => {
     //
     // The dependency ordering (initialExport → ECS service) is verified in isolation in:
     // - pgbouncer.mock.test.ts: passes a mock Invocation directly, bypassing Lambda creation
-    // - Code inspection: pgbouncer.ts line 345 shows { dependsOn: [listener, initialTlsExport] }
+    // - Code inspection: buildPgBouncer's ECS service is created with
+    //   { dependsOn: [listener, initialTlsExport] }
     //
     // To restore this test, pooler-tls.ts would need to either:
     // (a) avoid CallbackFunction entirely (use inline Lambda with raw code string), OR
@@ -299,9 +300,9 @@ describe("buildPoolerStack integration", () => {
     //   This test proves buildPoolerTlsRenewal receives a real aws.ecs.Service (not a
     //   ServiceMarker stand-in) and that the service is a valid Pulumi resource.
     // - Code inspection:
-    //   * pooler-stack.ts line 118: passes pgbouncer.service to buildPoolerTlsRenewal
-    //   * pgbouncer.ts line 355: returns the real aws.ecs.Service resource
-    //   * pooler-tls.ts line 321: EventBridge rule created with { dependsOn: [service] }
+    //   * buildPoolerStack (pooler-stack.ts) passes pgbouncer.service to buildPoolerTlsRenewal
+    //   * buildPgBouncer (pgbouncer.ts) returns the real aws.ecs.Service via PgBouncerResult.service
+    //   * buildPoolerTlsRenewal (pooler-tls.ts) creates the EventBridge rule with { dependsOn: [service] }
     //
     // This fixes the Critical review finding where a ServiceMarker stand-in was used
     // instead of the real service, breaking the dependency chain.

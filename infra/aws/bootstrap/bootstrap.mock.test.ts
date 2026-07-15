@@ -177,6 +177,13 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(policy).toContain("ecs:CreateService");
     expect(policy).toContain("iam:PassRole");
     expect(policy).toContain("starter-sandbox-pooler-*");
+    // PassRole must also cover the PgBouncer ECS execution/task roles the core
+    // stack creates, otherwise ECS service deploys fail once IAMFullAccess is
+    // tightened away from the managed base policies.
+    expect(policy).toContain("starter-sandbox-pgbouncer-*");
+    // Secrets scope must match the actual secret names the core stack creates
+    // (all use the leading-slash /starter/<stack>/ prefix).
+    expect(policy).toContain("secret:/starter/sandbox/*");
     // KMS data-plane actions must be region-scoped, not bare "*"
     const parsed = JSON.parse(policy);
     const kmsStatements = parsed.Statement.filter((s: { Action?: string[] }) =>

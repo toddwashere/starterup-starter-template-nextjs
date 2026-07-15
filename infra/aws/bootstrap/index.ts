@@ -330,7 +330,7 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "secretsmanager:DeleteSecret",
             "secretsmanager:TagResource",
           ],
-          Resource: `arn:aws:secretsmanager:${region}:*:secret:${namePrefix}/*`,
+          Resource: `arn:aws:secretsmanager:${region}:*:secret:/starter/${stack}/*`,
         },
         {
           Sid: "SecretsManagerList",
@@ -388,7 +388,10 @@ new aws.iam.RolePolicy("github-deploy-access", {
           Sid: "IamPassRolePooler",
           Effect: "Allow",
           Action: ["iam:PassRole"],
-          Resource: `arn:aws:iam::*:role/${namePrefix}-pooler-*`,
+          Resource: [
+            `arn:aws:iam::*:role/${namePrefix}-pooler-*`,
+            `arn:aws:iam::*:role/${namePrefix}-pgbouncer-*`,
+          ],
         },
       ],
     }),

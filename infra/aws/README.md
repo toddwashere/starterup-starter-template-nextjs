@@ -249,9 +249,13 @@ CloudTrail already records Bedrock control-plane management events.
 
 ### Certificate renewal and incident checks
 
-The ACM certificate for `db.<env>.aws.<root-domain>` renews automatically when
-DNS validation succeeds. The TLS delivery Lambda polls ACM every 6 hours and
-updates the NLB listener with the latest certificate ARN. An SNS topic alerts
+The ACM certificate for `db.<env>.aws.<root-domain>` renews automatically while
+DNS validation records remain in place. When ACM completes a renewal it emits an
+`ACM Certificate Available` event; an EventBridge rule invokes the TLS exporter
+Lambda, which exports the renewed certificate, writes the PEM material to the
+KMS-encrypted Secrets Manager secret, and forces a new ECS deployment so
+PgBouncer reloads the updated certificate files. The NLB listener is plain TCP —
+TLS terminates inside PgBouncer, not on the load balancer. An SNS topic alerts
 the configured email address when certificate expiration is approaching or when
 renewal fails.
 
@@ -265,7 +269,7 @@ aws acm list-certificates --profile starter-<env> --region us-east-2
 aws acm describe-certificate --certificate-arn <cert-arn> \
   --profile starter-<env> --region us-east-2
 
-# Lambda function errors (TLS delivery)
+# Lambda function errors (TLS exporter)
 aws logs tail /aws/lambda/<function-name> --follow \
   --profile starter-<env> --region us-east-2
 
@@ -298,15 +302,17 @@ If certificate validation fails, verify:
 4. The SNS topic subscription is confirmed; check the configured email address
    for confirmation and alert messages.
 
-If the TLS delivery Lambda reports errors, check CloudWatch Logs for the
-function and verify the IAM role has `acm:DescribeCertificate`,
-`acm:GetCertificate`, and `elasticloadbalancing:ModifyListener` permissions.
+If the TLS exporter Lambda reports errors, check CloudWatch Logs for the
+function and verify the IAM role has `acm:ExportCertificate`,
+`secretsmanager:PutSecretValue`, and `ecs:UpdateService` permissions, plus
+`kms:Decrypt`/`kms:GenerateDataKey` on the pooler TLS key used to encrypt the
+Secrets Manager secret.
 
 #### PHI and compliance
 
 **DNS labels, resource tags, CloudWatch log groups, and CloudWatch alarms must
 not contain Protected Health Information (PHI).** Use only environment names
-(`sandbox`, `staging`, `production`), resource types (`pooler`, `tls-delivery`),
+(`sandbox`, `staging`, `production`), resource types (`pooler`, `tls-exporter`),
 and generic identifiers. Violation of this constraint can result in PHI exposure
 in DNS query logs, CloudTrail logs, and third-party monitoring tools.
 

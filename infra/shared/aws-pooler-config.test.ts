@@ -26,6 +26,20 @@ describe("resolveAwsPoolerConfig", () => {
     });
   });
 
+  it("deduplicates repeated addresses within a source", () => {
+    const result = resolveAwsPoolerConfig("sandbox", {
+      rootDomain: "example.com",
+      appEgressCidrs: "203.0.113.10/32, 203.0.113.10/32, 203.0.113.11/32",
+      developerCidrs: "198.51.100.20/32,198.51.100.20/32",
+    });
+
+    expect(result.allowedCidrs).toEqual([
+      { cidr: "203.0.113.10/32", source: "application" },
+      { cidr: "203.0.113.11/32", source: "application" },
+      { cidr: "198.51.100.20/32", source: "developer" },
+    ]);
+  });
+
   it.each([
     ["", "required"],
     ["https://example.com", "domain"],

@@ -104,7 +104,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
 
   // --- 5. KMS-encrypted Secrets Manager secret ----------------------------------
   const tlsSecret = new aws.secretsmanager.Secret(`${namePrefix}-pooler-tls-secret`, {
-    name: `/${namePrefix}/pooler/tls`,
+    name: `/starter/${pulumi.getStack()}/pooler-tls`,
     description: `Exported TLS certificate material for ${hostname} pooler`,
     kmsKeyId: tlsKey.id,
     recoveryWindowInDays: isProduction ? 7 : 0,
@@ -268,7 +268,7 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
   const logicalPrefix = "pooler-tls";
 
   // --- EventBridge rule for ACM Certificate Available (renewal) -----------------
-  new aws.cloudwatch.EventRule(
+  const renewalRule = new aws.cloudwatch.EventRule(
     `${logicalPrefix}-renewal`,
     {
       name: pulumi.interpolate`${exporterFunction.name}-renewal`,
@@ -284,11 +284,12 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
     { dependsOn: [service] },
   );
 
-  const ruleName = pulumi.interpolate`${exporterFunction.name}-renewal`;
-
   // --- EventBridge target: invoke the exporter Lambda --------------------------
+  // Reference the rule resource (renewalRule.name) so Pulumi orders the target
+  // after the rule; deriving the name from exporterFunction would drop that edge
+  // and race PutTargets ahead of the rule's creation.
   new aws.cloudwatch.EventTarget(`${logicalPrefix}-renewal-target`, {
-    rule: ruleName,
+    rule: renewalRule.name,
     arn: exporterFunction.arn,
     input: pulumi.all([certificateArn, tlsSecretId]).apply(([certArn, secretId]) => {
       return JSON.stringify({
@@ -306,7 +307,7 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
     action: "lambda:InvokeFunction",
     function: exporterFunction.name,
     principal: "events.amazonaws.com",
-    sourceArn: pulumi.interpolate`arn:aws:events:*:*:rule/${ruleName}`,
+    sourceArn: pulumi.interpolate`arn:aws:events:*:*:rule/${renewalRule.name}`,
   });
 
   // --- Direct SNS targets for other certificate lifecycle events ----------------

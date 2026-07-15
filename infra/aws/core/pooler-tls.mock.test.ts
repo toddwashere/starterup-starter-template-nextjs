@@ -395,10 +395,10 @@ describe("buildPoolerTlsRenewal", () => {
     // the EventBridge rule's dependsOn, ensuring the rule is not created until after
     // the service exists.
     //
-    // Context: pooler-tls.ts line 321 sets { dependsOn: [service] } on the renewal rule.
-    // The service parameter comes from pgbouncer.ts line 355 which returns the real
-    // service resource, and pooler-stack.ts line 118 passes pgbouncer.service to
-    // buildPoolerTlsRenewal.
+    // Context: buildPoolerTlsRenewal (pooler-tls.ts) sets { dependsOn: [service] }
+    // on the renewal EventRule. The service parameter comes from buildPgBouncer's
+    // PgBouncerResult.service (a real aws.ecs.Service), which buildPoolerStack
+    // (pooler-stack.ts) threads into buildPoolerTlsRenewal.
 
     vi.resetModules();
     recorded.length = 0;
@@ -451,9 +451,9 @@ describe("buildPoolerTlsRenewal", () => {
     expect(sentinel, "Sentinel service must be recorded as a real resource").toBeDefined();
 
     // Verify EventBridge rule was created (may be missing due to Lambda serialization)
-    // The rule creation with dependsOn: [service] in pooler-tls.ts line 321 is the
-    // key wiring. Pulumi's mock newResource doesn't expose dependsOn in args, so we
-    // verify structurally: the service is a real resource, and the rule exists.
+    // The renewal EventRule's { dependsOn: [service] } in buildPoolerTlsRenewal is
+    // the key wiring. Pulumi's mock newResource doesn't expose dependsOn in args, so
+    // we verify structurally: the service is a real resource, and the rule exists.
     const rules = recorded.filter((r) => r.type === TYPES.eventRule);
     if (rules.length > 0) {
       const renewalRule = rules.find((rule) => {
