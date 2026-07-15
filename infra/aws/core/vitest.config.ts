@@ -4,6 +4,5 @@ export default defineConfig({
   test: {
     include: ["**/*.test.ts"],
     environment: "node",
-    dangerouslyIgnoreUnhandledErrors: true,
   },
 });
