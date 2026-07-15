@@ -163,7 +163,8 @@ Lambda roles get `bedrock:InvokeModel*` scoped to `ai.bedrockModels`. See
 ### Public pooler allowlist configuration
 
 The public PgBouncer pooler is protected by a network load balancer security
-group that allowlists specific CIDR blocks. Only addresses in
+group that allowlists specific individual IP addresses (canonical `/32`
+CIDRs). Only addresses in
 `AWS_POOLER_APP_EGRESS_CIDRS` and `AWS_POOLER_DEVELOPER_CIDRS` (defined in
 `infra/.env.local`) can connect to `:6432`.
 
@@ -208,8 +209,10 @@ listed individually in `/32` notation. A changed residential IP requires editing
 AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 ```
 
-The deployment **rejects** `0.0.0.0/0` and any CIDR block larger than a `/24`.
-This is enforced at deploy time to prevent accidental public exposure.
+Each CIDR must be a canonical `/32` (a single IP address). The deployment
+rejects broader ranges such as `/24`, non-canonical CIDRs, IPv6, and
+`0.0.0.0/0`. This is enforced at deploy time to prevent accidental public
+exposure.
 
 #### Credential rotation
 
