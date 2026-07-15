@@ -766,7 +766,7 @@ describe("transferOrganizationOwnership", () => {
         organizationId: "org_1",
         targetMemberId: "member_1",
       }),
-    ).rejects.toMatchObject({ code: "OWNER_PROTECTED" });
+    ).rejects.toMatchObject({ code: "SELF" });
     expect(txUpdateCalls).toEqual([]);
   });
 

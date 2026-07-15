@@ -543,6 +543,28 @@ export async function transferOrganizationOwnership(input: {
       const actorRoles = normalizeOrgRoleIds(parseOrgRoles(actor.role));
       const targetRoles = normalizeOrgRoleIds(parseOrgRoles(target.role));
 
+      // Single source of truth for transfer eligibility — the same pure
+      // policy `getMemberManagementContext` uses for the UI hint. Covers
+      // non-owner actor (MISSING_PERMISSION), self-transfer (SELF),
+      // target-already-owner (OWNER_PROTECTED), and unknown roles
+      // (UNKNOWN_ROLE); every reason is a valid MemberRoleFailureCode.
+      const decision = evaluateOwnershipTransfer({
+        actorUserId: actor.userId,
+        actorRoles,
+        targetUserId: target.userId,
+        targetRoles,
+      });
+      if (!decision.allowed) {
+        throw new MemberRoleManagementError(
+          decision.reason,
+          "You cannot transfer ownership to this member.",
+        );
+      }
+
+      // Data-integrity guard NOT covered by the eligibility policy: refuse to
+      // transfer while the org has ownership-role drift (a member other than
+      // the acting owner also carries an ownership role). Placed after the
+      // eligibility gate so a non-owner actor gets MISSING_PERMISSION first.
       const organizationMembers = await tx.member.findMany({
         where: { organizationId: input.organizationId },
         select: { id: true, role: true },
@@ -556,19 +578,6 @@ export async function transferOrganizationOwnership(input: {
         throw new MemberRoleManagementError(
           "OWNER_PROTECTED",
           "Resolve multiple-owner role data before transferring ownership.",
-        );
-      }
-
-      if (!hasOwnershipRole(actorRoles)) {
-        throw new MemberRoleManagementError(
-          "MISSING_PERMISSION",
-          "Only the current owner can transfer ownership.",
-        );
-      }
-      if (actor.userId === target.userId || hasOwnershipRole(targetRoles)) {
-        throw new MemberRoleManagementError(
-          "OWNER_PROTECTED",
-          "Select a different non-owner member.",
         );
       }
 
