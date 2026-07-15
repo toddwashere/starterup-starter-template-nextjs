@@ -128,6 +128,7 @@ describe("buildPoolerTls", () => {
     expect(certs[0].inputs.validationMethod).toBe("DNS");
     const options = certs[0].inputs.options as Record<string, string>;
     expect(options.certificateTransparencyLoggingPreference).toBe("ENABLED");
+    expect(options.export).toBe("ENABLED");
     // RSA_2048 is exportable (EC keys are not)
     expect(certs[0].inputs.keyAlgorithm).toBe("RSA_2048");
   });
@@ -315,6 +316,7 @@ describe("buildPoolerTlsRenewal", () => {
     try {
       mod.buildPoolerTlsRenewal({
         certificateArn: tlsResult.certificateArn,
+        tlsSecretId: tlsResult.tlsSecretId,
         exporterFunction: tlsResult.exporterFunction,
         alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
         clusterName: "starter-sandbox-pgbouncer",

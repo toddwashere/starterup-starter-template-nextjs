@@ -21,6 +21,7 @@ export interface PoolerTlsArgs {
 export interface PoolerTlsResult {
   certificateArn: pulumi.Output<string>;
   tlsSecretArn: pulumi.Output<string>;
+  tlsSecretId: pulumi.Output<string>;
   tlsKmsKeyArn: pulumi.Output<string>;
   alarmName: pulumi.Output<string>;
   initialExport: aws.lambda.Invocation;
@@ -32,6 +33,7 @@ export interface PoolerTlsResult {
 
 export interface PoolerTlsRenewalArgs {
   certificateArn: pulumi.Output<string>;
+  tlsSecretId: pulumi.Output<string>;
   exporterFunction: aws.lambda.CallbackFunction<
     PoolerCertificateExportEvent,
     unknown
@@ -70,6 +72,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
     keyAlgorithm: "RSA_2048",
     options: {
       certificateTransparencyLoggingPreference: "ENABLED",
+      export: "ENABLED",
     },
     tags: { ...tags, Name: `${namePrefix}-pooler-tls-cert` },
   });
@@ -266,6 +269,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
   return {
     certificateArn: certificate.arn,
     tlsSecretArn: tlsSecret.arn,
+    tlsSecretId: tlsSecret.id,
     tlsKmsKeyArn: tlsKey.arn,
     alarmName: alarm.name,
     initialExport,
@@ -286,6 +290,7 @@ export function buildPoolerTlsRenewal(
 ): void {
   const {
     certificateArn,
+    tlsSecretId,
     exporterFunction,
     alertTopicArn,
     clusterName,
@@ -325,10 +330,8 @@ export function buildPoolerTlsRenewal(
       rule: ruleName,
       arn: exporterFunction.arn,
       input: pulumi
-        .all([certificateArn, exporterFunction.name])
-        .apply(([certArn, funcName]) => {
-          // Extract secret ID from function name pattern
-          const secretId = `/${funcName.replace(/-pooler-tls-exporter$/, "")}/pooler/tls`;
+        .all([certificateArn, tlsSecretId])
+        .apply(([certArn, secretId]) => {
           return JSON.stringify({
             mode: "renewal",
             certificateArn: certArn,
