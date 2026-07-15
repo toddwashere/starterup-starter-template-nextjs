@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   createOrgSchema,
+  replaceMemberRolesSchema,
+  bulkMemberRolesSchema,
   inviteMemberSchema,
-  updateMemberRoleSchema,
+  transferOwnershipSchema,
 } from "./org-types";
 
 describe("createOrgSchema", () => {
@@ -45,64 +47,213 @@ describe("createOrgSchema", () => {
   });
 });
 
-describe("inviteMemberSchema", () => {
-  it("accepts valid invite input", () => {
-    const result = inviteMemberSchema.safeParse({ email: "user@example.com", role: "member" });
+describe("replaceMemberRolesSchema", () => {
+  it("accepts a valid payload", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberId: "member_1",
+      roles: ["admin", "member"],
+    });
     expect(result.success).toBe(true);
   });
 
-  it("accepts admin role", () => {
-    const result = inviteMemberSchema.safeParse({ email: "user@example.com", role: "admin" });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects invalid email", () => {
-    const result = inviteMemberSchema.safeParse({ email: "not-an-email", role: "member" });
+  it("rejects a malformed organizationId", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "",
+      memberId: "member_1",
+      roles: ["member"],
+    });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe("Invalid email address");
   });
 
-  it("rejects owner role (only admin/member allowed for invites)", () => {
-    const result = inviteMemberSchema.safeParse({ email: "user@example.com", role: "owner" });
+  it("rejects a malformed memberId", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberId: "",
+      roles: ["member"],
+    });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe("Role must be admin or member");
   });
 
-  it("rejects unknown role", () => {
-    const result = inviteMemberSchema.safeParse({ email: "user@example.com", role: "superadmin" });
+  it("rejects an empty roles array", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberId: "member_1",
+      roles: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown role", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberId: "member_1",
+      roles: ["superadmin"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects the owner role (not memberAssignable)", () => {
+    const result = replaceMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberId: "member_1",
+      roles: ["owner"],
+    });
     expect(result.success).toBe(false);
   });
 });
 
-describe("updateMemberRoleSchema", () => {
-  it("accepts a single role array", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["admin"] });
+describe("bulkMemberRolesSchema", () => {
+  it("accepts a valid payload", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: ["member_1", "member_2"],
+      operation: "add",
+      roles: ["member"],
+    });
     expect(result.success).toBe(true);
   });
 
-  it("accepts multiple roles", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["owner", "member"] });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts owner role for updates", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc123", role: ["owner"] });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects empty memberId", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "", role: ["member"] });
+  it("rejects an empty memberIds array", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: [],
+      operation: "add",
+      roles: ["member"],
+    });
     expect(result.success).toBe(false);
   });
 
-  it("rejects an empty role array", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc", role: [] });
+  it("rejects more than 100 memberIds", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: Array.from({ length: 101 }, (_, i) => `member_${i}`),
+      operation: "add",
+      roles: ["member"],
+    });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe("Select at least one role");
   });
 
-  it("rejects invalid role", () => {
-    const result = updateMemberRoleSchema.safeParse({ memberId: "abc", role: ["superadmin"] });
+  it("accepts exactly 100 memberIds", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: Array.from({ length: 100 }, (_, i) => `member_${i}`),
+      operation: "add",
+      roles: ["member"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an invalid operation", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: ["member_1"],
+      operation: "delete",
+      roles: ["member"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty roles array", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: ["member_1"],
+      operation: "add",
+      roles: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown role", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: ["member_1"],
+      operation: "add",
+      roles: ["superadmin"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects the owner role (not bulkAssignable)", () => {
+    const result = bulkMemberRolesSchema.safeParse({
+      organizationId: "org_1",
+      memberIds: ["member_1"],
+      operation: "add",
+      roles: ["owner"],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("inviteMemberSchema", () => {
+  it("accepts a valid payload", () => {
+    const result = inviteMemberSchema.safeParse({
+      organizationId: "org_1",
+      email: "user@example.com",
+      roles: ["admin"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an invalid email", () => {
+    const result = inviteMemberSchema.safeParse({
+      organizationId: "org_1",
+      email: "not-an-email",
+      roles: ["member"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty roles array", () => {
+    const result = inviteMemberSchema.safeParse({
+      organizationId: "org_1",
+      email: "user@example.com",
+      roles: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown role", () => {
+    const result = inviteMemberSchema.safeParse({
+      organizationId: "org_1",
+      email: "user@example.com",
+      roles: ["superadmin"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects the owner role (not invitationAssignable)", () => {
+    const result = inviteMemberSchema.safeParse({
+      organizationId: "org_1",
+      email: "user@example.com",
+      roles: ["owner"],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("transferOwnershipSchema", () => {
+  it("accepts a valid payload", () => {
+    const result = transferOwnershipSchema.safeParse({
+      organizationId: "org_1",
+      targetMemberId: "member_1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a malformed organizationId", () => {
+    const result = transferOwnershipSchema.safeParse({
+      organizationId: "",
+      targetMemberId: "member_1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a malformed targetMemberId", () => {
+    const result = transferOwnershipSchema.safeParse({
+      organizationId: "org_1",
+      targetMemberId: "",
+    });
     expect(result.success).toBe(false);
   });
 });
