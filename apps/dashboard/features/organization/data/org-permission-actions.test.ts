@@ -4,10 +4,23 @@ vi.mock("@workspace/auth/org-permission-context", () => ({
   getOrgPermissionContext: vi.fn(),
 }));
 
+vi.mock("@workspace/auth/member-role-management", () => ({
+  getMemberManagementContext: vi.fn(),
+}));
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn().mockResolvedValue(new Headers({ "x-test": "1" })),
+}));
+
+import { headers } from "next/headers";
 import { getOrgPermissionContext } from "@workspace/auth/org-permission-context";
 import {
+  getMemberManagementContext,
+  type MemberManagementContext,
+} from "@workspace/auth/member-role-management";
+import {
   getApiKeyManageContextAction,
-  getMemberManageContextAction,
+  getMemberManagementContextAction,
 } from "./org-permission-actions";
 
 describe("getApiKeyManageContextAction", () => {
@@ -36,31 +49,47 @@ describe("getApiKeyManageContextAction", () => {
   });
 });
 
-describe("getMemberManageContextAction", () => {
+describe("getMemberManagementContextAction", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("maps allowed -> canManage based on permission context result", async () => {
-    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: true });
+  it("delegates to getMemberManagementContext with awaited headers, organizationId, and memberIds", async () => {
+    const context: MemberManagementContext = {
+      canManageMembers: true,
+      actorRoles: ["admin"],
+      members: {
+        member_1: { allowed: true, reason: null, canTransferOwnership: false },
+      },
+    };
+    vi.mocked(getMemberManagementContext).mockResolvedValueOnce(context);
 
-    const result = await getMemberManageContextAction("org_123");
+    const result = await getMemberManagementContextAction("org_abc", ["member_1"]);
 
-    expect(result).toEqual({ canManage: true });
+    expect(headers).toHaveBeenCalled();
+    expect(getMemberManagementContext).toHaveBeenCalledWith(
+      expect.any(Headers),
+      "org_abc",
+      ["member_1"],
+    );
+    expect(getMemberManagementContext).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(context);
   });
 
-  it("maps allowed: false -> canManage: false", async () => {
-    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: false });
+  it("returns the context object as-is (allowed:false members included)", async () => {
+    const context: MemberManagementContext = {
+      canManageMembers: false,
+      actorRoles: ["member"],
+      members: {
+        member_2: {
+          allowed: false,
+          reason: "MISSING_PERMISSION",
+          canTransferOwnership: false,
+        },
+      },
+    };
+    vi.mocked(getMemberManagementContext).mockResolvedValueOnce(context);
 
-    const result = await getMemberManageContextAction("org_123");
+    const result = await getMemberManagementContextAction("org_123", ["member_2"]);
 
-    expect(result).toEqual({ canManage: false });
-  });
-
-  it("calls getOrgPermissionContext with { member: ['update'] } for the given orgId", async () => {
-    vi.mocked(getOrgPermissionContext).mockResolvedValueOnce({ allowed: true });
-
-    await getMemberManageContextAction("org_abc");
-
-    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { member: ["update"] });
-    expect(getOrgPermissionContext).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(context);
   });
 });

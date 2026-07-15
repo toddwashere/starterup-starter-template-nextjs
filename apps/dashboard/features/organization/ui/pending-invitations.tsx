@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { authClient } from "@workspace/auth/client";
+import { formatDate } from "@workspace/common";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
@@ -81,8 +82,7 @@ export function PendingInvitations({
                     {invitation.status}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Expires{" "}
-                    {new Date(invitation.expiresAt).toLocaleDateString()}
+                    Expires {formatDate(invitation.expiresAt)}
                   </span>
                 </div>
               </div>

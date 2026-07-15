@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isOrgRoleId, ORG_ROLE_CATALOG } from "@workspace/auth/org-roles";
 
 export const createOrgSchema = z.object({
   name: z
@@ -17,18 +18,60 @@ export const createOrgSchema = z.object({
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 
+// Role membership is validated against the registry (`ORG_ROLE_CATALOG`)
+// rather than a hand-duplicated Zod enum, so a new role only needs to be
+// added in one place. Each surface (replace / invite / bulk) has its own
+// assignability flag — ownership is never assignable through any of them.
+const memberAssignableRoleSchema = z
+  .string()
+  .refine(
+    (value) => isOrgRoleId(value) && ORG_ROLE_CATALOG[value].memberAssignable,
+    "Role cannot be assigned here",
+  );
+
+const invitationAssignableRoleSchema = z
+  .string()
+  .refine(
+    (value) =>
+      isOrgRoleId(value) && ORG_ROLE_CATALOG[value].invitationAssignable,
+    "Role cannot be assigned by invitation",
+  );
+
+const bulkAssignableRoleSchema = z
+  .string()
+  .refine(
+    (value) => isOrgRoleId(value) && ORG_ROLE_CATALOG[value].bulkAssignable,
+    "Role cannot be changed in bulk",
+  );
+
+export const replaceMemberRolesSchema = z.object({
+  organizationId: z.string().min(1),
+  memberId: z.string().min(1),
+  roles: z.array(memberAssignableRoleSchema).min(1),
+});
+
+export type ReplaceMemberRolesInput = z.infer<typeof replaceMemberRolesSchema>;
+
+export const bulkMemberRolesSchema = z.object({
+  organizationId: z.string().min(1),
+  memberIds: z.array(z.string().min(1)).min(1).max(100),
+  operation: z.enum(["add", "remove"]),
+  roles: z.array(bulkAssignableRoleSchema).min(1),
+});
+
+export type BulkMemberRolesInput = z.infer<typeof bulkMemberRolesSchema>;
+
 export const inviteMemberSchema = z.object({
+  organizationId: z.string().min(1),
   email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "member"], {
-    errorMap: () => ({ message: "Role must be admin or member" }),
-  }),
+  roles: z.array(invitationAssignableRoleSchema).min(1),
 });
 
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 
-export const updateMemberRoleSchema = z.object({
-  memberId: z.string().min(1),
-  role: z.array(z.enum(["owner", "admin", "member"])).min(1, "Select at least one role"),
+export const transferOwnershipSchema = z.object({
+  organizationId: z.string().min(1),
+  targetMemberId: z.string().min(1),
 });
 
-export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;

@@ -1,5 +1,10 @@
 "use server";
+import { headers } from "next/headers";
 import { getOrgPermissionContext } from "@workspace/auth/org-permission-context";
+import {
+  getMemberManagementContext,
+  type MemberManagementContext,
+} from "@workspace/auth/member-role-management";
 
 export async function getApiKeyManageContextAction(
   organizationId: string,
@@ -11,9 +16,17 @@ export async function getApiKeyManageContextAction(
   return { canRead: read.allowed, canCreate: create.allowed };
 }
 
-export async function getMemberManageContextAction(
+/**
+ * Per-member management context for the org members UI: whether the actor
+ * can manage members at all, the actor's own roles, and — for each
+ * requested member ID — whether the actor may manage that target's roles
+ * (with a safe reason when not) and whether the actor may transfer
+ * ownership to that target. Replaces the boolean-only
+ * `getMemberManageContextAction`.
+ */
+export async function getMemberManagementContextAction(
   organizationId: string,
-): Promise<{ canManage: boolean }> {
-  const ctx = await getOrgPermissionContext(organizationId, { member: ["update"] });
-  return { canManage: ctx.allowed };
+  memberIds: string[],
+): Promise<MemberManagementContext> {
+  return getMemberManagementContext(await headers(), organizationId, memberIds);
 }

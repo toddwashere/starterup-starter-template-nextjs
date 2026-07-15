@@ -12,3 +12,26 @@ export type OrgRoleId = keyof typeof orgRoles;
 export const ASSIGNABLE_ORG_ROLE_IDS = ["owner", "admin", "member"] as const satisfies readonly OrgRoleId[];
 
 export { memberRoleFieldHasPermission } from "./member-permissions";
+
+export {
+  ORG_ROLE_CATALOG,
+  InvalidOrgRoleSetError,
+  isOrgRoleId,
+  normalizeOrgRoleIds,
+  getHighestManagementRank,
+  hasOwnershipRole,
+  MEMBER_ASSIGNABLE_ORG_ROLE_IDS,
+  INVITATION_ASSIGNABLE_ORG_ROLE_IDS,
+  BULK_ASSIGNABLE_ORG_ROLE_IDS,
+} from "./role-catalog";
+export type { OrgRoleMetadata } from "./role-catalog";
+
+export {
+  evaluateMemberManagement,
+  evaluateRoleAssignment,
+  evaluateOwnershipTransfer,
+} from "./member-role-policy";
+export type {
+  MemberManagementReason,
+  MemberManagementDecision,
+} from "./member-role-policy";
