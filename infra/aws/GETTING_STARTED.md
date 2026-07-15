@@ -191,9 +191,10 @@ ACM certificate validation will fail.
 
 4. **Confirm the SNS subscription** (one-time per environment): The bootstrap
    stack creates an SNS topic for certificate expiration and renewal alerts. AWS
-   sends a confirmation email to the address configured in
-   `core/manual-secrets.ts` (or the bootstrap budget notification email). Click
-   the confirmation link once.
+   sends a confirmation email to the bootstrap
+   `starter-aws-bootstrap:budgetNotificationEmail` address. That shared setting
+   is intentionally reused for both AWS Budgets notifications and the
+   infrastructure alert topic subscription. Click the confirmation link once.
 
 5. **Deploy core:**
 
@@ -485,6 +486,10 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set starter-aws-boot
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap preview -s sandbox
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
 ```
+
+`budgetNotificationEmail` is currently a shared notification setting: bootstrap
+uses it for the AWS Budgets email notifications and subscribes the same address
+to the infrastructure SNS alert topic. It is not sourced from the core stack.
 
 Note the outputs — `deployRoleArn`, `ecrRepositoryUrl`, `hostedZoneNameServers` —
 you'll feed the role/URL into GitHub Actions (`AWS_DEPLOY_ROLE_ARN`,

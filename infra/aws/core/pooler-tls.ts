@@ -1,9 +1,36 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import {
-  handler as exportHandler,
-  type PoolerCertificateExportEvent,
-} from "./pooler-certificate-export";
+import { buildSync } from "esbuild";
+import { fileURLToPath } from "node:url";
+import type { PoolerCertificateExportEvent } from "./pooler-certificate-export";
+
+export function buildCertificateExporterCode(): string {
+  const build = buildSync({
+    absWorkingDir: fileURLToPath(new URL(".", import.meta.url)),
+    entryPoints: ["pooler-certificate-export.ts"],
+    bundle: true,
+    charset: "utf8",
+    format: "cjs",
+    legalComments: "none",
+    platform: "node",
+    sourcemap: false,
+    target: "node22",
+    write: false,
+  });
+  const output = build.outputFiles[0];
+
+  if (!output) {
+    throw new Error("esbuild did not produce the pooler certificate exporter bundle");
+  }
+
+  return output.text;
+}
+
+function bundleCertificateExporter(): pulumi.asset.AssetArchive {
+  return new pulumi.asset.AssetArchive({
+    "index.js": new pulumi.asset.StringAsset(buildCertificateExporterCode()),
+  });
+}
 
 export interface PoolerTlsArgs {
   namePrefix: string;
@@ -25,13 +52,15 @@ export interface PoolerTlsResult {
   tlsKmsKeyArn: pulumi.Output<string>;
   alarmName: pulumi.Output<string>;
   initialExport: aws.lambda.Invocation;
-  exporterFunction: aws.lambda.CallbackFunction<PoolerCertificateExportEvent, unknown>;
+  exporterFunction: aws.lambda.Function;
 }
 
 export interface PoolerTlsRenewalArgs {
+  region: string;
+  accountId: pulumi.Input<string>;
   certificateArn: pulumi.Output<string>;
   tlsSecretId: pulumi.Output<string>;
-  exporterFunction: aws.lambda.CallbackFunction<PoolerCertificateExportEvent, unknown>;
+  exporterFunction: aws.lambda.Function;
   alertTopicArn: pulumi.Input<string>;
   clusterName: string;
   serviceName: string;
@@ -121,13 +150,16 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
   });
 
   // Attach managed policy for basic Lambda execution (CloudWatch logs)
-  new aws.iam.RolePolicyAttachment(`${namePrefix}-pooler-tls-exporter-basic`, {
-    role: exporterRole.name,
-    policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-  });
+  const exporterBasicPolicy = new aws.iam.RolePolicyAttachment(
+    `${namePrefix}-pooler-tls-exporter-basic`,
+    {
+      role: exporterRole.name,
+      policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    },
+  );
 
   // Least-privilege inline policy
-  new aws.iam.RolePolicy(`${namePrefix}-pooler-tls-exporter-policy`, {
+  const exporterPolicy = new aws.iam.RolePolicy(`${namePrefix}-pooler-tls-exporter-policy`, {
     role: exporterRole.id,
     policy: pulumi
       .all([certificate.arn, tlsSecret.arn, tlsKey.arn, pulumi.output(accountId)])
@@ -175,22 +207,22 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
     tags,
   });
 
-  // --- CallbackFunction that delegates to exportPoolerCertificate --------------
-  // Use a mock-friendly wrapper that re-exports the handler to avoid
-  // serialization issues in tests
-  const exporterFunction = new aws.lambda.CallbackFunction<PoolerCertificateExportEvent, unknown>(
+  // --- Deterministically bundled certificate exporter Lambda -------------------
+  const exporterFunction = new aws.lambda.Function(
     `${namePrefix}-pooler-tls-exporter`,
     {
+      code: bundleCertificateExporter(),
+      handler: "index.handler",
       name: `${namePrefix}-pooler-tls-exporter`,
-      role: exporterRole,
-      runtime: aws.lambda.Runtime.NodeJS20dX,
+      role: exporterRole.arn,
+      runtime: aws.lambda.Runtime.NodeJS22dX,
       memorySize: 256,
       timeout: 60,
       reservedConcurrentExecutions: 1,
-      callback: async (event: PoolerCertificateExportEvent) => {
-        return await exportHandler(event);
-      },
       tags,
+    },
+    {
+      dependsOn: [exporterBasicPolicy, exporterPolicy, exporterLogGroup],
     },
   );
 
@@ -254,6 +286,8 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
  */
 export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
   const {
+    region,
+    accountId,
     certificateArn,
     tlsSecretId,
     exporterFunction,
@@ -307,7 +341,7 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
     action: "lambda:InvokeFunction",
     function: exporterFunction.name,
     principal: "events.amazonaws.com",
-    sourceArn: pulumi.interpolate`arn:aws:events:*:*:rule/${renewalRule.name}`,
+    sourceArn: pulumi.interpolate`arn:aws:events:${region}:${accountId}:rule/${renewalRule.name}`,
   });
 
   // --- Direct SNS targets for other certificate lifecycle events ----------------

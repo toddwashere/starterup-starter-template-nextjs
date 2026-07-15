@@ -5,8 +5,8 @@
  * root domain, and validates CIDR allowlists for the public PgBouncer endpoint.
  *
  * All parsing is fail-closed: reject empty domains, protocol/path/trailing-dot,
- * `0.0.0.0/0`, IPv6, non-canonical CIDRs, host bits set outside /32, and
- * empty union of app+developer CIDRs.
+ * `0.0.0.0/0`, IPv6, any prefix other than /32, and empty union of
+ * app+developer CIDRs.
  */
 
 export type PoolerCidrSource = "application" | "developer";
@@ -24,13 +24,27 @@ export interface AwsPoolerConfig {
   allowedCidrs: Array<{ cidr: string; source: PoolerCidrSource }>;
 }
 
+export type AwsPoolerDnsConfig = Omit<AwsPoolerConfig, "allowedCidrs">;
+
+export function resolveAwsPoolerDns(
+  env: "sandbox" | "staging" | "production",
+  rootDomainInput: string,
+): AwsPoolerDnsConfig {
+  const rootDomain = validateRootDomain(rootDomainInput);
+  const zoneName = `${env}.aws.${rootDomain}`;
+
+  return {
+    rootDomain,
+    zoneName,
+    hostname: `db.${zoneName}`,
+  };
+}
+
 export function resolveAwsPoolerConfig(
   env: "sandbox" | "staging" | "production",
   input: AwsPoolerConfigInput,
 ): AwsPoolerConfig {
-  const rootDomain = validateRootDomain(input.rootDomain);
-  const zoneName = `${env}.aws.${rootDomain}`;
-  const hostname = `db.${zoneName}`;
+  const dns = resolveAwsPoolerDns(env, input.rootDomain);
 
   const appCidrs = parseCidrList(input.appEgressCidrs);
   const devCidrs = parseCidrList(input.developerCidrs);
@@ -39,15 +53,21 @@ export function resolveAwsPoolerConfig(
     throw new Error("At least one CIDR must be provided in appEgressCidrs or developerCidrs");
   }
 
+  const developerSet = new Set(devCidrs);
+  const duplicateAcrossSources = appCidrs.find((cidr) => developerSet.has(cidr));
+  if (duplicateAcrossSources) {
+    throw new Error(
+      `CIDR ${duplicateAcrossSources} must not appear in both application and developer allowlists`,
+    );
+  }
+
   const allowedCidrs = [
     ...appCidrs.map((cidr) => ({ cidr, source: "application" as PoolerCidrSource })),
     ...devCidrs.map((cidr) => ({ cidr, source: "developer" as PoolerCidrSource })),
   ];
 
   return {
-    rootDomain,
-    zoneName,
-    hostname,
+    ...dns,
     allowedCidrs,
   };
 }
@@ -130,10 +150,8 @@ function validateCidr(cidr: string): string {
   }
 
   const [ipStr, prefixStr] = parts;
-  const prefix = parseInt(prefixStr, 10);
-
-  if (isNaN(prefix) || prefix < 0 || prefix > 32) {
-    throw new Error(`CIDR prefix must be between 0 and 32: ${cidr}`);
+  if (prefixStr !== "32") {
+    throw new Error(`Only individual IPv4 addresses with a /32 prefix are allowed: ${cidr}`);
   }
 
   const octets = ipStr.split(".");
@@ -141,23 +159,10 @@ function validateCidr(cidr: string): string {
     throw new Error(`Invalid IPv4 address: ${ipStr}`);
   }
 
-  const parsedOctets: number[] = [];
   for (const octetStr of octets) {
     const octet = parseInt(octetStr, 10);
     if (isNaN(octet) || octet < 0 || octet > 255 || octetStr !== String(octet)) {
       throw new Error(`Invalid IPv4 octet: ${octetStr} in ${ipStr}`);
-    }
-    parsedOctets.push(octet);
-  }
-
-  if (prefix !== 32) {
-    const ip32 =
-      (parsedOctets[0] << 24) | (parsedOctets[1] << 16) | (parsedOctets[2] << 8) | parsedOctets[3];
-    const mask = prefix === 0 ? 0 : ~((1 << (32 - prefix)) - 1);
-    const networkIp = ip32 & mask;
-
-    if (ip32 !== networkIp) {
-      throw new Error(`CIDR has host bits set (non-canonical): ${cidr}`);
     }
   }
 

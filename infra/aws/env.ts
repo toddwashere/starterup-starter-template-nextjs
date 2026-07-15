@@ -1,4 +1,9 @@
-import { resolveAwsPoolerConfig, type AwsPoolerConfig } from "../shared/aws-pooler-config";
+import {
+  resolveAwsPoolerConfig,
+  resolveAwsPoolerDns,
+  type AwsPoolerConfig,
+  type AwsPoolerDnsConfig,
+} from "../shared/aws-pooler-config";
 
 /**
  * Operator-supplied identifiers for the AWS profile.
@@ -57,4 +62,8 @@ export function poolerConfigFromEnv(env: AwsEnvName): AwsPoolerConfig {
     appEgressCidrs: process.env.AWS_POOLER_APP_EGRESS_CIDRS ?? "",
     developerCidrs: process.env.AWS_POOLER_DEVELOPER_CIDRS ?? "",
   });
+}
+
+export function poolerDnsFromEnv(env: AwsEnvName): AwsPoolerDnsConfig {
+  return resolveAwsPoolerDns(env, process.env.AWS_DNS_ROOT_DOMAIN ?? "");
 }

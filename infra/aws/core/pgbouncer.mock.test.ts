@@ -137,6 +137,9 @@ describe("buildPgBouncer", () => {
     expect(taskDefs).toHaveLength(1);
     const containers = JSON.parse(taskDefs[0].inputs.containerDefinitions as string) as Array<{
       name: string;
+      image: string;
+      user?: string;
+      command?: string[];
       environment: { name: string; value: string }[];
       dependsOn?: Array<{ containerName: string; condition: string }>;
       mountPoints?: Array<{ sourceVolume: string; containerPath: string; readOnly: boolean }>;
@@ -148,6 +151,15 @@ describe("buildPgBouncer", () => {
     const pgbouncer = containers.find((c) => c.name === "pgbouncer");
     expect(materializer).toBeDefined();
     expect(pgbouncer).toBeDefined();
+    expect(materializer?.image).toBe("edoburu/pgbouncer:v1.23.1-p0");
+    expect(pgbouncer?.image).toBe("edoburu/pgbouncer:v1.23.1-p0");
+
+    // The image runs PgBouncer as postgres. Materialization needs root to write
+    // the shared volume, then must hand ownership to postgres before startup.
+    expect(materializer?.user).toBe("0");
+    expect(materializer?.command?.[0]).toContain("chown postgres:postgres");
+    expect(materializer?.command?.[0]).toContain("chmod 600");
+    expect(materializer?.command?.[0]).toContain("/tls/server.key");
 
     // PgBouncer depends on materializer SUCCESS
     expect(pgbouncer?.dependsOn).toBeDefined();
@@ -313,11 +325,11 @@ describe("buildPgBouncer", () => {
     expect(allInputsStr).not.toContain("-----BEGIN PRIVATE KEY-----");
   });
 
-  it("service depends on initial TLS export Lambda invocation", () => {
+  it("creates the service when given the initial TLS export resource", () => {
     const services = recorded.filter((r) => r.type === TYPES.service);
     expect(services).toHaveLength(1);
-    // Pulumi dependsOn is handled at resource options level, can't directly assert
-    // but we verify it doesn't fail in the build
+    // Pulumi mocks do not expose ResourceOptions.dependsOn; pgbouncer.ts owns
+    // the explicit listener + initialTlsExport dependency list.
   });
 
   it("extends result with NLB DNS, zone ID, cluster, and service names", async () => {

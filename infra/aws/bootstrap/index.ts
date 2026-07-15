@@ -1,7 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { validatedGithubRepo } from "./bootstrap-config";
-import { poolerConfigFromEnv, type AwsEnvName } from "../env";
+import { poolerDnsFromEnv, type AwsEnvName } from "../env";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -23,6 +23,7 @@ const config = new pulumi.Config();
 const region = new pulumi.Config("aws").get("region") ?? "us-east-2";
 const stack = pulumi.getStack();
 const namePrefix = `starter-${stack}`;
+const accountId = aws.getCallerIdentityOutput({}).accountId;
 const baseTags = {
   Project: "starter",
   Stack: stack,
@@ -35,7 +36,7 @@ const validEnvs: AwsEnvName[] = ["sandbox", "staging", "production"];
 if (!validEnvs.includes(stack as AwsEnvName)) {
   throw new Error(`Stack must be one of ${validEnvs.join(", ")}; got ${stack}.`);
 }
-const poolerConfig = poolerConfigFromEnv(stack as AwsEnvName);
+const poolerDns = poolerDnsFromEnv(stack as AwsEnvName);
 
 // Required "owner/repo" scope. Failing closed prevents an unscoped OIDC role
 // from granting arbitrary GitHub repositories workload and state access.
@@ -150,7 +151,7 @@ deployPolicies.forEach((policyName, i) => {
 const hostedZone = new aws.route53.Zone(
   "delegated-zone",
   {
-    name: poolerConfig.zoneName,
+    name: poolerDns.zoneName,
     comment: `Public delegated zone for ${stack} AWS resources`,
     tags: baseTags,
   },
@@ -251,7 +252,10 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "acm:DescribeCertificate",
             "acm:GetCertificate",
             "acm:ListCertificates",
+            "acm:ListTagsForCertificate",
             "acm:AddTagsToCertificate",
+            "acm:RemoveTagsFromCertificate",
+            "acm:UpdateCertificateOptions",
             "acm:DeleteCertificate",
             "acm:ExportCertificate",
           ],
@@ -268,8 +272,11 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "lambda:DeleteFunction",
             "lambda:InvokeFunction",
             "lambda:TagResource",
+            "lambda:UntagResource",
+            "lambda:ListTags",
             "lambda:AddPermission",
             "lambda:RemovePermission",
+            "lambda:GetPolicy",
           ],
           Resource: `arn:aws:lambda:${region}:*:function:${namePrefix}-*`,
         },
@@ -292,6 +299,8 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "events:RemoveTargets",
             "events:ListTargetsByRule",
             "events:TagResource",
+            "events:UntagResource",
+            "events:ListTagsForResource",
           ],
           Resource: `arn:aws:events:${region}:*:rule/${namePrefix}-*`,
         },
@@ -304,8 +313,13 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "logs:DescribeLogGroups",
             "logs:PutRetentionPolicy",
             "logs:TagResource",
+            "logs:UntagResource",
+            "logs:ListTagsForResource",
           ],
-          Resource: `arn:aws:logs:${region}:*:log-group:/aws/lambda/${namePrefix}-*`,
+          Resource: [
+            `arn:aws:logs:${region}:*:log-group:/aws/lambda/${namePrefix}-*`,
+            `arn:aws:logs:${region}:*:log-group:/starter/${namePrefix}/*`,
+          ],
         },
         {
           Sid: "CloudWatchLogsList",
@@ -314,9 +328,27 @@ new aws.iam.RolePolicy("github-deploy-access", {
           Resource: "*",
         },
         {
+          Sid: "CloudWatchAlarms",
+          Effect: "Allow",
+          Action: [
+            "cloudwatch:PutMetricAlarm",
+            "cloudwatch:DeleteAlarms",
+            "cloudwatch:TagResource",
+            "cloudwatch:UntagResource",
+            "cloudwatch:ListTagsForResource",
+          ],
+          Resource: `arn:aws:cloudwatch:${region}:*:alarm:${namePrefix}-*`,
+        },
+        {
+          Sid: "CloudWatchAlarmRead",
+          Effect: "Allow",
+          Action: ["cloudwatch:DescribeAlarms"],
+          Resource: "*",
+        },
+        {
           Sid: "SnsPublish",
           Effect: "Allow",
-          Action: ["sns:Publish", "sns:GetTopicAttributes"],
+          Action: ["sns:Publish", "sns:GetTopicAttributes", "sns:SetTopicAttributes"],
           Resource: `arn:aws:sns:${region}:*:${namePrefix}-*`,
         },
         {
@@ -344,10 +376,18 @@ new aws.iam.RolePolicy("github-deploy-access", {
           Action: [
             "kms:DescribeKey",
             "kms:GetKeyPolicy",
+            "kms:GetKeyRotationStatus",
             "kms:PutKeyPolicy",
             "kms:EnableKeyRotation",
+            "kms:DisableKeyRotation",
+            "kms:EnableKey",
+            "kms:DisableKey",
+            "kms:UpdateKeyDescription",
             "kms:TagResource",
+            "kms:UntagResource",
+            "kms:ListResourceTags",
             "kms:ScheduleKeyDeletion",
+            "kms:CancelKeyDeletion",
             "kms:Encrypt",
             "kms:Decrypt",
             "kms:GenerateDataKey",
@@ -357,31 +397,56 @@ new aws.iam.RolePolicy("github-deploy-access", {
         {
           Sid: "KmsCreate",
           Effect: "Allow",
-          Action: ["kms:CreateKey", "kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
+          Action: [
+            "kms:CreateKey",
+            "kms:CreateAlias",
+            "kms:DeleteAlias",
+            "kms:UpdateAlias",
+            "kms:ListAliases",
+          ],
           Resource: "*",
         },
         {
-          Sid: "EcsServiceDeployment",
+          Sid: "EcsClusterAndServiceDeployment",
           Effect: "Allow",
           Action: [
+            "ecs:DeleteCluster",
+            "ecs:DescribeClusters",
             "ecs:CreateService",
             "ecs:UpdateService",
             "ecs:DeleteService",
             "ecs:DescribeServices",
-            "ecs:RegisterTaskDefinition",
-            "ecs:DeregisterTaskDefinition",
-            "ecs:DescribeTaskDefinition",
             "ecs:TagResource",
+            "ecs:UntagResource",
+            "ecs:ListTagsForResource",
           ],
           Resource: [
-            `arn:aws:ecs:${region}:*:service/${namePrefix}-*`,
-            `arn:aws:ecs:${region}:*:task-definition/${namePrefix}-*`,
+            `arn:aws:ecs:${region}:*:cluster/${namePrefix}-*`,
+            `arn:aws:ecs:${region}:*:service/${namePrefix}-*/${namePrefix}-*`,
           ],
         },
         {
-          Sid: "EcsList",
+          Sid: "EcsTaskDefinitions",
           Effect: "Allow",
-          Action: ["ecs:ListServices", "ecs:ListTaskDefinitions"],
+          Action: [
+            "ecs:DeregisterTaskDefinition",
+            "ecs:TagResource",
+            "ecs:UntagResource",
+            "ecs:ListTagsForResource",
+          ],
+          Resource: [`arn:aws:ecs:${region}:*:task-definition/${namePrefix}-*`],
+        },
+        {
+          Sid: "EcsUnscopedOperations",
+          Effect: "Allow",
+          Action: [
+            "ecs:CreateCluster",
+            "ecs:RegisterTaskDefinition",
+            "ecs:DescribeTaskDefinition",
+            "ecs:ListClusters",
+            "ecs:ListServices",
+            "ecs:ListTaskDefinitions",
+          ],
           Resource: "*",
         },
         {
@@ -402,10 +467,128 @@ new aws.iam.RolePolicy("github-deploy-access", {
 // The core stack publishes operational alerts (certificate expiry, pooler
 // health) to this SNS topic. Subscribe additional endpoints (PagerDuty, Slack)
 // as needed.
-const alertTopic = new aws.sns.Topic("infra-alerts", {
-  name: `${namePrefix}-infra-alerts`,
-  kmsMasterKeyId: "alias/aws/sns",
+const alertTopicName = `${namePrefix}-infra-alerts`;
+const alertTopicArn = pulumi.interpolate`arn:aws:sns:${region}:${accountId}:${alertTopicName}`;
+const alertKey = new aws.kms.Key("infra-alerts", {
+  description: `${namePrefix} infrastructure alert topic encryption key`,
+  enableKeyRotation: true,
+  policy: pulumi.all([accountId, alertTopicArn]).apply(([id, topicArn]) =>
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AccountAdministration",
+          Effect: "Allow",
+          Principal: { AWS: `arn:aws:iam::${id}:root` },
+          Action: "kms:*",
+          Resource: "*",
+        },
+        {
+          Sid: "AllowSnsTopicEncryption",
+          Effect: "Allow",
+          Principal: { Service: "sns.amazonaws.com" },
+          Action: ["kms:GenerateDataKey*", "kms:Decrypt"],
+          Resource: "*",
+          Condition: {
+            StringEquals: {
+              "aws:SourceAccount": id,
+              "aws:SourceArn": topicArn,
+            },
+          },
+        },
+        {
+          Sid: "AllowEventBridgeEncryptedPublish",
+          Effect: "Allow",
+          Principal: { Service: "events.amazonaws.com" },
+          Action: ["kms:GenerateDataKey*", "kms:Decrypt"],
+          Resource: "*",
+          // EventBridge-to-encrypted-SNS KMS requests do not support
+          // aws:SourceAccount or aws:SourceArn. The SNS topic policy below
+          // still restricts publishing to this account's pooler rules.
+        },
+        {
+          Sid: "AllowCloudWatchEncryptedPublish",
+          Effect: "Allow",
+          Principal: { Service: "cloudwatch.amazonaws.com" },
+          Action: ["kms:GenerateDataKey*", "kms:Decrypt"],
+          Resource: "*",
+          Condition: {
+            StringEquals: { "aws:SourceAccount": id },
+            ArnLike: {
+              "aws:SourceArn": `arn:aws:cloudwatch:${region}:${id}:alarm:${namePrefix}-*`,
+            },
+          },
+        },
+      ],
+    }),
+  ),
   tags: baseTags,
+});
+
+new aws.kms.Alias("infra-alerts", {
+  name: `alias/${namePrefix}-infra-alerts`,
+  targetKeyId: alertKey.keyId,
+});
+
+const alertTopic = new aws.sns.Topic("infra-alerts", {
+  name: alertTopicName,
+  kmsMasterKeyId: alertKey.arn,
+  tags: baseTags,
+});
+
+new aws.sns.TopicPolicy("infra-alerts", {
+  arn: alertTopic.arn,
+  policy: pulumi.all([accountId, alertTopic.arn]).apply(([id, topicArn]) =>
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "OwnerPermissions",
+          Effect: "Allow",
+          Principal: { AWS: `arn:aws:iam::${id}:root` },
+          Action: [
+            "sns:AddPermission",
+            "sns:DeleteTopic",
+            "sns:GetTopicAttributes",
+            "sns:ListSubscriptionsByTopic",
+            "sns:Publish",
+            "sns:Receive",
+            "sns:RemovePermission",
+            "sns:SetTopicAttributes",
+            "sns:Subscribe",
+          ],
+          Resource: topicArn,
+          Condition: { StringEquals: { "AWS:SourceOwner": id } },
+        },
+        {
+          Sid: "AllowEventBridgePublish",
+          Effect: "Allow",
+          Principal: { Service: "events.amazonaws.com" },
+          Action: "sns:Publish",
+          Resource: topicArn,
+          Condition: {
+            StringEquals: { "aws:SourceAccount": id },
+            ArnLike: {
+              "aws:SourceArn": `arn:aws:events:${region}:${id}:rule/${namePrefix}-*`,
+            },
+          },
+        },
+        {
+          Sid: "AllowCloudWatchPublish",
+          Effect: "Allow",
+          Principal: { Service: "cloudwatch.amazonaws.com" },
+          Action: "sns:Publish",
+          Resource: topicArn,
+          Condition: {
+            StringEquals: { "aws:SourceAccount": id },
+            ArnLike: {
+              "aws:SourceArn": `arn:aws:cloudwatch:${region}:${id}:alarm:${namePrefix}-*`,
+            },
+          },
+        },
+      ],
+    }),
+  ),
 });
 
 if (budgetNotificationEmail) {

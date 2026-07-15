@@ -109,6 +109,8 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
 
   // --- 3. TLS renewal wiring (depends on service) ----------------------------------
   buildPoolerTlsRenewal({
+    region,
+    accountId,
     certificateArn: tlsFoundation.certificateArn,
     tlsSecretId: tlsFoundation.tlsSecretId,
     exporterFunction: tlsFoundation.exporterFunction,
@@ -119,18 +121,22 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
   });
 
   // --- 4. Route 53 alias (points custom hostname to NLB) --------------------------
-  new aws.route53.Record("pooler-alias", {
-    zoneId: hostedZone.zoneId,
-    name: poolerConfig.hostname,
-    type: "A",
-    aliases: [
-      {
-        name: pgbouncer.loadBalancerDnsName,
-        zoneId: pgbouncer.loadBalancerZoneId,
-        evaluateTargetHealth: true,
-      },
-    ],
-  });
+  new aws.route53.Record(
+    "pooler-alias",
+    {
+      zoneId: hostedZone.zoneId,
+      name: poolerConfig.hostname,
+      type: "A",
+      aliases: [
+        {
+          name: pgbouncer.loadBalancerDnsName,
+          zoneId: pgbouncer.loadBalancerZoneId,
+          evaluateTargetHealth: true,
+        },
+      ],
+    },
+    { dependsOn: [pgbouncer.service] },
+  );
 
   // --- 5. Vercel DATABASE_URL secret (uses custom hostname, not NLB DNS) ----------
   const vercelPooledUrl = pulumi

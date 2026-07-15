@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import * as pulumi from "@pulumi/pulumi";
 
 interface RecordedResource {
@@ -8,38 +8,6 @@ interface RecordedResource {
 }
 
 const recorded: RecordedResource[] = [];
-
-// File-level error handler setup for Lambda serialization errors
-let savedHandlersGlobal: Array<(...args: unknown[]) => void> = [];
-
-beforeAll(() => {
-  // Save existing unhandledRejection handlers at file level
-  savedHandlersGlobal = process.listeners("unhandledRejection") as Array<
-    (...args: unknown[]) => void
-  >;
-  process.removeAllListeners("unhandledRejection");
-
-  // Install scoped handler that only ignores known Pulumi Lambda serialization errors
-  process.on("unhandledRejection", (reason: unknown) => {
-    const err = reason as { message?: string };
-    // Narrowly match Pulumi CallbackFunction serialization errors
-    if (
-      err?.message?.includes("error serializing") &&
-      (err.message.includes('property "code"') || err.message.includes("closure"))
-    ) {
-      // Suppress only this specific known error from pooler-tls Lambda creation
-      return;
-    }
-    // Fail on any other unhandled rejection
-    throw reason;
-  });
-});
-
-afterAll(() => {
-  // Restore original unhandledRejection handlers at file level
-  process.removeAllListeners("unhandledRejection");
-  savedHandlersGlobal.forEach((handler) => process.on("unhandledRejection", handler));
-});
 
 function installMocks() {
   pulumi.runtime.setMocks(
@@ -139,7 +107,7 @@ const TYPES = {
   secretVersion: "aws:secretsmanager/secretVersion:SecretVersion",
   iamRole: "aws:iam/role:Role",
   iamRolePolicy: "aws:iam/rolePolicy:RolePolicy",
-  lambdaFunction: "aws:lambda/callbackFunction:CallbackFunction",
+  lambdaFunction: "aws:lambda/function:Function",
   lambdaInvocation: "aws:lambda/invocation:Invocation",
   cloudwatchMetricAlarm: "aws:cloudwatch/metricAlarm:MetricAlarm",
   lambdaPermission: "aws:lambda/permission:Permission",
@@ -261,15 +229,17 @@ describe("buildPoolerTls", () => {
       : [ecsStatement!.Resource];
     expect(ecsResources.some((r: string) => r.includes("starter-sandbox-pgbouncer"))).toBe(true);
     expect(ecsResources).not.toContain("*");
+
+    const functions = recorded.filter((r) => r.type === TYPES.lambdaFunction);
+    expect(functions).toHaveLength(1);
+    expect(functions[0].inputs.handler).toBe("index.handler");
+    expect(functions[0].inputs.runtime).toBe("nodejs22.x");
+    expect(functions[0].inputs.code).toBeDefined();
+    expect((functions[0].inputs.code as { __pulumiArchive?: boolean }).__pulumiArchive).toBe(true);
   });
 
   it("creates an initial export invocation dependent on validation", () => {
     const invocations = recorded.filter((r) => r.type === TYPES.lambdaInvocation);
-    // Invocation may not be recorded due to Lambda serialization issues in mocks
-    if (invocations.length === 0) {
-      // Skip if serialization prevented creation
-      return;
-    }
     const initialInvocation = invocations.find((inv) =>
       (inv.inputs.input as string)?.includes("initial"),
     );
@@ -286,11 +256,6 @@ describe("buildPoolerTls", () => {
 
   it("creates a CloudWatch alarm for Lambda errors", () => {
     const alarms = recorded.filter((r) => r.type === TYPES.cloudwatchMetricAlarm);
-    // Alarm may not be recorded if Lambda creation failed due to serialization
-    if (alarms.length === 0) {
-      // Skip if serialization prevented Lambda/alarm creation
-      return;
-    }
     const lambdaAlarm = alarms.find(
       (a) =>
         (a.inputs.metricName as string) === "Errors" &&
@@ -306,13 +271,10 @@ describe("buildPoolerTls", () => {
   });
 
   it("returns the certificate ARN, secret ARN, KMS key ARN, and initial invocation", async () => {
-    // This test uses the result from beforeAll to avoid duplicate builds
-    // which can cause serialization hangs
-    // The resource structure is validated by other tests
-    // Just verify the types exist
     expect(recorded.filter((r) => r.type === TYPES.certificate).length).toBeGreaterThan(0);
     expect(recorded.filter((r) => r.type === TYPES.secret).length).toBeGreaterThan(0);
     expect(recorded.filter((r) => r.type === TYPES.kmsKey).length).toBeGreaterThan(0);
+    expect(recorded.filter((r) => r.type === TYPES.lambdaInvocation)).toHaveLength(1);
   });
 });
 
@@ -344,56 +306,47 @@ describe("buildPoolerTlsRenewal", () => {
       taskDefinition: "arn:aws:ecs:us-east-2:123456789012:task-definition/test:1",
     });
 
-    // Build renewal (might fail due to Lambda serialization, but should record some resources)
-    try {
-      mod.buildPoolerTlsRenewal({
-        certificateArn: tlsResult.certificateArn,
-        tlsSecretId: tlsResult.tlsSecretId,
-        exporterFunction: tlsResult.exporterFunction,
-        alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-        clusterName: "starter-sandbox-pgbouncer",
-        serviceName: "starter-sandbox-pgbouncer",
-        service: mockService,
-      });
-    } catch (err) {
-      // Serialization errors are expected in tests
-    }
+    mod.buildPoolerTlsRenewal({
+      region: "us-east-2",
+      accountId: "123456789012",
+      certificateArn: tlsResult.certificateArn,
+      tlsSecretId: tlsResult.tlsSecretId,
+      exporterFunction: tlsResult.exporterFunction,
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
+      clusterName: "starter-sandbox-pgbouncer",
+      serviceName: "starter-sandbox-pgbouncer",
+      service: mockService,
+    });
 
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
     const rules = recorded.filter((r) => r.type === TYPES.eventRule);
-    // EventBridge rules may not be recorded if Lambda serialization prevented completion
-    if (rules.length === 0) {
-      // Skip test if serialization prevented creation
-      return;
-    }
 
     const certAvailableRule = rules.find((rule) => {
       const pattern = rule.inputs.eventPattern as string;
       return pattern && pattern.includes("ACM Certificate Available");
     });
-
-    if (!certAvailableRule) {
-      // Also acceptable if rule wasn't created due to serialization
-      return;
-    }
+    expect(certAvailableRule).toBeDefined();
 
     // Verify the event pattern contains the certificate ARN
-    const pattern = JSON.parse(certAvailableRule.inputs.eventPattern as string);
+    const pattern = JSON.parse(certAvailableRule!.inputs.eventPattern as string);
     expect(pattern.resources).toBeDefined();
 
-    // Verify SNS subscriptions for other certificate events (may not exist)
-    // This is a soft check since serialization may prevent these
-    const snsSubscriptions = recorded.filter((r) => r.type === TYPES.snsTopicSubscription);
-    // Just verify the type exists, don't require specific count
-    expect(Array.isArray(snsSubscriptions)).toBe(true);
+    const renewalTargets = recorded.filter(
+      (r) => r.type === TYPES.eventTarget && (r.inputs.input as string)?.includes('"renewal"'),
+    );
+    expect(renewalTargets).toHaveLength(1);
+    const permissions = recorded.filter((r) => r.type === TYPES.lambdaPermission);
+    expect(permissions).toHaveLength(1);
+    expect(permissions[0].inputs.sourceArn).toBe(
+      "arn:aws:events:us-east-2:123456789012:rule/starter-sandbox-pooler-tls-exporter-renewal",
+    );
   }, 10000); // Increase timeout
 
-  it("wires service dependency into renewal EventBridge rule (regression: ServiceMarker bug)", async () => {
-    // This test verifies the Critical fix where buildPoolerTlsRenewal now receives
-    // the REAL aws.ecs.Service (not a ServiceMarker stand-in) and threads it into
-    // the EventBridge rule's dependsOn, ensuring the rule is not created until after
-    // the service exists.
+  it("accepts a real ECS service while creating the renewal EventBridge rule", async () => {
+    // Pulumi mocks cannot expose ResourceOptions.dependsOn. This regression test
+    // verifies the function accepts a real service resource and still creates
+    // the renewal rule; pooler-tls.ts owns the explicit dependsOn wiring.
     //
     // Context: buildPoolerTlsRenewal (pooler-tls.ts) sets { dependsOn: [service] }
     // on the renewal EventRule. The service parameter comes from buildPgBouncer's
@@ -427,21 +380,17 @@ describe("buildPoolerTlsRenewal", () => {
       name: "sentinel-service-name",
     });
 
-    // Call buildPoolerTlsRenewal with the sentinel service
-    // If the function doesn't use the service parameter, this test documents that gap
-    try {
-      mod.buildPoolerTlsRenewal({
-        certificateArn: tlsResult.certificateArn,
-        tlsSecretId: tlsResult.tlsSecretId,
-        exporterFunction: tlsResult.exporterFunction,
-        alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-        clusterName: "starter-sandbox-pgbouncer",
-        serviceName: "starter-sandbox-pgbouncer",
-        service: sentinelService,
-      });
-    } catch (err) {
-      // Serialization errors are expected
-    }
+    mod.buildPoolerTlsRenewal({
+      region: "us-east-2",
+      accountId: "123456789012",
+      certificateArn: tlsResult.certificateArn,
+      tlsSecretId: tlsResult.tlsSecretId,
+      exporterFunction: tlsResult.exporterFunction,
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
+      clusterName: "starter-sandbox-pgbouncer",
+      serviceName: "starter-sandbox-pgbouncer",
+      service: sentinelService,
+    });
 
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
@@ -450,27 +399,17 @@ describe("buildPoolerTlsRenewal", () => {
     const sentinel = services.find((s) => s.inputs.name === "sentinel-service-name");
     expect(sentinel, "Sentinel service must be recorded as a real resource").toBeDefined();
 
-    // Verify EventBridge rule was created (may be missing due to Lambda serialization)
-    // The renewal EventRule's { dependsOn: [service] } in buildPoolerTlsRenewal is
-    // the key wiring. Pulumi's mock newResource doesn't expose dependsOn in args, so
-    // we verify structurally: the service is a real resource, and the rule exists.
+    // Pulumi's mock newResource doesn't expose dependsOn in args, so verify
+    // structurally that the service is a real resource and the rule exists.
     const rules = recorded.filter((r) => r.type === TYPES.eventRule);
-    if (rules.length > 0) {
-      const renewalRule = rules.find((rule) => {
-        const pattern = rule.inputs.eventPattern as string;
-        return pattern?.includes("ACM Certificate Available");
-      });
-      // If the rule exists, the dependency chain is intact (service → rule)
-      // If it doesn't exist, Lambda serialization prevented it, but the sentinel
-      // service existing proves the parameter is correctly typed and passed
-      if (renewalRule) {
-        expect(renewalRule.inputs.eventPattern).toBeDefined();
-      }
-    }
+    const renewalRule = rules.find((rule) => {
+      const pattern = rule.inputs.eventPattern as string;
+      return pattern?.includes("ACM Certificate Available");
+    });
+    expect(renewalRule).toBeDefined();
+    expect(renewalRule?.inputs.eventPattern).toBeDefined();
 
-    // The existence of the sentinel service in recorded resources proves:
-    // 1. buildPoolerTlsRenewal receives a real aws.ecs.Service (not a marker)
-    // 2. The service is properly typed and usable by Pulumi
-    // 3. The fix ensures the dependency chain: service creation → rule creation
+    // The sentinel proves buildPoolerTlsRenewal receives a real aws.ecs.Service
+    // rather than the former marker stand-in.
   }, 10000);
 });

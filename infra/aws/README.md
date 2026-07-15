@@ -11,8 +11,8 @@ Three Pulumi projects live here:
 
 | Project                 | Path                   | What it owns                                                                                                                                                                                       |
 | ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget. Run once per account with admin credentials.                                                                        |
-| `starter-aws-core`      | `infra/aws/core/`      | VPC, RDS Postgres, RDS Proxy, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries (derived + manual placeholders), EventBridge Scheduler rules, compliance resources |
+| `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget, delegated Route 53 zone, and encrypted infrastructure-alert SNS topic. Run once per account with admin credentials. |
+| `starter-aws-core`      | `infra/aws/core/`      | VPC, RDS Postgres, RDS Proxy, public TLS PgBouncer, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries, and compliance resources                                    |
 | `starter-aws-apps`      | `infra/aws/apps/`      | 4 App Runner services (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector                                                                                           |
 
 `apps` depends on `core` via `pulumi.StackReference`. Deploy order: `bootstrap` → `core` → `apps`.
@@ -270,7 +270,11 @@ aws acm describe-certificate --certificate-arn <cert-arn> \
   --profile starter-<env> --region us-east-2
 
 # Lambda function errors (TLS exporter)
-aws logs tail /aws/lambda/<function-name> --follow \
+aws logs tail /aws/lambda/starter-<env>-pooler-tls-exporter --follow \
+  --profile starter-<env> --region us-east-2
+
+# PgBouncer and TLS materializer container logs
+aws logs tail /starter/starter-<env>/pgbouncer --follow \
   --profile starter-<env> --region us-east-2
 
 # CloudWatch alarms (certificate expiration, Lambda errors)
@@ -319,8 +323,8 @@ in DNS query logs, CloudTrail logs, and third-party monitoring tools.
 Acceptable DNS label: `db.production.aws.example.com`\
 Unacceptable DNS label: `db-patient-john-doe.production.aws.example.com`
 
-Acceptable log group: `/starter/production/pgbouncer`\
-Unacceptable log group: `/starter/production/patient-12345-queries`
+Acceptable log group: `/starter/starter-production/pgbouncer`\
+Unacceptable log group: `/starter/starter-production/patient-12345-queries`
 
 When in doubt, use only the environment name and resource type.
 

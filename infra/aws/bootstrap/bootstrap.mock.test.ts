@@ -23,8 +23,8 @@ describe("aws bootstrap layer (mocked)", () => {
     vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
     vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "myapp-cross-account-state");
     vi.stubEnv("AWS_DNS_ROOT_DOMAIN", "example.com");
-    vi.stubEnv("AWS_POOLER_APP_EGRESS_CIDRS", "203.0.113.10/32");
-    vi.stubEnv("AWS_POOLER_DEVELOPER_CIDRS", "198.51.100.20/32");
+    vi.stubEnv("AWS_POOLER_APP_EGRESS_CIDRS", "");
+    vi.stubEnv("AWS_POOLER_DEVELOPER_CIDRS", "");
     pulumi.runtime.setMocks(
       {
         newResource: (args) => {
@@ -49,12 +49,24 @@ describe("aws bootstrap layer (mocked)", () => {
               "ns-4.example.com",
             ];
           }
+          if (args.type === "aws:sns/topic:Topic") {
+            baseState.arn = `arn:aws:sns:us-east-2:123456789012:${args.inputs.name}`;
+          }
           return {
             id: `${args.name}-id`,
             state: baseState,
           };
         },
-        call: (args) => args.inputs,
+        call: (args) => {
+          if (args.token.includes("getCallerIdentity")) {
+            return {
+              accountId: "123456789012",
+              arn: "arn:aws:iam::123456789012:user/test",
+              userId: "test",
+            };
+          }
+          return args.inputs;
+        },
       },
       "starter-aws-bootstrap",
       "sandbox",
@@ -146,16 +158,81 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(zones[0].inputs.comment as string).toContain("delegated");
   });
 
-  it("creates an SNS alert topic with encryption and subscription", () => {
+  it("creates an SNS alert topic encrypted with a rotating customer-managed key", async () => {
+    const keys = recorded.filter((r) => r.type === "aws:kms/key:Key");
+    const alertKey = keys.find((key) =>
+      (key.inputs.description as string)?.includes("infrastructure alert"),
+    );
+    expect(alertKey).toBeDefined();
+    expect(alertKey?.inputs.enableKeyRotation).toBe(true);
+
+    const aliases = recorded.filter((r) => r.type === "aws:kms/alias:Alias");
+    expect(
+      aliases.some((alias) => alias.inputs.name === "alias/starter-sandbox-infra-alerts"),
+    ).toBe(true);
+
+    const keyPolicy = await new Promise<string>((resolve) =>
+      pulumi.output(alertKey!.inputs.policy as string).apply(resolve),
+    );
+    const parsedKeyPolicy = JSON.parse(keyPolicy);
+    const snsGrant = parsedKeyPolicy.Statement.find(
+      (statement: { Principal?: { Service?: string } }) =>
+        statement.Principal?.Service === "sns.amazonaws.com",
+    );
+    expect(snsGrant.Action).toEqual(["kms:GenerateDataKey*", "kms:Decrypt"]);
+    expect(snsGrant.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
+    expect(snsGrant.Condition.StringEquals["aws:SourceArn"]).toBe(
+      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+    );
+    const eventBridgeGrant = parsedKeyPolicy.Statement.find(
+      (statement: { Principal?: { Service?: string } }) =>
+        statement.Principal?.Service === "events.amazonaws.com",
+    );
+    expect(eventBridgeGrant.Action).toEqual(["kms:GenerateDataKey*", "kms:Decrypt"]);
+    // AWS does not provide SourceArn/SourceAccount context for EventBridge
+    // publishing to an encrypted SNS topic; adding either blocks delivery.
+    expect(eventBridgeGrant.Condition).toBeUndefined();
+
     const topics = recorded.filter((r) => r.type === "aws:sns/topic:Topic");
     expect(topics).toHaveLength(1);
     expect(topics[0].inputs.name).toBe("starter-sandbox-infra-alerts");
-    expect(topics[0].inputs.kmsMasterKeyId).toBe("alias/aws/sns");
+    expect(topics[0].inputs.kmsMasterKeyId).toBeDefined();
+    expect(topics[0].inputs.kmsMasterKeyId).not.toBe("alias/aws/sns");
     const subscriptions = recorded.filter(
       (r) => r.type === "aws:sns/topicSubscription:TopicSubscription",
     );
     expect(subscriptions).toHaveLength(1);
     expect(subscriptions[0].inputs.endpoint).toBe("ops@example.com");
+  });
+
+  it("allows only account-scoped EventBridge and CloudWatch publishers", async () => {
+    const policies = recorded.filter((r) => r.type === "aws:sns/topicPolicy:TopicPolicy");
+    expect(policies).toHaveLength(1);
+    const policyJson = await new Promise<string>((resolve) =>
+      pulumi.output(policies[0].inputs.policy as string).apply(resolve),
+    );
+    const policy = JSON.parse(policyJson);
+
+    const owner = policy.Statement.find(
+      (statement: { Sid?: string }) => statement.Sid === "OwnerPermissions",
+    );
+    expect(owner.Principal).toEqual({ AWS: "arn:aws:iam::123456789012:root" });
+    expect(owner.Action).toContain("sns:SetTopicAttributes");
+
+    for (const service of ["events.amazonaws.com", "cloudwatch.amazonaws.com"]) {
+      const publisher = policy.Statement.find(
+        (statement: { Principal?: { Service?: string } }) =>
+          statement.Principal?.Service === service,
+      );
+      expect(publisher).toBeDefined();
+      expect(publisher.Action).toBe("sns:Publish");
+      expect(publisher.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
+      expect(publisher.Condition.ArnLike["aws:SourceArn"]).toContain("123456789012");
+    }
+
+    expect(
+      policy.Statement.every((statement: { Principal?: unknown }) => statement.Principal !== "*"),
+    ).toBe(true);
   });
 
   it("attaches an inline deployment policy with least-privilege resource scoping", async () => {
@@ -168,24 +245,49 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(policy).toContain("route53:ChangeResourceRecordSets");
     expect(policy).toContain("acm:RequestCertificate");
     expect(policy).toContain("acm:ExportCertificate");
+    expect(policy).toContain("acm:ListTagsForCertificate");
+    expect(policy).toContain("acm:RemoveTagsFromCertificate");
+    expect(policy).toContain("acm:UpdateCertificateOptions");
     expect(policy).toContain("lambda:CreateFunction");
     expect(policy).toContain("events:PutRule");
     expect(policy).toContain("logs:CreateLogGroup");
+    expect(policy).toContain("cloudwatch:TagResource");
     expect(policy).toContain("sns:Publish");
+    expect(policy).toContain("sns:SetTopicAttributes");
     expect(policy).toContain("secretsmanager:CreateSecret");
     expect(policy).toContain("kms:CreateKey");
+    expect(policy).toContain("kms:UpdateKeyDescription");
+    expect(policy).toContain("kms:DeleteAlias");
     expect(policy).toContain("ecs:CreateService");
+    expect(policy).toContain("ecs:CreateCluster");
     expect(policy).toContain("iam:PassRole");
     expect(policy).toContain("starter-sandbox-pooler-*");
     // PassRole must also cover the PgBouncer ECS execution/task roles the core
     // stack creates, otherwise ECS service deploys fail once IAMFullAccess is
     // tightened away from the managed base policies.
     expect(policy).toContain("starter-sandbox-pgbouncer-*");
+    const parsed = JSON.parse(policy);
+    const logStatement = parsed.Statement.find(
+      (statement: { Sid?: string }) => statement.Sid === "CloudWatchLogs",
+    );
+    expect(logStatement.Resource).toContain(
+      "arn:aws:logs:us-east-2:*:log-group:/starter/starter-sandbox/*",
+    );
+    const ecsUnscoped = parsed.Statement.find(
+      (statement: { Sid?: string }) => statement.Sid === "EcsUnscopedOperations",
+    );
+    expect(ecsUnscoped.Resource).toBe("*");
+    expect(ecsUnscoped.Action).toContain("ecs:CreateCluster");
+    expect(ecsUnscoped.Action).toContain("ecs:RegisterTaskDefinition");
+    const ecsDeployment = parsed.Statement.find(
+      (statement: { Sid?: string }) => statement.Sid === "EcsClusterAndServiceDeployment",
+    );
+    expect(ecsDeployment.Action).toContain("ecs:DescribeClusters");
+    expect(ecsDeployment.Resource).toContain("arn:aws:ecs:us-east-2:*:cluster/starter-sandbox-*");
     // Secrets scope must match the actual secret names the core stack creates
     // (all use the leading-slash /starter/<stack>/ prefix).
     expect(policy).toContain("secret:/starter/sandbox/*");
     // KMS data-plane actions must be region-scoped, not bare "*"
-    const parsed = JSON.parse(policy);
     const kmsStatements = parsed.Statement.filter((s: { Action?: string[] }) =>
       s.Action?.some((a: string) => a.includes("kms:")),
     );
@@ -213,6 +315,8 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(await output(infra.hostedZoneId)).toBeTruthy();
     expect(await output(infra.hostedZoneName)).toBe("sandbox.aws.example.com");
     expect(await output(infra.hostedZoneNameServers)).toHaveLength(4);
-    expect(await output(infra.infraAlertTopicArn)).toContain("arn:aws:iam::");
+    expect(await output(infra.infraAlertTopicArn)).toBe(
+      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+    );
   });
 });

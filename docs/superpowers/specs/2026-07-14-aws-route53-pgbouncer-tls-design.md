@@ -242,7 +242,7 @@ Static IP requirement, and the recurring developer-IP update procedure.
 
 ## Critical Tests
 
-- `infra/aws/pooler-config.test.ts`: derives environment zone and database
+- `infra/shared/aws-pooler-config.test.ts`: derives environment zone and database
   names; parses multiple comma-delimited `/32` entries; trims and deduplicates
   CIDRs; rejects malformed domains, malformed/non-IPv4 CIDRs, empty public
   allowlists, and `0.0.0.0/0`.

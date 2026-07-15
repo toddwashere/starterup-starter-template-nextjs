@@ -408,25 +408,6 @@ const manualSecrets = buildManualSecrets({
 // NLB (public) backed by Fargate tasks in private subnets. RDS stays private.
 // The pooler uses a custom Route 53 hostname with verified TLS.
 
-// Resolve pooler configuration and bootstrap resources
-const poolerConfig = poolerConfigFromEnv(env);
-let hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
-let alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
-try {
-  [hostedZone, alertTopic] = await Promise.all([
-    aws.route53.getZone({
-      name: `${poolerConfig.zoneName}.`,
-      privateZone: false,
-    }),
-    aws.sns.getTopic({ name: `${namePrefix}-infra-alerts` }),
-  ]);
-} catch (error) {
-  throw new Error(
-    `Missing ${poolerConfig.zoneName} bootstrap resources. Deploy bootstrap, ` +
-      `delegate its nameservers, and retry core. Cause: ${String(error)}`,
-  );
-}
-
 let poolerHostname: string | undefined;
 let poolerCertificateArn: pulumi.Output<string> | undefined;
 let poolerTlsAlarmName: pulumi.Output<string> | undefined;
@@ -434,6 +415,24 @@ let poolerEndpointOutput: string | undefined;
 let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
 
 if (cfg.database.pooler.enabled) {
+  const poolerConfig = poolerConfigFromEnv(env);
+  let hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
+  let alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
+  try {
+    [hostedZone, alertTopic] = await Promise.all([
+      aws.route53.getZone({
+        name: `${poolerConfig.zoneName}.`,
+        privateZone: false,
+      }),
+      aws.sns.getTopic({ name: `${namePrefix}-infra-alerts` }),
+    ]);
+  } catch (error) {
+    throw new Error(
+      `Missing ${poolerConfig.zoneName} bootstrap resources. Deploy bootstrap, ` +
+        `delegate its nameservers, and retry core. Cause: ${String(error)}`,
+    );
+  }
+
   const accountId = aws.getCallerIdentityOutput().accountId;
 
   const poolerStack = buildPoolerStack({

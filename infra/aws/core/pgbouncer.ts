@@ -50,7 +50,7 @@ export interface PgBouncerResult {
 
 const PGBOUNCER_PORT = 6432;
 // Pinned PgBouncer image. The entrypoint reads DB_* / POOL_MODE / TLS env vars.
-const PGBOUNCER_IMAGE = "edoburu/pgbouncer:1.23.1-p0";
+const PGBOUNCER_IMAGE = "edoburu/pgbouncer:v1.23.1-p0";
 
 /**
  * Public PgBouncer pooler in front of the private RDS instance.
@@ -62,9 +62,9 @@ const PGBOUNCER_IMAGE = "edoburu/pgbouncer:1.23.1-p0";
  *
  * Note on TLS: Postgres negotiates TLS via an in-band SSLRequest, so an NLB TLS
  * listener cannot terminate it. The NLB uses a plain TCP listener on 6432 and
- * PgBouncer terminates client TLS itself (CLIENT_TLS_SSLMODE=require). The
- * server cert/key must be supplied to the task (e.g. mounted from Secrets
- * Manager); provisioning that material is a deployment step, not encoded here.
+ * PgBouncer terminates client TLS itself (CLIENT_TLS_SSLMODE=require). A
+ * non-essential init container materializes the server cert/key from Secrets
+ * Manager into a shared task volume before PgBouncer starts.
  */
 export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   const {
@@ -207,15 +207,20 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
           name: "tls-materializer",
           image: PGBOUNCER_IMAGE,
           essential: false,
+          // The image runs as postgres by default. Root is needed to initialize
+          // the Fargate-managed volume; ownership is handed back to postgres
+          // before the PgBouncer container reads the key.
+          user: "0",
           entryPoint: ["/bin/sh", "-c"],
           command: [
-            // Separate echoes guarantee a newline between the leaf certificate
-            // and the intermediate chain, so the concatenated PEM stays valid
-            // regardless of ACM's trailing-newline formatting.
-            'echo "$TLS_CERTIFICATE" > /tls/server.crt && ' +
-              'echo "$TLS_CERTIFICATE_CHAIN" >> /tls/server.crt && ' +
-              'echo "$TLS_PRIVATE_KEY" > /tls/server.key && ' +
-              "chmod 600 /tls/server.key && " +
+            // Separate writes guarantee a newline between the leaf certificate
+            // and intermediate chain regardless of ACM's PEM formatting.
+            "umask 077 && " +
+              'printf "%s\\n" "$TLS_CERTIFICATE" > /tls/server.crt && ' +
+              'printf "%s\\n" "$TLS_CERTIFICATE_CHAIN" >> /tls/server.crt && ' +
+              'printf "%s\\n" "$TLS_PRIVATE_KEY" > /tls/server.key && ' +
+              "chown postgres:postgres /tls/server.crt /tls/server.key && " +
+              "chmod 600 /tls/server.crt /tls/server.key && " +
               "exit 0",
           ],
           secrets: [
