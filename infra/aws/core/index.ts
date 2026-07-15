@@ -8,9 +8,10 @@ import { config as productionConfig } from "../config.production";
 import { resolveCompliance } from "../../shared/compliance";
 import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
-import { buildPgBouncer } from "./pgbouncer";
+import { buildPoolerStack } from "./pooler-stack";
 import { buildQueues } from "./queues";
 import { buildManualSecrets } from "./manual-secrets";
+import { poolerConfigFromEnv } from "../env";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -414,38 +415,63 @@ const manualSecrets = buildManualSecrets({
 // --- Public PgBouncer pooler (Vercel -> pooled Postgres) --------------------
 // RDS Proxy can't be public, so Vercel's pooled path terminates at a PgBouncer
 // NLB (public) backed by Fargate tasks in private subnets. RDS stays private.
-// A separate Vercel-facing DATABASE_URL secret points at the NLB endpoint.
-let poolerEndpoint: pulumi.Output<string> | undefined;
+// The pooler uses a custom Route 53 hostname with verified TLS.
+
+// Resolve pooler configuration and bootstrap resources
+const poolerConfig = poolerConfigFromEnv(env);
+let hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
+let alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
+try {
+  [hostedZone, alertTopic] = await Promise.all([
+    aws.route53.getZone({
+      name: `${poolerConfig.zoneName}.`,
+      privateZone: false,
+    }),
+    aws.sns.getTopic({ name: `${namePrefix}-infra-alerts` }),
+  ]);
+} catch (error) {
+  throw new Error(
+    `Missing ${poolerConfig.zoneName} bootstrap resources. Deploy bootstrap, ` +
+      `delegate its nameservers, and retry core. Cause: ${String(error)}`,
+  );
+}
+
+let poolerHostname: string | undefined;
+let poolerCertificateArn: pulumi.Output<string> | undefined;
+let poolerTlsAlarmName: pulumi.Output<string> | undefined;
+let poolerEndpointOutput: string | undefined;
 let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
+
 if (cfg.database.pooler.enabled) {
-  const pgbouncer = buildPgBouncer({
+  const accountId = aws.getCallerIdentityOutput().accountId;
+  
+  const poolerStack = buildPoolerStack({
     namePrefix,
     region,
+    accountId,
+    poolerConfig,
+    hostedZone,
+    alertTopic,
     vpcId: vpc.id,
     publicSubnetIds: publicSubnets.map((s) => s.id),
     privateSubnetIds,
     dbSecurityGroupId: dbSg.id,
     dbHost: db.address,
     dbName: "starter",
+    dbUsername: "starter",
+    dbPassword: dbPassword.result,
     dbSecretArn: proxyAuthSecret.arn,
     pooler: cfg.database.pooler,
     cmekKeyArn: cmekKeyId,
+    isProduction,
     tags: baseTags,
   });
-  poolerEndpoint = pgbouncer.poolerEndpoint;
 
-  // sslmode=verify-full: the client validates PgBouncer's server certificate.
-  const vercelPooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${poolerEndpoint}:6432/starter?sslmode=verify-full`;
-  const vercelDbUrlSecret = new aws.secretsmanager.Secret("vercel-database-url", {
-    name: `/starter/${stack}/vercel-database-url`,
-    recoveryWindowInDays: isProduction ? 7 : 0,
-    kmsKeyId: cmekKeyId,
-  });
-  new aws.secretsmanager.SecretVersion("vercel-database-url-v1", {
-    secretId: vercelDbUrlSecret.id,
-    secretString: vercelPooledUrl,
-  });
-  vercelDbUrlSecretArn = vercelDbUrlSecret.arn;
+  poolerHostname = poolerStack.poolerHostname;
+  poolerCertificateArn = poolerStack.poolerCertificateArn;
+  poolerTlsAlarmName = poolerStack.poolerTlsAlarmName;
+  poolerEndpointOutput = poolerStack.poolerEndpointOutput;
+  vercelDbUrlSecretArn = poolerStack.vercelDatabaseUrlSecretArn;
 }
 
 // --- Vercel OIDC access (hybrid: Vercel apps -> AWS data/AI plane) -----------
@@ -505,6 +531,7 @@ export const dbInstanceEndpoint = db.endpoint;
 // ARN of the Vercel OIDC access role (undefined for pure-AWS deploys). Paste
 // into the Vercel project as AWS_ROLE_ARN.
 export const vercelAccessRoleArnOutput = vercelAccessRoleArn;
-// Public PgBouncer endpoint + the Vercel-facing pooled DATABASE_URL secret.
-export const poolerEndpointOutput = poolerEndpoint;
+// Public PgBouncer pooler outputs (custom hostname, not generated NLB name).
+export { poolerHostname, poolerCertificateArn, poolerTlsAlarmName, poolerEndpointOutput };
+// Vercel-facing pooled DATABASE_URL secret ARN.
 export const vercelDatabaseUrlSecretArn = vercelDbUrlSecretArn;
