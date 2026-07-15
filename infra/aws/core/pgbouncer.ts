@@ -86,7 +86,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   } = args;
 
   // --- Security groups -------------------------------------------------------
-  
+
   // NLB security group (restricted ingress via separate rules)
   const nlbSg = new aws.ec2.SecurityGroup(`${namePrefix}-pgbouncer-nlb-sg`, {
     vpcId,
@@ -97,18 +97,15 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
 
   // One ingress rule per allowed CIDR
   for (const allowed of allowedCidrs) {
-    new aws.ec2.SecurityGroupRule(
-      `${namePrefix}-nlb-ingress-${allowed.source}`,
-      {
-        type: "ingress",
-        securityGroupId: nlbSg.id,
-        fromPort: PGBOUNCER_PORT,
-        toPort: PGBOUNCER_PORT,
-        protocol: "tcp",
-        cidrBlocks: [allowed.cidr],
-        description: `PgBouncer from ${allowed.source} egress`,
-      },
-    );
+    new aws.ec2.SecurityGroupRule(`${namePrefix}-nlb-ingress-${allowed.source}`, {
+      type: "ingress",
+      securityGroupId: nlbSg.id,
+      fromPort: PGBOUNCER_PORT,
+      toPort: PGBOUNCER_PORT,
+      protocol: "tcp",
+      cidrBlocks: [allowed.cidr],
+      description: `PgBouncer from ${allowed.source} egress`,
+    });
   }
 
   // PgBouncer task security group (no inline public ingress)
@@ -150,8 +147,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   });
   new aws.iam.RolePolicyAttachment(`${namePrefix}-pgbouncer-exec-attach`, {
     role: executionRole.name,
-    policyArn:
-      "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    policyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
   });
   new aws.iam.RolePolicy(`${namePrefix}-pgbouncer-exec-secrets`, {
     role: executionRole.id,
@@ -212,8 +208,8 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
           command: [
             'echo "$TLS_CERTIFICATE$TLS_CERTIFICATE_CHAIN" > /tls/server.crt && ' +
               'echo "$TLS_PRIVATE_KEY" > /tls/server.key && ' +
-              'chmod 600 /tls/server.key && ' +
-              'exit 0',
+              "chmod 600 /tls/server.key && " +
+              "exit 0",
           ],
           secrets: [
             { name: "TLS_CERTIFICATE", valueFrom: `${tlsSecret}:certificate::` },
@@ -223,9 +219,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
             },
             { name: "TLS_PRIVATE_KEY", valueFrom: `${tlsSecret}:privateKey::` },
           ],
-          mountPoints: [
-            { sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: false },
-          ],
+          mountPoints: [{ sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: false }],
           logConfiguration: {
             logDriver: "awslogs",
             options: {
@@ -239,9 +233,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
           name: "pgbouncer",
           image: PGBOUNCER_IMAGE,
           essential: true,
-          dependsOn: [
-            { containerName: "tls-materializer", condition: "SUCCESS" },
-          ],
+          dependsOn: [{ containerName: "tls-materializer", condition: "SUCCESS" }],
           portMappings: [{ containerPort: PGBOUNCER_PORT, protocol: "tcp" }],
           environment: [
             { name: "DB_HOST", value: host },
@@ -261,9 +253,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
             { name: "DB_USER", valueFrom: `${dbSecret}:username::` },
             { name: "DB_PASSWORD", valueFrom: `${dbSecret}:password::` },
           ],
-          mountPoints: [
-            { sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: true },
-          ],
+          mountPoints: [{ sourceVolume: "pooler-tls", containerPath: "/tls", readOnly: true }],
           logConfiguration: {
             logDriver: "awslogs",
             options: {
@@ -276,20 +266,17 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
       ]),
     );
 
-  const taskDefinition = new aws.ecs.TaskDefinition(
-    `${namePrefix}-pgbouncer-task`,
-    {
-      family: `${namePrefix}-pgbouncer`,
-      cpu: "256",
-      memory: "512",
-      networkMode: "awsvpc",
-      requiresCompatibilities: ["FARGATE"],
-      executionRoleArn: executionRole.arn,
-      containerDefinitions,
-      volumes: [{ name: "pooler-tls" }],
-      tags,
-    },
-  );
+  const taskDefinition = new aws.ecs.TaskDefinition(`${namePrefix}-pgbouncer-task`, {
+    family: `${namePrefix}-pgbouncer`,
+    cpu: "256",
+    memory: "512",
+    networkMode: "awsvpc",
+    requiresCompatibilities: ["FARGATE"],
+    executionRoleArn: executionRole.arn,
+    containerDefinitions,
+    volumes: [{ name: "pooler-tls" }],
+    tags,
+  });
 
   // --- Network Load Balancer (public) + target group + listener -------------
   const nlb = new aws.lb.LoadBalancer(`${namePrefix}-pgbouncer-nlb`, {

@@ -22,7 +22,7 @@ describe("buildPoolerDatabaseUrl", () => {
       hostname: "db.sandbox.aws.example.com",
       database: "starter",
     });
-    
+
     // Assert the URL uses the custom hostname, not an NLB DNS name
     expect(url).toContain("@db.sandbox.aws.example.com:");
     expect(url).not.toContain("elb.amazonaws.com");

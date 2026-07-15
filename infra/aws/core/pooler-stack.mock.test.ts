@@ -25,9 +25,9 @@ function installMocks() {
             },
           };
         }
-        
+
         recorded.push({ type: args.type, name: args.name, inputs: args.inputs });
-        
+
         const baseState = {
           ...args.inputs,
           name: (args.inputs.name as string | undefined) ?? args.name,
@@ -137,20 +137,19 @@ describe("buildPoolerStack integration", () => {
     vi.resetModules();
     recorded.length = 0;
     installMocks();
-    
+
     // Save existing unhandledRejection handlers
-    savedHandlers = process.listeners('unhandledRejection') as Array<(...args: unknown[]) => void>;
-    process.removeAllListeners('unhandledRejection');
-    
+    savedHandlers = process.listeners("unhandledRejection") as Array<(...args: unknown[]) => void>;
+    process.removeAllListeners("unhandledRejection");
+
     // Install scoped handler that only ignores known Pulumi Lambda serialization errors
-    process.on('unhandledRejection', (reason: unknown) => {
+    process.on("unhandledRejection", (reason: unknown) => {
       const err = reason as { message?: string };
       // Narrowly match Pulumi CallbackFunction serialization errors related to closure
       // serialization of native code (e.g., node:crypto randomBytes)
       if (
-        err?.message?.includes('error serializing') &&
-        (err.message.includes('property "code"') || 
-         err.message.includes('closure'))
+        err?.message?.includes("error serializing") &&
+        (err.message.includes('property "code"') || err.message.includes("closure"))
       ) {
         // Suppress only this specific known error from pooler-tls Lambda creation
         return;
@@ -158,93 +157,92 @@ describe("buildPoolerStack integration", () => {
       // Fail on any other unhandled rejection
       throw reason;
     });
-    
+
     const mod = await import("./pooler-stack.js");
     const aws = await import("@pulumi/aws");
     const random = await import("@pulumi/random");
-    
+
     // Mock password
     const dbPassword = new random.RandomPassword("test-password", {
       length: 32,
       special: false,
     });
-    
+
     // Build the pooler stack (Lambda serialization errors are expected and suppressed by handler)
     try {
       mod.buildPoolerStack({
-      namePrefix: "starter-sandbox",
-      region: "us-east-2",
-      accountId: "123456789012",
-      poolerConfig: {
-        rootDomain: "example.com",
-        zoneName: "sandbox.aws.example.com",
-        hostname: "db.sandbox.aws.example.com",
-        allowedCidrs: [
-          { cidr: "192.0.2.0/24", source: "application" },
-          { cidr: "198.51.100.0/24", source: "developer" },
-        ],
-      },
-      hostedZone: {
-        zoneId: "ZDELEGATED",
-        name: "sandbox.aws.example.com",
-        arn: "arn:aws:route53:::hostedzone/ZDELEGATED",
-        nameServers: [],
-        tags: {},
-        callerReference: "test-ref",
-        comment: "",
-        id: "ZDELEGATED",
-        linkedServiceDescription: "",
-        linkedServicePrincipal: "",
-        privateZone: false,
-        resourceRecordSetCount: 10,
-        primaryNameServer: "ns-1.awsdns-00.com",
-      },
-      alertTopic: {
-        arn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
-        name: "starter-sandbox-infra-alerts",
-        id: "starter-sandbox-infra-alerts",
+        namePrefix: "starter-sandbox",
         region: "us-east-2",
-        tags: {},
-      },
-      vpcId: "vpc-12345",
-      publicSubnetIds: ["subnet-pub-1", "subnet-pub-2"],
-      privateSubnetIds: ["subnet-priv-1", "subnet-priv-2"],
-      dbSecurityGroupId: "sg-db",
-      dbHost: "starter-sandbox-db.region.rds.amazonaws.com",
-      dbName: "starter",
-      dbUsername: "starter",
-      dbPassword: dbPassword.result,
-      dbSecretArn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:test",
-      pooler: { poolSize: 20, publicListener: true },
-      isProduction: false,
+        accountId: "123456789012",
+        poolerConfig: {
+          rootDomain: "example.com",
+          zoneName: "sandbox.aws.example.com",
+          hostname: "db.sandbox.aws.example.com",
+          allowedCidrs: [
+            { cidr: "192.0.2.0/24", source: "application" },
+            { cidr: "198.51.100.0/24", source: "developer" },
+          ],
+        },
+        hostedZone: {
+          zoneId: "ZDELEGATED",
+          name: "sandbox.aws.example.com",
+          arn: "arn:aws:route53:::hostedzone/ZDELEGATED",
+          nameServers: [],
+          tags: {},
+          callerReference: "test-ref",
+          comment: "",
+          id: "ZDELEGATED",
+          linkedServiceDescription: "",
+          linkedServicePrincipal: "",
+          privateZone: false,
+          resourceRecordSetCount: 10,
+          primaryNameServer: "ns-1.awsdns-00.com",
+        },
+        alertTopic: {
+          arn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+          name: "starter-sandbox-infra-alerts",
+          id: "starter-sandbox-infra-alerts",
+          region: "us-east-2",
+          tags: {},
+        },
+        vpcId: "vpc-12345",
+        publicSubnetIds: ["subnet-pub-1", "subnet-pub-2"],
+        privateSubnetIds: ["subnet-priv-1", "subnet-priv-2"],
+        dbSecurityGroupId: "sg-db",
+        dbHost: "starter-sandbox-db.region.rds.amazonaws.com",
+        dbName: "starter",
+        dbUsername: "starter",
+        dbPassword: dbPassword.result,
+        dbSecretArn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:test",
+        pooler: { poolSize: 20, publicListener: true },
+        isProduction: false,
       });
     } catch (err) {
       // Lambda CallbackFunction serialization errors are expected in mocks
       // due to node:crypto native code references. These errors don't affect
       // the resources that CAN be created (Route 53, NLB, task definition, etc.).
     }
-    
+
     // Wait for async resource creation
     await new Promise<void>((resolve) => setTimeout(resolve, 200));
   }, 10000);
 
   afterAll(() => {
     // Restore original unhandledRejection handlers
-    process.removeAllListeners('unhandledRejection');
-    savedHandlers.forEach(handler => process.on('unhandledRejection', handler));
+    process.removeAllListeners("unhandledRejection");
+    savedHandlers.forEach((handler) => process.on("unhandledRejection", handler));
   });
 
   it("creates the Route 53 alias record targeting the NLB", () => {
     const records = recorded.filter((r) => r.type === TYPES.route53Record);
-    const aliasRecord = records.find((r) => 
-      r.inputs.type === "A" && 
-      Array.isArray(r.inputs.aliases)
+    const aliasRecord = records.find(
+      (r) => r.inputs.type === "A" && Array.isArray(r.inputs.aliases),
     );
-    
+
     expect(aliasRecord).toBeDefined();
     expect(aliasRecord?.inputs.name).toBe("db.sandbox.aws.example.com");
     expect(aliasRecord?.inputs.zoneId).toBe("ZDELEGATED");
-    
+
     const aliases = aliasRecord?.inputs.aliases as Array<Record<string, unknown>>;
     expect(aliases).toHaveLength(1);
     expect(aliases[0].name).toBe("starter-sandbox-pgbouncer-nlb.us-east-2.elb.amazonaws.com");
@@ -272,17 +270,17 @@ describe("buildPoolerStack integration", () => {
     // Neither is feasible without degrading production code quality.
     const invocations = recorded.filter((r) => r.type === TYPES.lambdaInvocation);
     const services = recorded.filter((r) => r.type === TYPES.ecsService);
-    
+
     expect(services.length, "ECS service must be created").toBeGreaterThan(0);
-    
+
     const service = services[0];
     expect(service.inputs.name).toBe("starter-sandbox-pgbouncer");
-    
-    const initialInvocation = invocations.find((inv) => 
-      (inv.inputs.input as string)?.includes("initial")
+
+    const initialInvocation = invocations.find((inv) =>
+      (inv.inputs.input as string)?.includes("initial"),
     );
     expect(initialInvocation, "Initial TLS export invocation must be created").toBeDefined();
-    
+
     const input = JSON.parse(initialInvocation!.inputs.input as string);
     expect(input.mode).toBe("initial");
     expect(input.clusterName).toBe("starter-sandbox-pgbouncer");
@@ -308,17 +306,18 @@ describe("buildPoolerStack integration", () => {
     // This fixes the Critical review finding where a ServiceMarker stand-in was used
     // instead of the real service, breaking the dependency chain.
     const services = recorded.filter((r) => r.type === TYPES.ecsService);
-    const renewalRules = recorded.filter((r) => 
-      r.type === TYPES.eventRule &&
-      (r.inputs.eventPattern as string)?.includes("ACM Certificate Available")
+    const renewalRules = recorded.filter(
+      (r) =>
+        r.type === TYPES.eventRule &&
+        (r.inputs.eventPattern as string)?.includes("ACM Certificate Available"),
     );
-    
+
     expect(services.length, "ECS service must be created").toBeGreaterThan(0);
     expect(renewalRules.length, "EventBridge renewal rule must be created").toBeGreaterThan(0);
-    
+
     const service = services[0];
     expect(service.inputs.name).toBe("starter-sandbox-pgbouncer");
-    
+
     const renewalRule = renewalRules[0];
     const pattern = JSON.parse(renewalRule.inputs.eventPattern as string);
     expect(pattern.source).toContain("aws.acm");
@@ -330,11 +329,10 @@ describe("buildPoolerStack integration", () => {
     // In the real stack, poolerEndpointOutput would be set to the hostname
     // We verify the alias record points to db.sandbox.aws.example.com
     const records = recorded.filter((r) => r.type === TYPES.route53Record);
-    const aliasRecord = records.find((r) => 
-      r.inputs.type === "A" && 
-      Array.isArray(r.inputs.aliases)
+    const aliasRecord = records.find(
+      (r) => r.inputs.type === "A" && Array.isArray(r.inputs.aliases),
     );
-    
+
     expect(aliasRecord?.inputs.name).toBe("db.sandbox.aws.example.com");
     // The exported endpoint should use this name, not the NLB DNS name
   });

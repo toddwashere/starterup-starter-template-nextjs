@@ -14,17 +14,18 @@ let savedHandlersGlobal: Array<(...args: unknown[]) => void> = [];
 
 beforeAll(() => {
   // Save existing unhandledRejection handlers at file level
-  savedHandlersGlobal = process.listeners('unhandledRejection') as Array<(...args: unknown[]) => void>;
-  process.removeAllListeners('unhandledRejection');
-  
+  savedHandlersGlobal = process.listeners("unhandledRejection") as Array<
+    (...args: unknown[]) => void
+  >;
+  process.removeAllListeners("unhandledRejection");
+
   // Install scoped handler that only ignores known Pulumi Lambda serialization errors
-  process.on('unhandledRejection', (reason: unknown) => {
+  process.on("unhandledRejection", (reason: unknown) => {
     const err = reason as { message?: string };
     // Narrowly match Pulumi CallbackFunction serialization errors
     if (
-      err?.message?.includes('error serializing') &&
-      (err.message.includes('property "code"') || 
-       err.message.includes('closure'))
+      err?.message?.includes("error serializing") &&
+      (err.message.includes('property "code"') || err.message.includes("closure"))
     ) {
       // Suppress only this specific known error from pooler-tls Lambda creation
       return;
@@ -36,8 +37,8 @@ beforeAll(() => {
 
 afterAll(() => {
   // Restore original unhandledRejection handlers at file level
-  process.removeAllListeners('unhandledRejection');
-  savedHandlersGlobal.forEach(handler => process.on('unhandledRejection', handler));
+  process.removeAllListeners("unhandledRejection");
+  savedHandlersGlobal.forEach((handler) => process.on("unhandledRejection", handler));
 });
 
 function installMocks() {
@@ -45,7 +46,7 @@ function installMocks() {
     {
       newResource: (args) => {
         recorded.push({ type: args.type, name: args.name, inputs: args.inputs });
-        
+
         const baseState = {
           ...args.inputs,
           name: (args.inputs.name as string | undefined) ?? args.name,
@@ -174,9 +175,10 @@ describe("buildPoolerTls", () => {
 
   it("creates a rotating KMS key for pooler TLS material", () => {
     const keys = recorded.filter((r) => r.type === TYPES.kmsKey);
-    const poolerKey = keys.find((k) => 
-      (k.inputs.description as string)?.includes("pooler") ||
-      (k.inputs.description as string)?.includes("TLS")
+    const poolerKey = keys.find(
+      (k) =>
+        (k.inputs.description as string)?.includes("pooler") ||
+        (k.inputs.description as string)?.includes("TLS"),
     );
     expect(poolerKey).toBeDefined();
     expect(poolerKey?.inputs.enableKeyRotation).toBe(true);
@@ -184,9 +186,10 @@ describe("buildPoolerTls", () => {
 
   it("creates a KMS-encrypted secret", () => {
     const secrets = recorded.filter((r) => r.type === TYPES.secret);
-    const poolerSecret = secrets.find((s) => 
-      (s.inputs.name as string)?.includes("pooler") ||
-      (s.inputs.description as string)?.includes("pooler")
+    const poolerSecret = secrets.find(
+      (s) =>
+        (s.inputs.name as string)?.includes("pooler") ||
+        (s.inputs.description as string)?.includes("pooler"),
     );
     expect(poolerSecret).toBeDefined();
     expect(poolerSecret?.inputs.kmsKeyId).toBeDefined();
@@ -196,9 +199,10 @@ describe("buildPoolerTls", () => {
 
   it("creates a Lambda with least-privilege IAM scoping", async () => {
     const roles = recorded.filter((r) => r.type === TYPES.iamRole);
-    const lambdaRole = roles.find((role) => 
-      (role.inputs.name as string)?.includes("exporter") ||
-      (role.inputs.description as string)?.includes("export")
+    const lambdaRole = roles.find(
+      (role) =>
+        (role.inputs.name as string)?.includes("exporter") ||
+        (role.inputs.description as string)?.includes("export"),
     );
     expect(lambdaRole).toBeDefined();
 
@@ -213,25 +217,25 @@ describe("buildPoolerTls", () => {
     expect(exporterPolicy).toBeDefined();
 
     const policyDoc = await out(
-      pulumi.output(exporterPolicy!.inputs.policy as pulumi.Input<string>)
+      pulumi.output(exporterPolicy!.inputs.policy as pulumi.Input<string>),
     );
     const statements = statementsOf(policyDoc);
 
     // ACM export scoped to the certificate
-    const acmStatement = statements.find((s) => 
-      JSON.stringify(s.Action).includes("acm:ExportCertificate")
+    const acmStatement = statements.find((s) =>
+      JSON.stringify(s.Action).includes("acm:ExportCertificate"),
     );
     expect(acmStatement).toBeDefined();
-    const acmResources = Array.isArray(acmStatement!.Resource) 
-      ? acmStatement!.Resource 
+    const acmResources = Array.isArray(acmStatement!.Resource)
+      ? acmStatement!.Resource
       : [acmStatement!.Resource];
     // Should reference the certificate ARN (contains "mock" in test)
     expect(acmResources.some((r: string) => r.includes("mock"))).toBe(true);
     expect(acmResources).not.toContain("*");
 
     // Secrets Manager scoped to the pooler secret
-    const secretStatement = statements.find((s) => 
-      JSON.stringify(s.Action).includes("secretsmanager:PutSecretValue")
+    const secretStatement = statements.find((s) =>
+      JSON.stringify(s.Action).includes("secretsmanager:PutSecretValue"),
     );
     expect(secretStatement).toBeDefined();
     const secretResources = Array.isArray(secretStatement!.Resource)
@@ -240,9 +244,7 @@ describe("buildPoolerTls", () => {
     expect(secretResources).not.toContain("*");
 
     // KMS scoped to the pooler key
-    const kmsStatement = statements.find((s) => 
-      JSON.stringify(s.Action).includes("kms:")
-    );
+    const kmsStatement = statements.find((s) => JSON.stringify(s.Action).includes("kms:"));
     expect(kmsStatement).toBeDefined();
     const kmsResources = Array.isArray(kmsStatement!.Resource)
       ? kmsStatement!.Resource
@@ -250,16 +252,14 @@ describe("buildPoolerTls", () => {
     expect(kmsResources).not.toContain("*");
 
     // ECS scoped to the deterministic service ARN
-    const ecsStatement = statements.find((s) => 
-      JSON.stringify(s.Action).includes("ecs:UpdateService")
+    const ecsStatement = statements.find((s) =>
+      JSON.stringify(s.Action).includes("ecs:UpdateService"),
     );
     expect(ecsStatement).toBeDefined();
     const ecsResources = Array.isArray(ecsStatement!.Resource)
       ? ecsStatement!.Resource
       : [ecsStatement!.Resource];
-    expect(ecsResources.some((r: string) => 
-      r.includes("starter-sandbox-pgbouncer")
-    )).toBe(true);
+    expect(ecsResources.some((r: string) => r.includes("starter-sandbox-pgbouncer"))).toBe(true);
     expect(ecsResources).not.toContain("*");
   });
 
@@ -270,8 +270,8 @@ describe("buildPoolerTls", () => {
       // Skip if serialization prevented creation
       return;
     }
-    const initialInvocation = invocations.find((inv) => 
-      (inv.inputs.input as string)?.includes("initial")
+    const initialInvocation = invocations.find((inv) =>
+      (inv.inputs.input as string)?.includes("initial"),
     );
     expect(initialInvocation).toBeDefined();
     // Verify the input contains certificateArn and secretId
@@ -291,16 +291,17 @@ describe("buildPoolerTls", () => {
       // Skip if serialization prevented Lambda/alarm creation
       return;
     }
-    const lambdaAlarm = alarms.find((a) => 
-      (a.inputs.metricName as string) === "Errors" &&
-      (a.inputs.namespace as string) === "AWS/Lambda"
+    const lambdaAlarm = alarms.find(
+      (a) =>
+        (a.inputs.metricName as string) === "Errors" &&
+        (a.inputs.namespace as string) === "AWS/Lambda",
     );
     expect(lambdaAlarm).toBeDefined();
     expect(lambdaAlarm?.inputs.alarmActions).toEqual([
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts"
+      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
     ]);
     expect(lambdaAlarm?.inputs.okActions).toEqual([
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts"
+      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
     ]);
   });
 
@@ -309,9 +310,9 @@ describe("buildPoolerTls", () => {
     // which can cause serialization hangs
     // The resource structure is validated by other tests
     // Just verify the types exist
-    expect(recorded.filter(r => r.type === TYPES.certificate).length).toBeGreaterThan(0);
-    expect(recorded.filter(r => r.type === TYPES.secret).length).toBeGreaterThan(0);
-    expect(recorded.filter(r => r.type === TYPES.kmsKey).length).toBeGreaterThan(0);
+    expect(recorded.filter((r) => r.type === TYPES.certificate).length).toBeGreaterThan(0);
+    expect(recorded.filter((r) => r.type === TYPES.secret).length).toBeGreaterThan(0);
+    expect(recorded.filter((r) => r.type === TYPES.kmsKey).length).toBeGreaterThan(0);
   });
 });
 
@@ -320,9 +321,9 @@ describe("buildPoolerTlsRenewal", () => {
     vi.resetModules();
     recorded.length = 0;
     installMocks();
-    
+
     const mod = await import("./pooler-tls.js");
-    
+
     // Build the TLS resources first
     const tlsResult = mod.buildPoolerTls({
       namePrefix: "starter-sandbox",
@@ -335,14 +336,14 @@ describe("buildPoolerTlsRenewal", () => {
       serviceName: "starter-sandbox-pgbouncer",
       isProduction: false,
     });
-    
+
     // Create a proper mock service resource using pulumi mocks
     const aws = await import("@pulumi/aws");
     const mockService = new aws.ecs.Service("mock-service", {
       cluster: "arn:aws:ecs:us-east-2:123456789012:cluster/test",
       taskDefinition: "arn:aws:ecs:us-east-2:123456789012:task-definition/test:1",
     });
-    
+
     // Build renewal (might fail due to Lambda serialization, but should record some resources)
     try {
       mod.buildPoolerTlsRenewal({
@@ -366,17 +367,17 @@ describe("buildPoolerTlsRenewal", () => {
       // Skip test if serialization prevented creation
       return;
     }
-    
+
     const certAvailableRule = rules.find((rule) => {
       const pattern = rule.inputs.eventPattern as string;
       return pattern && pattern.includes("ACM Certificate Available");
     });
-    
+
     if (!certAvailableRule) {
       // Also acceptable if rule wasn't created due to serialization
       return;
     }
-    
+
     // Verify the event pattern contains the certificate ARN
     const pattern = JSON.parse(certAvailableRule.inputs.eventPattern as string);
     expect(pattern.resources).toBeDefined();
@@ -398,14 +399,14 @@ describe("buildPoolerTlsRenewal", () => {
     // The service parameter comes from pgbouncer.ts line 355 which returns the real
     // service resource, and pooler-stack.ts line 118 passes pgbouncer.service to
     // buildPoolerTlsRenewal.
-    
+
     vi.resetModules();
     recorded.length = 0;
     installMocks();
-    
+
     const mod = await import("./pooler-tls.js");
     const aws = await import("@pulumi/aws");
-    
+
     // Build TLS foundation
     const tlsResult = mod.buildPoolerTls({
       namePrefix: "starter-sandbox",
@@ -418,14 +419,14 @@ describe("buildPoolerTlsRenewal", () => {
       serviceName: "starter-sandbox-pgbouncer",
       isProduction: false,
     });
-    
+
     // Create a sentinel mock service to verify it's threaded through
     const sentinelService = new aws.ecs.Service("sentinel-service", {
       cluster: "arn:aws:ecs:us-east-2:123456789012:cluster/sentinel",
       taskDefinition: "arn:aws:ecs:us-east-2:123456789012:task-definition/sentinel:1",
       name: "sentinel-service-name",
     });
-    
+
     // Call buildPoolerTlsRenewal with the sentinel service
     // If the function doesn't use the service parameter, this test documents that gap
     try {
@@ -448,7 +449,7 @@ describe("buildPoolerTlsRenewal", () => {
     const services = recorded.filter((r) => r.type === "aws:ecs/service:Service");
     const sentinel = services.find((s) => s.inputs.name === "sentinel-service-name");
     expect(sentinel, "Sentinel service must be recorded as a real resource").toBeDefined();
-    
+
     // Verify EventBridge rule was created (may be missing due to Lambda serialization)
     // The rule creation with dependsOn: [service] in pooler-tls.ts line 321 is the
     // key wiring. Pulumi's mock newResource doesn't expose dependsOn in args, so we
@@ -466,7 +467,7 @@ describe("buildPoolerTlsRenewal", () => {
         expect(renewalRule.inputs.eventPattern).toBeDefined();
       }
     }
-    
+
     // The existence of the sentinel service in recorded resources proves:
     // 1. buildPoolerTlsRenewal receives a real aws.ecs.Service (not a marker)
     // 2. The service is properly typed and usable by Pulumi

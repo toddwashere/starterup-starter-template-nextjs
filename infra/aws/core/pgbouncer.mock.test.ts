@@ -134,42 +134,40 @@ describe("buildPgBouncer", () => {
   it("configures transaction pooling with the requested pool size", () => {
     const taskDefs = recorded.filter((r) => r.type === TYPES.taskDef);
     expect(taskDefs).toHaveLength(1);
-    const containers = JSON.parse(
-      taskDefs[0].inputs.containerDefinitions as string,
-    ) as Array<{
+    const containers = JSON.parse(taskDefs[0].inputs.containerDefinitions as string) as Array<{
       name: string;
       environment: { name: string; value: string }[];
       dependsOn?: Array<{ containerName: string; condition: string }>;
       mountPoints?: Array<{ sourceVolume: string; containerPath: string; readOnly: boolean }>;
     }>;
-    
+
     // Should have both materializer and pgbouncer containers
     expect(containers).toHaveLength(2);
     const materializer = containers.find((c) => c.name === "tls-materializer");
     const pgbouncer = containers.find((c) => c.name === "pgbouncer");
     expect(materializer).toBeDefined();
     expect(pgbouncer).toBeDefined();
-    
+
     // PgBouncer depends on materializer SUCCESS
     expect(pgbouncer?.dependsOn).toBeDefined();
     expect(pgbouncer?.dependsOn).toHaveLength(1);
     expect(pgbouncer?.dependsOn?.[0].containerName).toBe("tls-materializer");
     expect(pgbouncer?.dependsOn?.[0].condition).toBe("SUCCESS");
-    
+
     // Both mount the same volume; pgbouncer read-only
     expect(materializer?.mountPoints).toBeDefined();
     expect(pgbouncer?.mountPoints).toBeDefined();
-    const materializerMount = materializer?.mountPoints?.find((m) => m.sourceVolume === "pooler-tls");
+    const materializerMount = materializer?.mountPoints?.find(
+      (m) => m.sourceVolume === "pooler-tls",
+    );
     const pgbouncerMount = pgbouncer?.mountPoints?.find((m) => m.sourceVolume === "pooler-tls");
     expect(materializerMount).toBeDefined();
     expect(pgbouncerMount).toBeDefined();
     expect(materializerMount?.containerPath).toBe("/tls");
     expect(pgbouncerMount?.containerPath).toBe("/tls");
     expect(pgbouncerMount?.readOnly).toBe(true);
-    
-    const env = Object.fromEntries(
-      pgbouncer!.environment.map((e) => [e.name, e.value]),
-    );
+
+    const env = Object.fromEntries(pgbouncer!.environment.map((e) => [e.name, e.value]));
     expect(env.POOL_MODE).toBe("transaction");
     expect(env.DEFAULT_POOL_SIZE).toBe("25");
     expect(env.CLIENT_TLS_SSLMODE).toBe("require");
@@ -186,9 +184,7 @@ describe("buildPgBouncer", () => {
 
   it("returns the NLB DNS name as the pooler endpoint", async () => {
     const result = await build();
-    const endpoint = await new Promise<string>((res) =>
-      result.poolerEndpoint.apply(res),
-    );
+    const endpoint = await new Promise<string>((res) => result.poolerEndpoint.apply(res));
     expect(endpoint).toMatch(/elb\.amazonaws\.com$/);
   });
 
@@ -196,34 +192,33 @@ describe("buildPgBouncer", () => {
     const sgs = recorded.filter((r) => r.type === TYPES.sg);
     const nlbSg = sgs.find((sg) => sg.name.includes("nlb-sg"));
     expect(nlbSg).toBeDefined();
-    
+
     // NLB SG should have no inline ingress rules (all via SecurityGroupRule)
     const inlineIngress = nlbSg?.inputs.ingress as unknown[];
     expect(inlineIngress).toBeUndefined();
-    
+
     // Should have exactly 2 SecurityGroupRule resources for ingress
     const rules = recorded.filter((r) => r.type === TYPES.sgRule);
-    const ingressRules = rules.filter((r) => 
-      r.inputs.type === "ingress" && 
-      r.inputs.securityGroupId === `${nlbSg?.name}-id`
+    const ingressRules = rules.filter(
+      (r) => r.inputs.type === "ingress" && r.inputs.securityGroupId === `${nlbSg?.name}-id`,
     );
     expect(ingressRules).toHaveLength(2);
-    
+
     // Verify each CIDR has a rule
     const cidrs = ingressRules.map((r) => r.inputs.cidrBlocks).flat();
     expect(cidrs).toContain("203.0.113.10/32");
     expect(cidrs).toContain("198.51.100.20/32");
-    
+
     // Verify descriptions match source
-    const appRule = ingressRules.find((r) => 
-      (r.inputs.cidrBlocks as string[])?.includes("203.0.113.10/32")
+    const appRule = ingressRules.find((r) =>
+      (r.inputs.cidrBlocks as string[])?.includes("203.0.113.10/32"),
     );
-    const devRule = ingressRules.find((r) => 
-      (r.inputs.cidrBlocks as string[])?.includes("198.51.100.20/32")
+    const devRule = ingressRules.find((r) =>
+      (r.inputs.cidrBlocks as string[])?.includes("198.51.100.20/32"),
     );
     expect(appRule?.inputs.description).toContain("application");
     expect(devRule?.inputs.description).toContain("developer");
-    
+
     // Verify NO resource contains 0.0.0.0/0 in ingress
     for (const r of recorded) {
       const ingress = r.inputs.ingress as Array<{ cidrBlocks?: string[] }> | undefined;
@@ -248,24 +243,27 @@ describe("buildPgBouncer", () => {
     const sgs = recorded.filter((r) => r.type === TYPES.sg);
     const nlbSg = sgs.find((sg) => sg.name.includes("nlb-sg"));
     const taskSg = sgs.find((sg) => sg.name.includes("pgbouncer-sg") && !sg.name.includes("nlb"));
-    
+
     // Task SG ingress from NLB SG on 6432
-    const taskIngress = rules.find((r) => 
-      r.inputs.type === "ingress" && 
-      r.inputs.fromPort === 6432 &&
-      r.name.includes("pgbouncer-ingress-from-nlb")
+    const taskIngress = rules.find(
+      (r) =>
+        r.inputs.type === "ingress" &&
+        r.inputs.fromPort === 6432 &&
+        r.name.includes("pgbouncer-ingress-from-nlb"),
     );
     expect(taskIngress).toBeDefined();
     expect(taskIngress?.inputs.protocol).toBe("tcp");
     expect(taskIngress?.inputs.description).toContain("NLB");
-    
+
     // NLB SG should have broad egress (default)
     const nlbSgEgress = nlbSg?.inputs.egress as Array<{ protocol: string }> | undefined;
     expect(nlbSgEgress).toBeDefined();
     expect(nlbSgEgress?.some((e) => e.protocol === "-1")).toBe(true);
-    
+
     // Task SG should have NO inline 0.0.0.0/0 ingress
-    const taskSgInlineIngress = taskSg?.inputs.ingress as Array<{ cidrBlocks?: string[] }> | undefined;
+    const taskSgInlineIngress = taskSg?.inputs.ingress as
+      | Array<{ cidrBlocks?: string[] }>
+      | undefined;
     if (taskSgInlineIngress) {
       for (const rule of taskSgInlineIngress) {
         expect(rule.cidrBlocks).not.toContain("0.0.0.0/0");
@@ -276,34 +274,32 @@ describe("buildPgBouncer", () => {
   it("materializes TLS files via secrets injection without plaintext PEM", () => {
     const taskDefs = recorded.filter((r) => r.type === TYPES.taskDef);
     expect(taskDefs).toHaveLength(1);
-    
+
     // Should have pooler-tls volume
     const volumes = taskDefs[0].inputs.volumes as Array<{ name: string }> | undefined;
     expect(volumes).toBeDefined();
     const tlsVolume = volumes?.find((v) => v.name === "pooler-tls");
     expect(tlsVolume).toBeDefined();
-    
-    const containers = JSON.parse(
-      taskDefs[0].inputs.containerDefinitions as string,
-    ) as Array<{
+
+    const containers = JSON.parse(taskDefs[0].inputs.containerDefinitions as string) as Array<{
       name: string;
       secrets?: Array<{ name: string; valueFrom: string }>;
     }>;
-    
+
     const materializer = containers.find((c) => c.name === "tls-materializer");
     expect(materializer).toBeDefined();
     expect(materializer?.secrets).toBeDefined();
-    
+
     // Verify secrets are injected via ARN reference, not plaintext
     const secretNames = materializer?.secrets?.map((s) => s.name) ?? [];
     expect(secretNames).toContain("TLS_CERTIFICATE");
     expect(secretNames).toContain("TLS_CERTIFICATE_CHAIN");
     expect(secretNames).toContain("TLS_PRIVATE_KEY");
-    
+
     const certSecret = materializer?.secrets?.find((s) => s.name === "TLS_CERTIFICATE");
     expect(certSecret?.valueFrom).toContain("arn:aws:secretsmanager");
     expect(certSecret?.valueFrom).toContain(":certificate::");
-    
+
     // Verify no plaintext PEM in any input
     const allInputsStr = JSON.stringify(taskDefs[0].inputs);
     expect(allInputsStr).not.toContain("-----BEGIN CERTIFICATE-----");
@@ -319,20 +315,12 @@ describe("buildPgBouncer", () => {
 
   it("extends result with NLB DNS, zone ID, cluster, and service names", async () => {
     const result = await build();
-    
-    const dnsName = await new Promise<string>((res) =>
-      result.loadBalancerDnsName.apply(res),
-    );
-    const zoneId = await new Promise<string>((res) =>
-      result.loadBalancerZoneId.apply(res),
-    );
-    const clusterName = await new Promise<string>((res) =>
-      result.clusterName.apply(res),
-    );
-    const serviceName = await new Promise<string>((res) =>
-      result.serviceName.apply(res),
-    );
-    
+
+    const dnsName = await new Promise<string>((res) => result.loadBalancerDnsName.apply(res));
+    const zoneId = await new Promise<string>((res) => result.loadBalancerZoneId.apply(res));
+    const clusterName = await new Promise<string>((res) => result.clusterName.apply(res));
+    const serviceName = await new Promise<string>((res) => result.serviceName.apply(res));
+
     expect(dnsName).toMatch(/elb\.amazonaws\.com$/);
     expect(zoneId).toBe("Z1234567890ABC");
     expect(clusterName).toBe("starter-sandbox-pgbouncer");

@@ -16,14 +16,12 @@ describe("exportPoolerCertificate", () => {
 
   const validExportedCert = {
     certificate: "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----",
-    certificateChain:
-      "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----",
+    certificateChain: "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----",
     privateKey:
       "-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIE...\n-----END ENCRYPTED PRIVATE KEY-----",
   };
 
-  const decryptedPrivateKey =
-    "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----";
+  const decryptedPrivateKey = "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----";
 
   test("export failure means zero secret writes and zero ECS calls", async () => {
     let secretWriteCount = 0;
@@ -45,9 +43,7 @@ describe("exportPoolerCertificate", () => {
       },
     };
 
-    await expect(exportPoolerCertificate(validEvent, deps)).rejects.toThrow(
-      "ACM export failed",
-    );
+    await expect(exportPoolerCertificate(validEvent, deps)).rejects.toThrow("ACM export failed");
 
     expect(secretWriteCount).toBe(0);
     expect(ecsCallCount).toBe(0);

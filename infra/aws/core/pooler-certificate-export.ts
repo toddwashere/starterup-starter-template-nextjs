@@ -1,9 +1,6 @@
 import { ACMClient, ExportCertificateCommand } from "@aws-sdk/client-acm";
 import { ECSClient, UpdateServiceCommand } from "@aws-sdk/client-ecs";
-import {
-  SecretsManagerClient,
-  PutSecretValueCommand,
-} from "@aws-sdk/client-secrets-manager";
+import { SecretsManagerClient, PutSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { createPrivateKey } from "node:crypto";
 import { randomBytes } from "node:crypto";
 
@@ -35,10 +32,7 @@ export async function exportPoolerCertificate(
   deps: PoolerCertificateExportDependencies,
 ): Promise<{ updated: true; deployed: boolean }> {
   const passphrase = deps.randomPassphrase();
-  const exported = await deps.exportCertificate(
-    event.certificateArn,
-    passphrase,
-  );
+  const exported = await deps.exportCertificate(event.certificateArn, passphrase);
   const privateKey = deps.decryptPrivateKey(exported.privateKey, passphrase);
 
   await deps.putSecretValue(
@@ -79,11 +73,7 @@ async function exportCertificateFromACM(
 
   const response = await acmClient.send(command);
 
-  if (
-    !response.Certificate ||
-    !response.CertificateChain ||
-    !response.PrivateKey
-  ) {
+  if (!response.Certificate || !response.CertificateChain || !response.PrivateKey) {
     throw new Error("ACM export did not return complete certificate data");
   }
 
@@ -94,10 +84,7 @@ async function exportCertificateFromACM(
   };
 }
 
-function decryptAndConvertPrivateKey(
-  encryptedPem: string,
-  passphrase: string,
-): string {
+function decryptAndConvertPrivateKey(encryptedPem: string, passphrase: string): string {
   const privateKeyObject = createPrivateKey({
     key: encryptedPem,
     format: "pem",
@@ -110,10 +97,7 @@ function decryptAndConvertPrivateKey(
   }) as string;
 }
 
-async function writeSecretValue(
-  secretId: string,
-  secretValue: string,
-): Promise<void> {
+async function writeSecretValue(secretId: string, secretValue: string): Promise<void> {
   const secretsClient = new SecretsManagerClient({});
   const command = new PutSecretValueCommand({
     SecretId: secretId,
@@ -123,10 +107,7 @@ async function writeSecretValue(
   await secretsClient.send(command);
 }
 
-async function forceServiceDeployment(
-  clusterName: string,
-  serviceName: string,
-): Promise<void> {
+async function forceServiceDeployment(clusterName: string, serviceName: string): Promise<void> {
   const ecsClient = new ECSClient({});
   const command = new UpdateServiceCommand({
     cluster: clusterName,

@@ -143,7 +143,7 @@ describe("aws bootstrap layer (mocked)", () => {
     const zones = recorded.filter((r) => r.type === "aws:route53/zone:Zone");
     expect(zones).toHaveLength(1);
     expect(zones[0].inputs.name).toBe("sandbox.aws.example.com");
-    expect((zones[0].inputs.comment as string)).toContain("delegated");
+    expect(zones[0].inputs.comment as string).toContain("delegated");
   });
 
   it("creates an SNS alert topic with encryption and subscription", () => {
@@ -151,7 +151,9 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(topics).toHaveLength(1);
     expect(topics[0].inputs.name).toBe("starter-sandbox-infra-alerts");
     expect(topics[0].inputs.kmsMasterKeyId).toBe("alias/aws/sns");
-    const subscriptions = recorded.filter((r) => r.type === "aws:sns/topicSubscription:TopicSubscription");
+    const subscriptions = recorded.filter(
+      (r) => r.type === "aws:sns/topicSubscription:TopicSubscription",
+    );
     expect(subscriptions).toHaveLength(1);
     expect(subscriptions[0].inputs.endpoint).toBe("ops@example.com");
   });
@@ -200,8 +202,7 @@ describe("aws bootstrap layer (mocked)", () => {
   });
 
   it("exports the hosted zone id, name, name servers, and alert topic ARN", async () => {
-    const output = <T>(val: pulumi.Output<T>) =>
-      new Promise<T>((res) => val.apply(res));
+    const output = <T>(val: pulumi.Output<T>) => new Promise<T>((res) => val.apply(res));
     expect(await output(infra.hostedZoneId)).toBeTruthy();
     expect(await output(infra.hostedZoneName)).toBe("sandbox.aws.example.com");
     expect(await output(infra.hostedZoneNameServers)).toHaveLength(4);

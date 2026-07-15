@@ -54,9 +54,7 @@ const { kmsKeyArn } = buildComplianceResources({
 
 // When CMEK is on, feed the KMS key to RDS/S3; otherwise use the service
 // default (AWS-managed key for RDS, SSE-S3 for the bucket).
-const cmekKeyId: pulumi.Output<string> | undefined = compliance.cmek
-  ? kmsKeyArn
-  : undefined;
+const cmekKeyId: pulumi.Output<string> | undefined = compliance.cmek ? kmsKeyArn : undefined;
 
 // --- Networking: VPC + subnets + IGW + NAT ----------------------------------
 const azs = aws.getAvailabilityZonesOutput({ state: "available" });
@@ -164,9 +162,7 @@ const privateSubnetIds = pulumi.all(privateSubnets.map((s) => s.id));
 const appSg = new aws.ec2.SecurityGroup("app-sg", {
   vpcId: vpc.id,
   description: "Starter application workloads security group",
-  egress: [
-    { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
-  ],
+  egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
   tags: { ...baseTags, Name: `${namePrefix}-app-sg` },
 });
 
@@ -175,9 +171,7 @@ const appSg = new aws.ec2.SecurityGroup("app-sg", {
 const dbSg = new aws.ec2.SecurityGroup("db-sg", {
   vpcId: vpc.id,
   description: "Starter database security group",
-  egress: [
-    { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
-  ],
+  egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
   tags: { ...baseTags, Name: `${namePrefix}-db-sg` },
 });
 
@@ -313,17 +307,14 @@ const dbProxy = new aws.rds.Proxy("db-proxy", {
   tags: { ...baseTags, Name: `${namePrefix}-db-proxy` },
 });
 
-const dbProxyTargetGroup = new aws.rds.ProxyDefaultTargetGroup(
-  "db-proxy-tg",
-  {
-    dbProxyName: dbProxy.name,
-    connectionPoolConfig: {
-      maxConnectionsPercent: 100,
-      maxIdleConnectionsPercent: 50,
-      connectionBorrowTimeout: 120,
-    },
+const dbProxyTargetGroup = new aws.rds.ProxyDefaultTargetGroup("db-proxy-tg", {
+  dbProxyName: dbProxy.name,
+  connectionPoolConfig: {
+    maxConnectionsPercent: 100,
+    maxIdleConnectionsPercent: 50,
+    connectionBorrowTimeout: 120,
   },
-);
+});
 
 new aws.rds.ProxyTarget("db-proxy-target", {
   dbProxyName: dbProxy.name,
@@ -444,7 +435,7 @@ let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
 
 if (cfg.database.pooler.enabled) {
   const accountId = aws.getCallerIdentityOutput().accountId;
-  
+
   const poolerStack = buildPoolerStack({
     namePrefix,
     region,
@@ -518,9 +509,7 @@ export const queueArns = Object.fromEntries(
 export const uploadsBucket = uploadsBucketResource.bucket;
 // Names + ARNs of the manually-managed placeholder secrets (empty until you set
 // their values in the console/CLI). Grant read access from consumers as needed.
-export const manualSecretArns = Object.fromEntries(
-  manualSecrets.map((s) => [s.name, s.arn]),
-);
+export const manualSecretArns = Object.fromEntries(manualSecrets.map((s) => [s.name, s.arn]));
 // Re-export the compliance KMS key ARN ("" when CMEK is disabled).
 export { kmsKeyArn, privateSubnetIds };
 
