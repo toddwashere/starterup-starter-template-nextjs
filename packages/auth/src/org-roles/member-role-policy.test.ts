@@ -28,6 +28,18 @@ describe("evaluateMemberManagement", () => {
     },
   );
 
+  it("fails closed with UNKNOWN_ROLE for an unrecognized role", () => {
+    expect(
+      evaluateMemberManagement({
+        actorUserId: "a",
+        actorRoles: ["superadmin"],
+        targetUserId: "b",
+        targetRoles: ["member"],
+        hasMemberUpdatePermission: true,
+      }),
+    ).toEqual({ allowed: false, reason: "UNKNOWN_ROLE" });
+  });
+
   it("rejects self-management", () => {
     expect(
       evaluateMemberManagement({

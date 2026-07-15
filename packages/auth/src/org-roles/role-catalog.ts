@@ -62,6 +62,9 @@ export function normalizeOrgRoleIds(values: readonly string[]): OrgRoleId[] {
     throw new InvalidOrgRoleSetError("EMPTY_ROLE_SET", "Select at least one role.");
   }
   const unique = [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    throw new InvalidOrgRoleSetError("EMPTY_ROLE_SET", "Select at least one role.");
+  }
   if (unique.some((value) => !isOrgRoleId(value))) {
     throw new InvalidOrgRoleSetError("UNKNOWN_ROLE", "Role configuration is out of date.");
   }

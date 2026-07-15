@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { orgRoles } from "./index";
 import {
+  InvalidOrgRoleSetError,
   ORG_ROLE_CATALOG,
   getHighestManagementRank,
   normalizeOrgRoleIds,
@@ -33,6 +34,20 @@ describe("ORG_ROLE_CATALOG", () => {
     "rejects invalid role sets: %j",
     (roles) => {
       expect(() => normalizeOrgRoleIds(roles)).toThrow();
+    },
+  );
+
+  it.each([[[""]], [["  "]]] as [string[]][])(
+    "rejects blank/whitespace-only role sets: %j",
+    (roles) => {
+      expect(() => normalizeOrgRoleIds(roles)).toThrow();
+      try {
+        normalizeOrgRoleIds(roles);
+        throw new Error("expected normalizeOrgRoleIds to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(InvalidOrgRoleSetError);
+        expect((error as InvalidOrgRoleSetError).code).toBe("EMPTY_ROLE_SET");
+      }
     },
   );
 
