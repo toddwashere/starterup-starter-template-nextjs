@@ -13,6 +13,7 @@ import {
   type MemberRoleOutcome,
 } from "@workspace/auth/member-role-management";
 import { InvalidOrgRoleSetError } from "@workspace/auth/org-roles";
+import { captureException } from "@workspace/observability/capture";
 import {
   replaceMemberRolesSchema,
   bulkMemberRolesSchema,
@@ -56,12 +57,21 @@ export type MemberRoleActionResult<T> =
  *  - `InvalidOrgRoleSetError` (`.code: "EMPTY_ROLE_SET" | "UNKNOWN_ROLE"`)
  *    from `@workspace/auth/org-roles` — both codes are valid
  *    `MemberRoleFailureCode` members, so no widening is needed.
- * Any other (unexpected) error is never leaked to the client: it maps to a
- * generic `UPDATE_FAILED` message. The service itself is responsible for
- * capturing unexpected errors for observability before they reach here.
+ * Both branches are EXPECTED authorization/validation outcomes, not
+ * incidents, so neither is captured for observability.
+ *
+ * Any OTHER (unexpected) error is never leaked to the client: it maps to a
+ * generic `UPDATE_FAILED` message AND is captured for observability, tagged
+ * with the `operation` label. `replaceMemberRoles`/`mutateMemberRoles`
+ * already capture their own unexpected errors internally (they never throw),
+ * but `inviteMemberWithRoles`/`transferOrganizationOwnership` throw straight
+ * through to here, so this fallthrough is the only place their unexpected
+ * failures get recorded. Only the operation label is included — never any
+ * email address or role payload.
  */
 function toMemberRoleActionError(
   error: unknown,
+  operation: string,
 ): { success: false; error: { code: MemberRoleFailureCode; message: string } } {
   if (error instanceof MemberRoleManagementError) {
     return { success: false, error: { code: error.code, message: error.message } };
@@ -69,6 +79,7 @@ function toMemberRoleActionError(
   if (error instanceof InvalidOrgRoleSetError) {
     return { success: false, error: { code: error.code, message: error.message } };
   }
+  captureException(error, { operation });
   return {
     success: false,
     error: {
@@ -104,7 +115,7 @@ export async function replaceMemberRolesAction(
       }),
     };
   } catch (error) {
-    return toMemberRoleActionError(error);
+    return toMemberRoleActionError(error, "member-role-replace");
   }
 }
 
@@ -131,7 +142,7 @@ export async function bulkMemberRolesAction(
       }),
     };
   } catch (error) {
-    return toMemberRoleActionError(error);
+    return toMemberRoleActionError(error, "member-role-bulk");
   }
 }
 
@@ -166,7 +177,7 @@ export async function inviteMemberAction(
       }),
     };
   } catch (error) {
-    return toMemberRoleActionError(error);
+    return toMemberRoleActionError(error, "member-role-invite");
   }
 }
 
@@ -198,7 +209,7 @@ export async function transferOwnershipAction(
       }),
     };
   } catch (error) {
-    return toMemberRoleActionError(error);
+    return toMemberRoleActionError(error, "member-role-transfer");
   }
 }
 

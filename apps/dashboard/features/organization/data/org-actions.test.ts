@@ -48,7 +48,12 @@ vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers({ "x-test": "1" })),
 }));
 
+vi.mock("@workspace/observability/capture", () => ({
+  captureException: vi.fn(),
+}));
+
 import { headers } from "next/headers";
+import { captureException } from "@workspace/observability/capture";
 import {
   replaceMemberRoles,
   mutateMemberRoles,
@@ -335,8 +340,9 @@ describe("inviteMemberAction", () => {
     });
   });
 
-  it("maps an unexpected exception to a generic UPDATE_FAILED error", async () => {
-    vi.mocked(inviteMemberWithRoles).mockRejectedValue(new Error("smtp exploded"));
+  it("maps an unexpected exception to a generic UPDATE_FAILED error AND captures it with the operation label", async () => {
+    const unexpected = new Error("smtp exploded");
+    vi.mocked(inviteMemberWithRoles).mockRejectedValue(unexpected);
 
     const result = await inviteMemberAction({
       organizationId: "org_1",
@@ -349,6 +355,29 @@ describe("inviteMemberAction", () => {
       expect(result.error.code).toBe("UPDATE_FAILED");
       expect(result.error.message).not.toContain("smtp exploded");
     }
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      unexpected,
+      expect.objectContaining({ operation: "member-role-invite" }),
+    );
+    // The captured context must not leak the invitee email or role payload.
+    const [, context] = vi.mocked(captureException).mock.calls[0]!;
+    expect(JSON.stringify(context)).not.toContain("user@example.com");
+    expect(JSON.stringify(context)).not.toContain("admin");
+  });
+
+  it("does NOT capture an expected MemberRoleManagementError", async () => {
+    vi.mocked(inviteMemberWithRoles).mockRejectedValue(
+      new MemberRoleManagementError("MISSING_PERMISSION", "You do not have permission to invite members."),
+    );
+
+    await inviteMemberAction({
+      organizationId: "org_1",
+      email: "user@example.com",
+      roles: ["admin"],
+    });
+
+    expect(captureException).not.toHaveBeenCalled();
   });
 });
 
@@ -391,7 +420,7 @@ describe("transferOwnershipAction", () => {
     });
   });
 
-  it("maps a thrown MemberRoleManagementError to a typed error (expected denial)", async () => {
+  it("maps a thrown MemberRoleManagementError to a typed error (expected denial) WITHOUT capturing it", async () => {
     vi.mocked(transferOrganizationOwnership).mockRejectedValue(
       new MemberRoleManagementError("SELF", "You cannot change your own roles."),
     );
@@ -405,10 +434,30 @@ describe("transferOwnershipAction", () => {
       success: false,
       error: { code: "SELF", message: "You cannot change your own roles." },
     });
+    // Expected authorization outcomes are NOT incidents — never captured.
+    expect(captureException).not.toHaveBeenCalled();
   });
 
-  it("maps an unexpected exception to a generic UPDATE_FAILED error", async () => {
-    vi.mocked(transferOrganizationOwnership).mockRejectedValue(new Error("tx aborted"));
+  it("does NOT capture an expected InvalidOrgRoleSetError", async () => {
+    vi.mocked(transferOrganizationOwnership).mockRejectedValue(
+      new InvalidOrgRoleSetError("UNKNOWN_ROLE", "Role configuration is out of date."),
+    );
+
+    const result = await transferOwnershipAction({
+      organizationId: "org_1",
+      targetMemberId: "member_2",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: "UNKNOWN_ROLE", message: "Role configuration is out of date." },
+    });
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("maps an unexpected exception to a generic UPDATE_FAILED error AND captures it with the operation label", async () => {
+    const unexpected = new Error("tx aborted");
+    vi.mocked(transferOrganizationOwnership).mockRejectedValue(unexpected);
 
     const result = await transferOwnershipAction({
       organizationId: "org_1",
@@ -420,5 +469,10 @@ describe("transferOwnershipAction", () => {
       expect(result.error.code).toBe("UPDATE_FAILED");
       expect(result.error.message).not.toContain("tx aborted");
     }
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      unexpected,
+      expect.objectContaining({ operation: "member-role-transfer" }),
+    );
   });
 });
