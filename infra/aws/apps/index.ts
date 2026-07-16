@@ -212,11 +212,28 @@ for (const app of apprunnerApps) {
           port: String(app.port),
           runtimeEnvironmentVariables: {
             PORT: String(app.port),
+            // Next.js standalone defaults to localhost; App Runner health checks
+            // need the process listening on all interfaces.
+            HOSTNAME: "0.0.0.0",
             WORKER_QUEUE_ADAPTER: "sqs",
             SQS_QUEUE_URL: sqsQueueUrl,
             // The AI SDK's Bedrock provider reads AWS_REGION; App Runner does
             // not set it automatically (Lambda does, as a reserved var).
             AWS_REGION: cfg.ai.bedrockRegion,
+            // Bootstrapping placeholders so auth/billing modules can load and
+            // health checks pass. Replace with Secrets Manager
+            // (runtimeEnvironmentSecrets) + real public URLs before real traffic.
+            // See infra/aws/GETTING_STARTED.md § Secrets.
+            STRIPE_SECRET_KEY: "sk_test_sandbox_placeholder",
+            STRIPE_WEBHOOK_SECRET: "whsec_sandbox_placeholder",
+            BETTER_AUTH_SECRET: "sandbox-better-auth-secret-min-32-chars",
+            BETTER_AUTH_URL: "http://127.0.0.1:4000",
+            NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:4000",
+            // public-mcp asserts NEXT_PUBLIC_MCP_URL at process start; PORT is
+            // the listen port. Swap for the real public URL after first deploy.
+            ...(app.name === "public-mcp"
+              ? { NEXT_PUBLIC_MCP_URL: `http://127.0.0.1:${app.port}` }
+              : {}),
           },
           runtimeEnvironmentSecrets: {
             DATABASE_URL: databaseUrlSecretArn,
@@ -238,6 +255,10 @@ for (const app of apprunnerApps) {
     healthCheckConfiguration: {
       protocol: "HTTP",
       path: app.healthPath,
+      interval: 10,
+      timeout: 5,
+      healthyThreshold: 1,
+      unhealthyThreshold: 5,
     },
     autoScalingConfigurationArn: autoScaling.arn,
     tags: { ...baseTags, Name: `${namePrefix}-${app.name}` },

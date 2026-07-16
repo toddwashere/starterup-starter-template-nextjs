@@ -7,8 +7,8 @@
 # Build context must be the repo root:
 #   docker build -f infra/shared/docker/Dockerfile.public-api -t public-api .
 #
-# Note: public-api does not use @workspace/database directly, so no Prisma
-# generate step is needed.
+# public-api pulls @workspace/database transitively via @workspace/auth, so
+# Prisma client must be generated before start.
 
 # ---------------------------------------------------------------------------
 # Stage 1: prune the monorepo down to @apps/public-api + its dependencies.
@@ -20,7 +20,7 @@ COPY . .
 RUN npx --yes turbo@^2 prune @apps/public-api --docker
 
 # ---------------------------------------------------------------------------
-# Stage 2: install deps.
+# Stage 2: install deps and generate Prisma client.
 # ---------------------------------------------------------------------------
 FROM node:24.16.0-slim AS builder
 WORKDIR /app
@@ -34,8 +34,14 @@ RUN pnpm install --frozen-lockfile
 # Copy the pruned source.
 COPY --from=pruner /app/out/full/ .
 
+# Generate the Prisma client from the schema. No DB connection is made, but
+# prisma.config.ts resolves env("DATABASE_URL") while loading, so pass a
+# placeholder to satisfy config loading.
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" \
+    pnpm --filter @workspace/database exec prisma generate
+
 # ---------------------------------------------------------------------------
-# Stage 3: runtime image (carries node_modules + source).
+# Stage 3: runtime image (carries node_modules + source + generated client).
 # ---------------------------------------------------------------------------
 FROM node:24.16.0-slim AS runner
 WORKDIR /app

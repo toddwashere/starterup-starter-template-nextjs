@@ -15,6 +15,13 @@ describe("public MCP env", () => {
     expect(getPublicMcpListenPort()).toBe(4003);
   });
 
+  it("prefers PORT over the public URL port for listen", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com");
+    vi.stubEnv("PORT", "4003");
+    const { getPublicMcpListenPort } = await import("./public-mcp.js");
+    expect(getPublicMcpListenPort()).toBe(4003);
+  });
+
   it("throws when NEXT_PUBLIC_MCP_URL is missing", async () => {
     delete process.env.NEXT_PUBLIC_MCP_URL;
     const { getPublicMcpUrl } = await import("./public-mcp.js");

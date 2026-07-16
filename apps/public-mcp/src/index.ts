@@ -28,14 +28,22 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = req.url ?? "";
+  const pathname = url.split("?")[0] ?? "";
+
+  // Liveness for App Runner / load balancers — no auth, no side effects.
+  if (pathname === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
 
   // OAuth protected-resource metadata — required for MCP client OAuth discovery
-  if (url === "/.well-known/oauth-protected-resource") {
+  if (pathname === "/.well-known/oauth-protected-resource") {
     writeProtectedResourceMetadata(res);
     return;
   }
 
-  if (!url.startsWith("/mcp")) {
+  if (!pathname.startsWith("/mcp")) {
     writeJsonError(res, 404, "NOT_FOUND", "Not found");
     return;
   }
@@ -68,6 +76,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 });
 
 const port = getPublicMcpListenPort();
-server.listen(port, () => {
-  console.log(`Public MCP server running at ${getPublicMcpUrl()}/mcp`);
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Public MCP server listening on 0.0.0.0:${port}`);
+  console.log(`Public MCP endpoint: ${getPublicMcpUrl()}/mcp`);
 });

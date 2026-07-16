@@ -37,8 +37,28 @@ COPY --from=pruner /app/out/full/ .
 RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" \
     pnpm --filter @workspace/database exec prisma generate
 
+# NEXT_PUBLIC_* are inlined at build time. Defaults unblock CI/local image
+# builds; pass real App Runner / custom-domain URLs via --build-arg for prod.
+ARG NEXT_PUBLIC_DASHBOARD_URL=http://localhost:4000
+ARG NEXT_PUBLIC_WWW_URL=http://localhost:4001
+ARG NEXT_PUBLIC_API_URL=http://localhost:4002
+ARG NEXT_PUBLIC_MCP_URL=http://localhost:4003
+ARG NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:4000
+ENV NEXT_PUBLIC_DASHBOARD_URL=$NEXT_PUBLIC_DASHBOARD_URL \
+    NEXT_PUBLIC_WWW_URL=$NEXT_PUBLIC_WWW_URL \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_MCP_URL=$NEXT_PUBLIC_MCP_URL \
+    NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
+    DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder \
+    BETTER_AUTH_SECRET=build-time-placeholder-secret-32chars \
+    BETTER_AUTH_URL=http://localhost:4000 \
+    STRIPE_SECRET_KEY=sk_test_build_placeholder \
+    STRIPE_WEBHOOK_SECRET=whsec_build_placeholder \
+    CAMPAIGN_UNSUBSCRIBE_SECRET=build-time-campaign-unsubscribe-secret-32
+
 # Build Next.js with standalone output enabled.
-RUN pnpm --filter @apps/dashboard build
+RUN pnpm --filter @apps/dashboard build \
+    && mkdir -p apps/dashboard/public
 
 # ---------------------------------------------------------------------------
 # Stage 3: minimal runtime image using the Next.js standalone output.
@@ -47,6 +67,7 @@ FROM node:24.16.0-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV HOSTNAME=0.0.0.0
 
 # Next standalone emits a self-contained server.js + trimmed node_modules
 # under .next/standalone/. Copy that tree plus the static assets and public

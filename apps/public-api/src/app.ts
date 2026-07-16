@@ -9,6 +9,7 @@ import { registerEmailResendWebhookRoute } from "./routes/webhooks/email-resend"
 
 export function createApp(): OpenAPIHono<AppEnv> {
   const app = new OpenAPIHono<AppEnv>();
+  app.get("/health", (c) => c.json({ status: "ok" }));
   registerEmailResendWebhookRoute(app);
   app.route("/", createV1Router());
   registerDocs(app);

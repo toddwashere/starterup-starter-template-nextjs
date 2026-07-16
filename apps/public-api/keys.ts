@@ -6,6 +6,7 @@ const schema = z.object({
 
 export function keys() {
   return schema.parse({
-    PUBLIC_API_PORT: process.env.PUBLIC_API_PORT,
+    // App Runner / containers set PORT; keep PUBLIC_API_PORT for local overrides.
+    PUBLIC_API_PORT: process.env.PUBLIC_API_PORT ?? process.env.PORT,
   });
 }

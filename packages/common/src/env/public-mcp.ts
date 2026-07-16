@@ -30,8 +30,22 @@ export function getPublicMcpEndpoint(): string {
   return `${getPublicMcpUrl()}/mcp`;
 }
 
-/** TCP port derived from {@link getPublicMcpUrl}. */
+/**
+ * TCP listen port.
+ *
+ * Prefer `PORT` / `PUBLIC_MCP_PORT` (App Runner and containers set `PORT`) so a
+ * public HTTPS URL without an explicit port does not force listen on 443.
+ * Fall back to the port embedded in {@link getPublicMcpUrl}.
+ */
 export function getPublicMcpListenPort(): number {
+  const fromEnv = process.env.PORT ?? process.env.PUBLIC_MCP_PORT;
+  if (fromEnv) {
+    const parsed = Number(fromEnv);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
   const url = new URL(getPublicMcpUrl());
   if (url.port) {
     return Number(url.port);
