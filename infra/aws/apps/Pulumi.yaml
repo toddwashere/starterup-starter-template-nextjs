@@ -1,5 +1,10 @@
 name: starter-aws-apps
-runtime: nodejs
+runtime:
+  name: nodejs
+  options:
+    # Native ESM ("type": "module") + relative TS imports need a TS loader.
+    typescript: false
+    nodeargs: "--import tsx"
 description: ECS Fargate services for the SaaS starter template
 config:
   aws:region:

@@ -218,7 +218,8 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
       runtime: aws.lambda.Runtime.NodeJS22dX,
       memorySize: 256,
       timeout: 60,
-      reservedConcurrentExecutions: 1,
+      // Omit reserved concurrency: new accounts often have only 10 concurrent
+      // executions, and AWS requires leaving at least 10 unreserved.
       tags,
     },
     {

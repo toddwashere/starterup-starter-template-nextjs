@@ -194,7 +194,7 @@ new aws.ec2.SecurityGroupRule("db-sg-ingress-self", {
   toPort: 5432,
   protocol: "tcp",
   self: true,
-  description: "Postgres within db-sg (RDS Proxy -> instance)",
+  description: "Postgres within db-sg (RDS Proxy to instance)",
 });
 
 // --- RDS Postgres (private) -------------------------------------------------

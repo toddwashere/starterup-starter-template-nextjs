@@ -1,3 +1,9 @@
 name: starter-aws-bootstrap
-runtime: nodejs
+runtime:
+  name: nodejs
+  options:
+    # Native ESM ("type": "module") + relative .ts imports need a TS loader.
+    # Disable Pulumi's default ts-node path and use tsx instead.
+    typescript: false
+    nodeargs: "--import tsx"
 description: Per-account foundations (GitHub OIDC deploy role, ECR repo, budget) — run once per AWS account with admin credentials
