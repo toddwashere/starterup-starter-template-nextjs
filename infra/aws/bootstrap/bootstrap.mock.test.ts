@@ -101,13 +101,22 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(policyDoc).toContain("repo:acme/starter:*");
   });
 
-  it("provisions an ECR repository with scan-on-push", () => {
+  it("provisions per-app ECR repositories with scan-on-push", () => {
     const repos = recorded.filter((r) => r.type === "aws:ecr/repository:Repository");
-    expect(repos).toHaveLength(1);
-    expect(repos[0].inputs.name).toBe("starter");
-    expect(repos[0].inputs.imageScanningConfiguration).toEqual({
-      scanOnPush: true,
-    });
+    const names = repos.map((r) => r.inputs.name as string).sort();
+    expect(names).toEqual([
+      "starter/dashboard",
+      "starter/public-api",
+      "starter/public-mcp",
+      "starter/workers",
+      "starter/workers-lambda",
+      "starter/www",
+    ]);
+    for (const repo of repos) {
+      expect(repo.inputs.imageScanningConfiguration).toEqual({
+        scanOnPush: true,
+      });
+    }
   });
 
   it("attaches only the base policy set when complianceMode is none", () => {

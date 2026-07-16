@@ -14,10 +14,35 @@ import { poolerDnsFromEnv, type AwsEnvName } from "../env";
 //   AWS_PROFILE=starter-sandbox pulumi up -s sandbox
 //
 // It codifies the three things core/apps assume already exist:
-//   1. An ECR repository for app images.
+//   1. Per-app ECR repositories under the `starter/` prefix (see below).
 //   2. A GitHub Actions OIDC provider + least-privilege deploy role.
 //   3. A monthly cost budget with email alerts.
 // ---------------------------------------------------------------------------
+
+/** Image names App Runner / Lambda pull as `…/starter/<name>:<tag>`. */
+const ECR_IMAGE_NAMES = [
+  "dashboard",
+  "www",
+  "public-api",
+  "public-mcp",
+  "workers",
+  "workers-lambda",
+] as const;
+
+const ecrLifecyclePolicy = JSON.stringify({
+  rules: [
+    {
+      rulePriority: 1,
+      description: "Keep last 20 images",
+      selection: {
+        tagStatus: "any",
+        countType: "imageCountMoreThan",
+        countNumber: 20,
+      },
+      action: { type: "expire" },
+    },
+  ],
+});
 
 const config = new pulumi.Config();
 const region = new pulumi.Config("aws").get("region") ?? "us-east-2";
@@ -46,32 +71,22 @@ const budgetNotificationEmail = config.get("budgetNotificationEmail");
 const complianceMode = config.get("complianceMode") ?? "none";
 const isCompliant = complianceMode !== "none";
 
-// --- 1. ECR repository for app images ---------------------------------------
-const ecr = new aws.ecr.Repository("app-images", {
-  name: "starter",
-  imageTagMutability: "MUTABLE",
-  imageScanningConfiguration: { scanOnPush: true },
-  encryptionConfigurations: [{ encryptionType: "AES256" }],
-  tags: baseTags,
-});
-
-// Keep only the most recent images to bound storage cost.
-new aws.ecr.LifecyclePolicy("app-images-lifecycle", {
-  repository: ecr.name,
-  policy: JSON.stringify({
-    rules: [
-      {
-        rulePriority: 1,
-        description: "Keep last 20 images",
-        selection: {
-          tagStatus: "any",
-          countType: "imageCountMoreThan",
-          countNumber: 20,
-        },
-        action: { type: "expire" },
-      },
-    ],
-  }),
+// --- 1. ECR repositories for app images -------------------------------------
+// Apps resolve images as `<account>.dkr.ecr.<region>.amazonaws.com/starter/<name>:<tag>`.
+// A single bare `starter` repo is not enough — each app needs its own repository.
+const ecrRepos = ECR_IMAGE_NAMES.map((imageName) => {
+  const repo = new aws.ecr.Repository(`app-images-${imageName}`, {
+    name: `starter/${imageName}`,
+    imageTagMutability: "MUTABLE",
+    imageScanningConfiguration: { scanOnPush: true },
+    encryptionConfigurations: [{ encryptionType: "AES256" }],
+    tags: { ...baseTags, App: imageName },
+  });
+  new aws.ecr.LifecyclePolicy(`app-images-${imageName}-lifecycle`, {
+    repository: repo.name,
+    policy: ecrLifecyclePolicy,
+  });
+  return repo;
 });
 
 // --- 2. GitHub Actions OIDC provider + deploy role --------------------------
@@ -631,7 +646,11 @@ if (budgetNotificationEmail) {
 // --- Exports ----------------------------------------------------------------
 // Feed these into GitHub Actions (AWS_DEPLOY_ROLE_ARN, AWS_ECR_REGISTRY) and the
 // apps stack's `imageRegistry` config.
-export const ecrRepositoryUrl = ecr.repositoryUrl;
+// Registry prefix shared by every `starter/<name>` repository (not a single repo URL).
+export const ecrRepositoryUrl = pulumi.interpolate`${accountId}.dkr.ecr.${region}.amazonaws.com/starter`;
+export const ecrRepositoryUrls = Object.fromEntries(
+  ecrRepos.map((repo, i) => [ECR_IMAGE_NAMES[i], repo.repositoryUrl]),
+);
 export const githubOidcProviderArn = githubOidc.arn;
 export const deployRoleArn = deployRole.arn;
 export const regionOut = region;

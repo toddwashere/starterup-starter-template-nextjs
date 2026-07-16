@@ -38,6 +38,8 @@ pnpm-debug.log*
 .env
 .env*.local
 infra/.pulumi-passphrase
+# Local Docker build-arg helpers (may contain placeholder secrets)
+infra/shared/docker/build-time.env
 
 # vercel
 .vercel

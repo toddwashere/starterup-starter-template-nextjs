@@ -124,7 +124,8 @@ Use the exact KMS secrets-provider URL printed by the state command:
 1. Initialize, preview, and deploy `bootstrap`.
 2. **CHECKPOINT:** Delegate the Route 53 hosted zone (see below).
 3. Initialize, preview, and deploy `core`.
-4. Initialize, preview, and deploy `apps`.
+4. Build/push `linux/amd64` images to the per-app ECR repos, then deploy `apps`
+   (see steps 7–8 below).
 
 Before deploying `bootstrap`, set its required repository scope:
 
@@ -222,6 +223,66 @@ ACM certificate validation will fail.
    The `openssl` command should complete the TLS handshake and print the
    certificate chain. If it reports `Verify return code: 0 (ok)`, TLS is
    correctly configured.
+
+7. **Build and push app images (required before `apps up`):** Bootstrap creates
+   one ECR repository per image under `starter/<name>`
+   (`dashboard`, `www`, `public-api`, `public-mcp`, `workers`, `workers-lambda`).
+   App Runner and Lambda pull `…/starter/<name>:<tag>`. Images must be
+   **`linux/amd64`** (App Runner / Lambda), and buildx attestations must be
+   disabled or pulls can fail:
+
+   ```bash
+   export AWS_PROFILE=starter-sandbox
+   export AWS_REGION=us-east-2
+   export REGISTRY=<account>.dkr.ecr.us-east-2.amazonaws.com
+   export TAG=sandbox-verify   # or a git SHA; pass the same tag to apps via imageTag
+
+   aws ecr get-login-password --region "$AWS_REGION" \
+     | docker login --username AWS --password-stdin "$REGISTRY"
+
+   build_push() {
+     local name="$1" file="$2"
+     docker buildx build \
+       --platform linux/amd64 \
+       --provenance=false --sbom=false \
+       -f "$file" \
+       -t "$REGISTRY/starter/$name:$TAG" \
+       --push .
+   }
+
+   build_push dashboard infra/shared/docker/Dockerfile.dashboard
+   build_push www infra/shared/docker/Dockerfile.www
+   build_push public-api infra/shared/docker/Dockerfile.public-api
+   build_push public-mcp infra/shared/docker/Dockerfile.public-mcp
+   build_push workers apps/workers/Dockerfile
+   build_push workers-lambda apps/workers/Dockerfile.lambda
+
+   AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set imageTag "$TAG"
+   AWS_PROFILE=starter-sandbox pnpm infra:aws apps preview -s sandbox
+   AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
+   ```
+
+   `NEXT_PUBLIC_*` values are baked into Next.js images at **build** time. Rebuild
+   with `--build-arg NEXT_PUBLIC_DASHBOARD_URL=https://…` (and related args) once
+   you know the App Runner or custom-domain URLs; runtime App Runner env alone
+   will not fix client-side links.
+
+8. **Smoke-check apps:** After `apps up`, every App Runner service should be
+   `RUNNING`. Confirm health and DB from the VPC path:
+
+   ```bash
+   # Replace hosts with `pulumi stack output` values from the apps stack
+   curl -sS "https://<dashboardUrl>/api/health"   # expect {"status":"ok"}
+   curl -sS "https://<dashboardUrl>/api/ready"    # expect db: true
+   curl -sS "https://<wwwUrl>/api/health"
+   curl -sS "https://<publicApiUrl>/health"
+   curl -sS "https://<publicMcpUrl>/health"
+   ```
+
+   Auth/billing will still look broken until you replace the bootstrapping
+   placeholders in `infra/aws/apps/index.ts` (or, better, Secrets Manager
+   values wired via `runtimeEnvironmentSecrets`) and rebuild Next images with
+   real public URLs. See [Secrets](#secrets).
 
 > [!IMPORTANT]
 > **Substitution required:** Every occurrence of `example.com` in the commands
@@ -378,7 +439,7 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 | Root user hardening (MFA, no keys)                                    | **Manual (console)**                     | One-time account security                                                |
 | Central Pulumi state foundation                                       | **CloudFormation via `infra:aws:state`** | Must exist independently of the Pulumi stacks it stores                  |
 | GitHub OIDC provider + deploy role                                    | **`bootstrap` stack**                    | Codified, repeatable per account                                         |
-| ECR repository                                                        | **`bootstrap` stack**                    | Codified                                                                 |
+| ECR repositories (`starter/<app>`)                                    | **`bootstrap` stack**                    | Codified                                                                 |
 | Cost budget + alerts                                                  | **`bootstrap` stack**                    | Codified                                                                 |
 | VPC, RDS, Proxy, PgBouncer, SQS, S3, Secrets, EventBridge, compliance | **`core` stack**                         | Codified                                                                 |
 | App Runner services, workers Lambda, VPC connector                    | **`apps` stack**                         | Codified                                                                 |
@@ -602,6 +663,16 @@ Two kinds of secrets, both kept out of git:
 `/starter/<env>/database-url`, `/starter/<env>/direct-url`, and (hybrid)
 `/starter/<env>/vercel-database-url`. You never author or commit these; they're
 materialized at deploy time from the generated password and resource endpoints.
+
+#### App Runner runtime placeholders (boot only)
+
+The apps stack ships non-secret **bootstrapping** env vars so containers can
+start and pass health checks (`STRIPE_*`, `BETTER_AUTH_*`, etc.). They are **not**
+production values: auth redirects and billing will fail until you set real
+secrets (Secrets Manager + `runtimeEnvironmentSecrets`) and point
+`BETTER_AUTH_URL` / public URLs at your App Runner or custom domain. Prefer
+Secrets Manager for anything sensitive — do not commit live keys into
+`apps/index.ts`.
 
 #### Manually-managed (placeholders)
 
