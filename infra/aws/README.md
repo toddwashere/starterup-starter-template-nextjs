@@ -17,6 +17,13 @@ Three Pulumi projects live here:
 
 `apps` depends on `core` via `pulumi.StackReference`. Deploy order: `bootstrap` → `core` → `apps`.
 
+AWS Pulumi packages live in a **nested pnpm workspace** under `infra/aws/` so the
+root app install stays free of Pulumi/AWS SDK deps. Install them with:
+
+```bash
+pnpm --dir infra/aws install
+```
+
 ---
 
 ## Architecture
@@ -398,24 +405,25 @@ These projects are not in the pnpm workspace root. Install deps inside each proj
 pnpm infra:aws:state init sandbox
 # Copy the printed awskms:///... URL for the stack-init commands below.
 
+# Install Pulumi layer deps once (nested workspace; not part of the app install)
+pnpm --dir infra/aws install
+
 # 1. Bootstrap (once per account, admin creds) — ECR repo, OIDC deploy role, budget
-cd infra/aws/bootstrap
-pnpm install
-AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pulumi config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox \
+  --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set \
+  starter-aws-bootstrap:githubRepo <owner>/<repo>
 
-cd ../core
-pnpm install
-AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pulumi config set starter-aws-core:env sandbox
+# 2. Core
+AWS_PROFILE=starter-sandbox pnpm infra:aws core stack init sandbox \
+  --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pnpm infra:aws core config set aws:region us-east-2
 
-cd ../apps
-pnpm install
-AWS_PROFILE=starter-sandbox pulumi stack init sandbox --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pulumi config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pulumi config set starter-aws-apps:env sandbox
+# 3. Apps
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps stack init sandbox \
+  --secrets-provider="<printed awskms URL>"
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set aws:region us-east-2
 # coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
 # account + region (infra/.env.local) — no per-stack config needed for those.
 ```
@@ -434,17 +442,16 @@ Authenticate to the target environment's account first — **the profile you use
 decides the account** (see [`GETTING_STARTED.md`](./GETTING_STARTED.md)).
 
 ```sh
+pnpm --dir infra/aws install
+
 # 0. Bootstrap (once per account): ECR repo, OIDC deploy role, budget
-cd infra/aws/bootstrap
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
 
 # 1. Core infrastructure (VPC, RDS, Proxy, SQS, S3, Secrets Manager)
-cd ../core
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 
 # 2. App services (App Runner, Lambda — reads outputs from core)
-cd ../apps
-AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
 ```
 
 ---

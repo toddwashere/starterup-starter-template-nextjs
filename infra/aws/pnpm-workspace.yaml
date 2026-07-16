@@ -1,0 +1,14 @@
+packages:
+  - "bootstrap"
+  - "core"
+  - "apps"
+
+# Keep the optional AWS toolchain isolated from the root application workspace.
+# These supply-chain controls mirror the repository root without making Pulumi
+# dependencies part of the default install.
+minimumReleaseAge: 600
+blockExoticSubdeps: true
+
+allowBuilds:
+  esbuild: true
+  protobufjs: true

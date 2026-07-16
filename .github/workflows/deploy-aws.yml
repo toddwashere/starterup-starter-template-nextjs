@@ -61,12 +61,8 @@ jobs:
           node-version: 24.16.0
           cache: pnpm
 
-      - name: Install deps (core stack)
-        working-directory: infra/aws/core
-        run: pnpm install --frozen-lockfile
-
-      - name: Install deps (apps stack)
-        working-directory: infra/aws/apps
+      - name: Install AWS infrastructure dependencies
+        working-directory: infra/aws
         run: pnpm install --frozen-lockfile
 
       - name: Configure AWS credentials (OIDC)
@@ -225,8 +221,8 @@ jobs:
         run: pnpm exec prisma migrate deploy
 
       # Deploy core infrastructure (RDS, SQS, Secrets Manager)
-      - name: Install deps (core stack)
-        working-directory: infra/aws/core
+      - name: Install AWS infrastructure dependencies
+        working-directory: infra/aws
         run: pnpm install --frozen-lockfile
 
       - name: Pulumi up (core)
@@ -244,10 +240,6 @@ jobs:
       # Deploy app services: App Runner rolling update (dashboard, www, public-api, public-mcp)
       # + workers Lambda (Function + EventSourceMapping) — all managed by the apps stack.
       # imageTag pins every service to this SHA; no separate Lambda publish step needed.
-      - name: Install deps (apps stack)
-        working-directory: infra/aws/apps
-        run: pnpm install --frozen-lockfile
-
       - name: Pulumi up (apps)
         uses: pulumi/actions@v6
         with:

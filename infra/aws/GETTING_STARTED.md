@@ -476,7 +476,7 @@ Codifies the GitHub OIDC deploy role, the ECR repo, the budget, the protected
 Route 53 hosted zone, and the SNS alert topic.
 
 ```bash
-cd infra/aws/bootstrap && pnpm install && cd -
+pnpm --dir infra/aws install
 PULUMI_SECRETS_PROVIDER='<printed awskms:///... URL>'
 AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
@@ -505,7 +505,7 @@ email.
 #### 2. Core
 
 ```bash
-cd infra/aws/core && pnpm install && cd -
+# AWS deps already installed via `pnpm --dir infra/aws install` above.
 AWS_PROFILE=starter-sandbox pnpm infra:aws core stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
 AWS_PROFILE=starter-sandbox pnpm infra:aws core config set aws:region us-east-2
@@ -516,7 +516,7 @@ AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
 #### 3. Apps
 
 ```bash
-cd infra/aws/apps && pnpm install && cd -
+# AWS deps already installed via `pnpm --dir infra/aws install` above.
 AWS_PROFILE=starter-sandbox pnpm infra:aws apps stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
 AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set aws:region us-east-2

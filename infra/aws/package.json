@@ -1,5 +1,6 @@
 {
   "name": "starter-aws-config",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "packageManager": "pnpm@11.1.3"
 }
