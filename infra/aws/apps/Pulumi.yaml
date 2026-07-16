@@ -5,7 +5,4 @@ runtime:
     # Native ESM ("type": "module") + relative TS imports need a TS loader.
     typescript: false
     nodeargs: "--import tsx"
-description: ECS Fargate services for the SaaS starter template
-config:
-  aws:region:
-    description: AWS region
+description: App Runner services and workers Lambda for the SaaS starter template
