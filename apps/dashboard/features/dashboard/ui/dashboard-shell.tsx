@@ -1,8 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/features/auth/data/auth-client";
-import { getPathForSignIn } from "@workspace/routes";
+import {
+  getPathForAccountSettings,
+  getPathForSignIn,
+} from "@workspace/routes";
 import {
   Avatar,
   AvatarFallback,
@@ -12,12 +16,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import { AppLogo } from "@workspace/ui/components/app-logo";
 import { Button } from "@workspace/ui/components/button";
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle";
-import { IconForSignOut } from "@workspace/ui/components/icon-for";
+import {
+  IconForProfile,
+  IconForSignOut,
+} from "@workspace/ui/components/icon-for";
 
 interface DashboardShellProps {
   user: { name: string; image?: string | null };
@@ -53,8 +61,15 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={getPathForAccountSettings()}>
+                  <IconForProfile />
+                  Account settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={handleSignOut}>
-                <IconForSignOut className="mr-2" />
+                <IconForSignOut />
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
