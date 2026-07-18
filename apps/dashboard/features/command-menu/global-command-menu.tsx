@@ -14,7 +14,11 @@ import { toast } from "@workspace/ui/components/sonner";
 import { authClient } from "@workspace/auth/client";
 import { buildCommands } from "./command-providers";
 import { CommandMenuDialog } from "./command-menu-dialog";
-import type { CommandContext, DashboardCommand } from "./command-types";
+import type {
+  CommandContext,
+  DashboardCommand,
+  Organization,
+} from "./command-types";
 import { AddContactButtonModal } from "@/features/contacts/contact/ui/add-contact-button-modal";
 import {
   openAddContactFlow,
@@ -31,15 +35,77 @@ export function useCommandMenu() {
   return useContext(CommandMenuContext);
 }
 
+type SessionUser = NonNullable<CommandContext["user"]>;
+
+/**
+ * Root command menu. Avoid calling `useListOrganizations` while logged out —
+ * a pre-sign-in 401 sticks in better-auth's `$listOrg` atom and the org picker
+ * stays empty after soft navigation until a full reload.
+ */
 export function GlobalCommandMenu({ children }: { children: ReactNode }) {
+  const { data: session } = authClient.useSession();
+  const sessionUser = session?.user
+    ? {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+      }
+    : null;
+
+  if (!sessionUser) {
+    return (
+      <GlobalCommandMenuShell sessionUser={null} organizations={[]}>
+        {children}
+      </GlobalCommandMenuShell>
+    );
+  }
+
+  return (
+    <AuthenticatedGlobalCommandMenu sessionUser={sessionUser}>
+      {children}
+    </AuthenticatedGlobalCommandMenu>
+  );
+}
+
+function AuthenticatedGlobalCommandMenu({
+  sessionUser,
+  children,
+}: {
+  sessionUser: SessionUser;
+  children: ReactNode;
+}) {
+  const { data: orgsData } = authClient.useListOrganizations();
+  const organizations: Organization[] = (orgsData ?? []).map((org) => ({
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+  }));
+
+  return (
+    <GlobalCommandMenuShell
+      sessionUser={sessionUser}
+      organizations={organizations}
+    >
+      {children}
+    </GlobalCommandMenuShell>
+  );
+}
+
+function GlobalCommandMenuShell({
+  sessionUser,
+  organizations,
+  children,
+}: {
+  sessionUser: SessionUser | null;
+  organizations: Organization[];
+  children: ReactNode;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const params = useParams<{ "org-slug"?: string }>();
   const orgSlug = params["org-slug"];
   const { setTheme } = useTheme();
-  const { data: session } = authClient.useSession();
-  const { data: orgsData } = authClient.useListOrganizations();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -56,8 +122,8 @@ export function GlobalCommandMenu({ children }: { children: ReactNode }) {
   const context: CommandContext = {
     pathname,
     orgSlug,
-    user: session?.user ?? null,
-    organizations: orgsData ?? [],
+    user: sessionUser,
+    organizations,
     router,
     setTheme,
     signOut: async () => {

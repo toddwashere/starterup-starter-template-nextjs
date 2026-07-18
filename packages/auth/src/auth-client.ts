@@ -19,3 +19,11 @@ export const authClient = createAuthClient({
 });
 
 export type AuthClient = typeof authClient;
+
+/**
+ * Better Auth refreshes the session atom on sign-in/sign-up but does not
+ * notify `$listOrg`. Call after auth transitions so organization lists refetch.
+ */
+export function invalidateOrganizationList(): void {
+  authClient.$store.notify("$listOrg");
+}

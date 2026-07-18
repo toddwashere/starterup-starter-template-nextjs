@@ -22,11 +22,7 @@ export async function signIn(page: Page, { email, password }: SignInOptions): Pr
   // Wait until we are no longer on the sign-in page.
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
 
-  // Reload so the org-picker fetches with the newly-set session cookie.
-  // (The org-list atom may have been pre-populated with a 401 by a shared
-  // component that ran before sign-in; a reload guarantees a fresh fetch.)
-  await page.reload();
-
-  // Assert the org picker page has loaded successfully.
+  // Assert the org picker page has loaded successfully (no reload — soft nav
+  // after sign-in should show orgs once `$listOrg` is gated/invalidated).
   await expect(page.getByRole("heading", { name: "Your Organizations" })).toBeVisible();
 }

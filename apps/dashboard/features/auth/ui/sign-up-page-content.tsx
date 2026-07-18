@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { authClient } from "../data/auth-client";
+import { authClient, invalidateOrganizationList } from "../data/auth-client";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -40,6 +40,7 @@ export function SignUpPageContent() {
 
     try {
       await authClient.signUp.email({ email, password, name });
+      invalidateOrganizationList();
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
