@@ -18,6 +18,12 @@ export const createOrgSchema = z.object({
 
 export type CreateOrgInput = z.infer<typeof createOrgSchema>;
 
+export const updateOrgSchema = createOrgSchema.extend({
+  organizationId: z.string().min(1),
+});
+
+export type UpdateOrgInput = z.infer<typeof updateOrgSchema>;
+
 // Role membership is validated against the registry (`ORG_ROLE_CATALOG`)
 // rather than a hand-duplicated Zod enum, so a new role only needs to be
 // added in one place. Each surface (replace / invite / bulk) has its own

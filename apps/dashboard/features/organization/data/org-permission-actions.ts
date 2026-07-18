@@ -6,6 +6,15 @@ import {
   type MemberManagementContext,
 } from "@workspace/auth/member-role-management";
 
+export async function getOrgUpdateContextAction(
+  organizationId: string,
+): Promise<{ canUpdate: boolean }> {
+  const result = await getOrgPermissionContext(organizationId, {
+    organization: ["update"],
+  });
+  return { canUpdate: result.allowed };
+}
+
 export async function getApiKeyManageContextAction(
   organizationId: string,
 ): Promise<{ canRead: boolean; canCreate: boolean }> {

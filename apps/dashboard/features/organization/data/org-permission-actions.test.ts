@@ -21,14 +21,34 @@ import {
 import {
   getApiKeyManageContextAction,
   getMemberManagementContextAction,
+  getOrgUpdateContextAction,
 } from "./org-permission-actions";
 
+describe("getOrgUpdateContextAction", () => {
+  beforeEach(() => {
+    vi.mocked(getOrgPermissionContext).mockReset();
+  });
+
+  it("returns whether the actor may update the organization", async () => {
+    vi.mocked(getOrgPermissionContext).mockResolvedValue({ allowed: true });
+
+    await expect(getOrgUpdateContextAction("org_1")).resolves.toEqual({
+      canUpdate: true,
+    });
+    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_1", {
+      organization: ["update"],
+    });
+  });
+});
+
 describe("getApiKeyManageContextAction", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.mocked(getOrgPermissionContext).mockReset();
+  });
 
   it("returns { canRead: true, canCreate: false } based on permission context results", async () => {
     vi.mocked(getOrgPermissionContext)
-      .mockResolvedValueOnce({ allowed: true })  // read call
+      .mockResolvedValueOnce({ allowed: true }) // read call
       .mockResolvedValueOnce({ allowed: false }); // create call
 
     const result = await getApiKeyManageContextAction("org_123");
@@ -43,8 +63,12 @@ describe("getApiKeyManageContextAction", () => {
 
     await getApiKeyManageContextAction("org_abc");
 
-    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { apiKey: ["read"] });
-    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", { apiKey: ["create"] });
+    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", {
+      apiKey: ["read"],
+    });
+    expect(getOrgPermissionContext).toHaveBeenCalledWith("org_abc", {
+      apiKey: ["create"],
+    });
     expect(getOrgPermissionContext).toHaveBeenCalledTimes(2);
   });
 });

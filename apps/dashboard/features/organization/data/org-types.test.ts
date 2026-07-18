@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   createOrgSchema,
+  updateOrgSchema,
   replaceMemberRolesSchema,
   bulkMemberRolesSchema,
   inviteMemberSchema,
@@ -44,6 +45,43 @@ describe("createOrgSchema", () => {
   it("rejects slug shorter than 2 characters", () => {
     const result = createOrgSchema.safeParse({ name: "Acme", slug: "a" });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("updateOrgSchema", () => {
+  it("accepts a valid update payload", () => {
+    const result = updateOrgSchema.safeParse({
+      organizationId: "org_1",
+      name: "Acme Inc",
+      slug: "acme-inc",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("requires organizationId", () => {
+    const result = updateOrgSchema.safeParse({
+      organizationId: "",
+      name: "Acme",
+      slug: "acme",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects invalid name and slug the same way as create", () => {
+    expect(
+      updateOrgSchema.safeParse({
+        organizationId: "org_1",
+        name: "A",
+        slug: "acme",
+      }).success,
+    ).toBe(false);
+    expect(
+      updateOrgSchema.safeParse({
+        organizationId: "org_1",
+        name: "Acme",
+        slug: "Acme",
+      }).success,
+    ).toBe(false);
   });
 });
 

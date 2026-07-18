@@ -4,6 +4,7 @@ vi.mock("@workspace/auth", () => ({
   auth: {
     api: {
       createOrganization: vi.fn(),
+      updateOrganization: vi.fn(),
       removeMember: vi.fn(),
       cancelInvitation: vi.fn(),
     },
@@ -52,6 +53,8 @@ vi.mock("@workspace/observability/capture", () => ({
   captureException: vi.fn(),
 }));
 
+import { auth } from "@workspace/auth";
+import { requireOrgPermission } from "@workspace/auth/guards";
 import { headers } from "next/headers";
 import { captureException } from "@workspace/observability/capture";
 import {
@@ -67,7 +70,105 @@ import {
   bulkMemberRolesAction,
   inviteMemberAction,
   transferOwnershipAction,
+  updateOrganizationAction,
 } from "./org-actions";
+
+const mockUpdateOrganization = vi.mocked(auth.api.updateOrganization);
+
+describe("updateOrganizationAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns INVALID_INPUT for a malformed payload without calling auth", async () => {
+    const result = await updateOrganizationAction({
+      organizationId: "org_1",
+      name: "A",
+      slug: "acme",
+    });
+    expect(result).toEqual({
+      success: false,
+      error: { code: "INVALID_INPUT", message: "Check the organization details." },
+    });
+    expect(mockUpdateOrganization).not.toHaveBeenCalled();
+  });
+
+  it("requires organization:update and updates name and slug", async () => {
+    mockUpdateOrganization.mockResolvedValue({
+      id: "org_1",
+      name: "Acme Renamed",
+      slug: "acme-renamed",
+    } as never);
+
+    const result = await updateOrganizationAction({
+      organizationId: "org_1",
+      name: "Acme Renamed",
+      slug: "acme-renamed",
+    });
+
+    expect(requireOrgPermission).toHaveBeenCalledWith({
+      organization: ["update"],
+    });
+    expect(mockUpdateOrganization).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: {
+        organizationId: "org_1",
+        data: { name: "Acme Renamed", slug: "acme-renamed" },
+      },
+    });
+    expect(result).toEqual({
+      success: true,
+      data: {
+        id: "org_1",
+        name: "Acme Renamed",
+        slug: "acme-renamed",
+      },
+    });
+  });
+
+  it("maps slug-taken errors to SLUG_TAKEN", async () => {
+    mockUpdateOrganization.mockRejectedValue(
+      new Error("organization slug already taken"),
+    );
+
+    const result = await updateOrganizationAction({
+      organizationId: "org_1",
+      name: "Acme",
+      slug: "taken-slug",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "SLUG_TAKEN",
+        message:
+          "This URL slug is already taken. Choose a different slug for your organization.",
+      },
+    });
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("maps forbidden errors without capturing", async () => {
+    vi.mocked(requireOrgPermission).mockRejectedValueOnce(
+      new Error("Forbidden: missing required permission", {
+        cause: { status: 403 },
+      }),
+    );
+
+    const result = await updateOrganizationAction({
+      organizationId: "org_1",
+      name: "Acme",
+      slug: "acme",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: "FORBIDDEN",
+        message: "You do not have permission to update this organization.",
+      },
+    });
+    expect(captureException).not.toHaveBeenCalled();
+  });
+});
 
 describe("replaceMemberRolesAction", () => {
   beforeEach(() => vi.clearAllMocks());

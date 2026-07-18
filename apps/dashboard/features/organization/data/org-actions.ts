@@ -19,6 +19,7 @@ import {
   bulkMemberRolesSchema,
   inviteMemberSchema,
   transferOwnershipSchema,
+  updateOrgSchema,
 } from "./org-types";
 
 export async function createOrganizationAction(data: {
@@ -32,6 +33,112 @@ export async function createOrganizationAction(data: {
     headers: requestHeaders,
   });
   return result;
+}
+
+export type UpdateOrganizationActionResult =
+  | {
+      success: true;
+      data: { id: string; name: string; slug: string };
+    }
+  | {
+      success: false;
+      error: {
+        code: "INVALID_INPUT" | "FORBIDDEN" | "SLUG_TAKEN" | "UPDATE_FAILED";
+        message: string;
+      };
+    };
+
+/**
+ * Updates organization name/slug. Requires `organization:["update"]`
+ * (owner/admin). Returns a typed result so the settings UI can redirect on
+ * slug changes without throwing across the server-action boundary.
+ */
+export async function updateOrganizationAction(
+  input: unknown,
+): Promise<UpdateOrganizationActionResult> {
+  const parsed = updateOrgSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: {
+        code: "INVALID_INPUT",
+        message: "Check the organization details.",
+      },
+    };
+  }
+
+  try {
+    await requireOrgPermission({ organization: ["update"] });
+    const updated = await auth.api.updateOrganization({
+      headers: await headers(),
+      body: {
+        organizationId: parsed.data.organizationId,
+        data: {
+          name: parsed.data.name,
+          slug: parsed.data.slug,
+        },
+      },
+    });
+
+    if (!updated) {
+      return {
+        success: false,
+        error: {
+          code: "UPDATE_FAILED",
+          message:
+            "Something went wrong updating the organization. Please try again.",
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        id: updated.id,
+        name: updated.name,
+        slug: updated.slug,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const normalized = message.toLowerCase();
+
+    if (
+      normalized.includes("forbidden") ||
+      normalized.includes("not allowed to update")
+    ) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to update this organization.",
+        },
+      };
+    }
+
+    if (
+      normalized.includes("already taken") ||
+      normalized.includes("already exists")
+    ) {
+      return {
+        success: false,
+        error: {
+          code: "SLUG_TAKEN",
+          message:
+            "This URL slug is already taken. Choose a different slug for your organization.",
+        },
+      };
+    }
+
+    captureException(error, { operation: "organization-update" });
+    return {
+      success: false,
+      error: {
+        code: "UPDATE_FAILED",
+        message: "Something went wrong updating the organization. Please try again.",
+      },
+    };
+  }
 }
 
 /**
