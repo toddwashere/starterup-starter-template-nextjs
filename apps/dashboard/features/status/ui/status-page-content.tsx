@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchSystemStatus } from "../data/fetch-system-status";
 import type { CheckState, SystemStatus } from "../data/system-status";
+import { AppLogo } from "@workspace/ui/components/app-logo";
 import { Badge } from "@workspace/ui/components/badge";
 import {
   Card,
@@ -56,7 +57,8 @@ export function StatusPageContent() {
   const overallReady = status?.status === "ready";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/30 px-4 py-10">
+      <AppLogo size="lg" />
       <Card className="w-full max-w-xl">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">

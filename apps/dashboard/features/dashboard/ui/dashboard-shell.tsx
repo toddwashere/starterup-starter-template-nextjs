@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import { AppLogo } from "@workspace/ui/components/app-logo";
 import { Button } from "@workspace/ui/components/button";
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle";
 import { IconForSignOut } from "@workspace/ui/components/icon-for";
@@ -36,26 +37,29 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex h-16 shrink-0 items-center justify-end gap-2 border-b px-6">
-        <ThemeToggle />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Avatar className="size-8">
-                <AvatarImage src={displayImage} alt={displayName} />
-                <AvatarFallback>
-                  {displayName.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={handleSignOut}>
-              <IconForSignOut className="mr-2" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-6">
+        <AppLogo size="sm" />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Avatar className="size-8">
+                  <AvatarImage src={displayImage} alt={displayName} />
+                  <AvatarFallback>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={handleSignOut}>
+                <IconForSignOut className="mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
       <main className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col px-6 py-10">
         {children}

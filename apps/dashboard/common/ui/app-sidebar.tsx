@@ -10,6 +10,7 @@ import {
 import { OrgSwitcher } from "./org-switcher";
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
+import { SidebarBrand } from "./sidebar-brand";
 import type { NavConfig } from "@/types/nav";
 
 export function AppSidebar({
@@ -19,6 +20,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
+        <SidebarBrand />
         <OrgSwitcher />
       </SidebarHeader>
       <SidebarContent>
