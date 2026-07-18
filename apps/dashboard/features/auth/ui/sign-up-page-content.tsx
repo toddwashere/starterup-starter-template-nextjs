@@ -56,7 +56,11 @@ export function SignUpPageContent() {
           Enter your details to get started
         </CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit} {...passwordManagerSafeFormProps}>
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-6"
+        {...passwordManagerSafeFormProps}
+      >
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>

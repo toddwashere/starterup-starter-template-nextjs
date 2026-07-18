@@ -49,6 +49,7 @@ export function SignInPageContent() {
       <form
         onSubmit={handleSubmit}
         data-testid="sign-in-form"
+        className="flex flex-col gap-6"
         {...passwordManagerSafeFormProps}
       >
         <CardContent className="space-y-4">
