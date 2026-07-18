@@ -288,7 +288,7 @@ function DataTableBulkActions<TData>({
   children,
 }: DataTableSelectionProps<TData>): React.JSX.Element {
   return (
-    <div className="absolute inset-x-0 bottom-12 z-50 mx-auto flex h-[60px] max-w-xl animate-fadeIn items-center justify-between rounded-md border bg-background px-6 py-3 shadow-xl">
+    <div className="fixed inset-x-0 bottom-6 z-50 mx-auto flex h-[60px] max-w-xl animate-fadeIn items-center justify-between rounded-md border bg-background px-6 py-3 shadow-xl">
       <div className="flex items-center gap-2">{children}</div>
       <Button
         type="button"
