@@ -29,6 +29,8 @@ export type { OrgRoleMetadata } from "./role-catalog";
 export {
   evaluateMemberManagement,
   evaluateRoleAssignment,
+  evaluateRoleAssignmentDelta,
+  evaluateSelfRoleRetention,
   evaluateOwnershipTransfer,
 } from "./member-role-policy";
 export type {

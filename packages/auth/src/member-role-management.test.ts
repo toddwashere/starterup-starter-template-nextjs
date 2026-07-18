@@ -284,15 +284,56 @@ describe("replaceMemberRoles", () => {
     expect(mockUpdateMemberRole).not.toHaveBeenCalled();
   });
 
-  it("rejects self-editing", async () => {
-    mockTarget.userId = "user_actor";
+  it("allows an owner to add a lower role to themselves without dropping ownership", async () => {
+    mockTarget = {
+      id: "member_1",
+      organizationId: "org_1",
+      userId: "user_actor",
+      role: "owner",
+    };
     const result = await replaceMemberRoles({
       headers: new Headers(),
       organizationId: "org_1",
-      memberId: "member_2",
+      memberId: "member_1",
       roles: ["admin"],
     });
-    expect(result).toEqual(expect.objectContaining({ memberId: "member_2", status: "failed", code: "SELF" }));
+    expect(result).toEqual({
+      memberId: "member_1",
+      status: "updated",
+      roles: ["owner", "admin"],
+    });
+    expect(mockUpdateMemberRole).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      body: {
+        memberId: "member_1",
+        organizationId: "org_1",
+        role: ["owner", "admin"],
+      },
+    });
+  });
+
+  it("rejects self-demotion that removes the actor's highest role", async () => {
+    mockActor.role = "admin";
+    mockTarget = {
+      id: "member_1",
+      organizationId: "org_1",
+      userId: "user_actor",
+      role: "admin,member",
+    };
+    const result = await replaceMemberRoles({
+      headers: new Headers(),
+      organizationId: "org_1",
+      memberId: "member_1",
+      roles: ["member"],
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        memberId: "member_1",
+        status: "failed",
+        code: "SELF",
+      }),
+    );
+    expect(mockUpdateMemberRole).not.toHaveBeenCalled();
   });
 
   it("rejects editing an owner target", async () => {
@@ -545,11 +586,20 @@ describe("mutateMemberRoles", () => {
   });
 
   it("continues processing other targets after one target fails, and never rejects the whole batch", async () => {
+    mockActor.role = "admin";
     installFindFirst(async ({ where }) => {
       if ("userId" in where) {
         return where.userId === mockActor.userId ? { ...mockActor } : null;
       }
-      if (where.id === "member_self") return { id: "member_self", organizationId: "org_1", userId: "user_actor", role: "member" };
+      // Peer admin is not manageable; ordinary members still update.
+      if (where.id === "member_fail") {
+        return {
+          id: "member_fail",
+          organizationId: "org_1",
+          userId: "user_admin_2",
+          role: "admin",
+        };
+      }
       if (where.id === "member_ok_1") return { id: "member_ok_1", organizationId: "org_1", userId: "user_ok_1", role: "member" };
       if (where.id === "member_ok_2") return { id: "member_ok_2", organizationId: "org_1", userId: "user_ok_2", role: "member" };
       return null;
@@ -558,15 +608,19 @@ describe("mutateMemberRoles", () => {
     const result = await mutateMemberRoles({
       headers: new Headers(),
       organizationId: "org_1",
-      memberIds: ["member_self", "member_ok_1", "member_ok_2"],
+      memberIds: ["member_fail", "member_ok_1", "member_ok_2"],
       operation: "add",
-      roles: ["admin"],
+      roles: ["member"],
     });
 
     expect(result.outcomes).toEqual([
-      expect.objectContaining({ memberId: "member_self", status: "failed", code: "SELF" }),
-      expect.objectContaining({ memberId: "member_ok_1", status: "updated" }),
-      expect.objectContaining({ memberId: "member_ok_2", status: "updated" }),
+      expect.objectContaining({
+        memberId: "member_fail",
+        status: "failed",
+        code: "SAME_OR_HIGHER_RANK",
+      }),
+      expect.objectContaining({ memberId: "member_ok_1", status: "unchanged" }),
+      expect.objectContaining({ memberId: "member_ok_2", status: "unchanged" }),
     ]);
   });
 

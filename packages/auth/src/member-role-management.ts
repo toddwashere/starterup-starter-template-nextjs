@@ -9,6 +9,8 @@ import {
   hasOwnershipRole,
   evaluateMemberManagement,
   evaluateRoleAssignment,
+  evaluateRoleAssignmentDelta,
+  evaluateSelfRoleRetention,
   evaluateOwnershipTransfer,
 } from "./org-roles";
 import type { OrgRoleId, MemberManagementReason } from "./org-roles";
@@ -75,7 +77,7 @@ type ActorContext = {
 
 const REASON_MESSAGES: Record<MemberManagementReason, string> = {
   MISSING_PERMISSION: "You do not have permission to manage member roles.",
-  SELF: "You cannot change your own roles.",
+  SELF: "You cannot remove your highest role from yourself.",
   OWNER_PROTECTED: "The owner role is protected and cannot be changed here.",
   SAME_OR_HIGHER_RANK:
     "You cannot manage a member at the same or a higher rank than you.",
@@ -88,6 +90,50 @@ function reasonMessage(reason: MemberManagementReason): string {
 
 function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+/** Keep ownership roles when replacing the assignable role set. */
+function mergeOwnershipRoles(
+  currentRoles: readonly OrgRoleId[],
+  requestedRoles: readonly OrgRoleId[],
+): OrgRoleId[] {
+  const ownershipRoles = currentRoles.filter(
+    (role) => ORG_ROLE_CATALOG[role].ownership,
+  );
+  return normalizeOrgRoleIds([...ownershipRoles, ...requestedRoles]);
+}
+
+function assertRoleChangeAllowed(input: {
+  actorUserId: string;
+  actorRoles: readonly string[];
+  targetUserId: string;
+  currentRoles: readonly OrgRoleId[];
+  nextRoles: readonly OrgRoleId[];
+}): void {
+  const assignmentDecision = evaluateRoleAssignmentDelta(
+    input.actorRoles,
+    input.currentRoles,
+    input.nextRoles,
+  );
+  if (!assignmentDecision.allowed) {
+    throw new MemberRoleManagementError(
+      assignmentDecision.reason,
+      reasonMessage(assignmentDecision.reason),
+    );
+  }
+
+  if (input.actorUserId === input.targetUserId) {
+    const retentionDecision = evaluateSelfRoleRetention(
+      input.currentRoles,
+      input.nextRoles,
+    );
+    if (!retentionDecision.allowed) {
+      throw new MemberRoleManagementError(
+        retentionDecision.reason,
+        reasonMessage(retentionDecision.reason),
+      );
+    }
+  }
 }
 
 /**
@@ -236,11 +282,11 @@ export async function getMemberManagementContext(
 }
 
 /**
- * Replaces one target member's complete non-owner role set. Validates the
- * requested roles, reloads the target scoped to the explicit organization,
- * enforces management hierarchy and role-assignment ceilings, then writes
- * through Better Auth. Never throws for expected failures — returns a
- * `MemberRoleOutcome` describing what happened.
+ * Replaces one target member's assignable role set (ownership roles on the
+ * target are preserved). Validates the requested roles, reloads the target
+ * scoped to the explicit organization, enforces management hierarchy,
+ * assignment deltas, and self-role retention, then writes through Better Auth.
+ * Never throws for expected failures — returns a `MemberRoleOutcome`.
  */
 export async function replaceMemberRoles(input: {
   headers: Headers;
@@ -276,6 +322,7 @@ export async function replaceMemberRoles(input: {
     }
 
     const currentRoles = normalizeOrgRoleIds(parseOrgRoles(target.role));
+    const nextRoles = mergeOwnershipRoles(currentRoles, requestedRoles);
 
     const managementDecision = evaluateMemberManagement({
       actorUserId: actor.actorUserId,
@@ -291,30 +338,24 @@ export async function replaceMemberRoles(input: {
       );
     }
 
-    // Independently bound the *assigned* roles against the actor's rank so
-    // an admin cannot promote a member to admin even though the admin is
-    // otherwise allowed to manage that member.
-    const assignmentDecision = evaluateRoleAssignment(
-      actor.actorRoles,
-      requestedRoles,
-    );
-    if (!assignmentDecision.allowed) {
-      throw new MemberRoleManagementError(
-        assignmentDecision.reason,
-        reasonMessage(assignmentDecision.reason),
-      );
-    }
+    assertRoleChangeAllowed({
+      actorUserId: actor.actorUserId,
+      actorRoles: actor.actorRoles,
+      targetUserId: target.userId,
+      currentRoles,
+      nextRoles,
+    });
 
-    if (arraysEqual(currentRoles, requestedRoles)) {
+    if (arraysEqual(currentRoles, nextRoles)) {
       return { memberId, status: "unchanged", roles: currentRoles };
     }
 
     await auth.api.updateMemberRole({
       headers,
-      body: { memberId, organizationId, role: requestedRoles },
+      body: { memberId, organizationId, role: nextRoles },
     });
 
-    return { memberId, status: "updated", roles: requestedRoles };
+    return { memberId, status: "updated", roles: nextRoles };
   } catch (error) {
     return toFailedOutcome(error, {
       operation: "member-role-replace",
@@ -368,19 +409,13 @@ async function mutateSingleMemberRoles(input: {
       );
     }
 
-    // Evaluate the *resulting* complete role set — required for bulk add: an
-    // admin may add ordinary member/functional roles but may not promote a
-    // selected member to admin.
-    const assignmentDecision = evaluateRoleAssignment(
-      actor.actorRoles,
+    assertRoleChangeAllowed({
+      actorUserId: actor.actorUserId,
+      actorRoles: actor.actorRoles,
+      targetUserId: target.userId,
+      currentRoles,
       nextRoles,
-    );
-    if (!assignmentDecision.allowed) {
-      throw new MemberRoleManagementError(
-        assignmentDecision.reason,
-        reasonMessage(assignmentDecision.reason),
-      );
-    }
+    });
 
     if (arraysEqual(currentRoles, nextRoles)) {
       return { memberId, status: "unchanged", roles: currentRoles };

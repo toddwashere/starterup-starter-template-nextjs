@@ -17,7 +17,7 @@ const REASON_PRESENTATION: Record<
   MemberManagementReason,
   { message: string }
 > = {
-  SELF: { message: "You cannot edit your own roles." },
+  SELF: { message: "You cannot remove your highest role from yourself." },
   OWNER_PROTECTED: { message: "Ownership changes use Transfer ownership." },
   SAME_OR_HIGHER_RANK: { message: "Only owners can manage admins." },
   MISSING_PERMISSION: {

@@ -25,15 +25,19 @@ export function evaluateMemberManagement(input: {
   if (!input.hasMemberUpdatePermission) {
     return { allowed: false, reason: "MISSING_PERMISSION" };
   }
-  if (input.actorUserId === input.targetUserId) {
-    return { allowed: false, reason: "SELF" };
-  }
   try {
     normalizeOrgRoleIds(input.actorRoles);
     normalizeOrgRoleIds(input.targetRoles);
   } catch {
     return { allowed: false, reason: "UNKNOWN_ROLE" };
   }
+
+  // Self-edits are allowed for eligibility (opening the editor / bulk target).
+  // Escalation and self-demotion are enforced at assignment time.
+  if (input.actorUserId === input.targetUserId) {
+    return { allowed: true, reason: null };
+  }
+
   if (hasOwnershipRole(input.targetRoles)) {
     return { allowed: false, reason: "OWNER_PROTECTED" };
   }
@@ -58,6 +62,64 @@ export function evaluateRoleAssignment(
       getHighestManagementRank(assignedRoles)
       ? { allowed: true, reason: null }
       : { allowed: false, reason: "SAME_OR_HIGHER_RANK" };
+  } catch {
+    return { allowed: false, reason: "UNKNOWN_ROLE" };
+  }
+}
+
+/**
+ * Bounds a role-set change by evaluating only newly introduced roles.
+ * Retaining an existing higher role (or ownership) while adding lower roles
+ * is allowed; introducing ownership or same/higher-rank roles is not.
+ */
+export function evaluateRoleAssignmentDelta(
+  actorRoles: readonly string[],
+  currentRoles: readonly string[],
+  nextRoles: readonly string[],
+): MemberManagementDecision {
+  try {
+    const current = normalizeOrgRoleIds(currentRoles);
+    const next = normalizeOrgRoleIds(nextRoles);
+    const currentSet = new Set<string>(current);
+
+    if (hasOwnershipRole(next) && !hasOwnershipRole(current)) {
+      return { allowed: false, reason: "OWNER_PROTECTED" };
+    }
+
+    const introduced = next.filter((role) => !currentSet.has(role));
+    if (introduced.length === 0) {
+      return { allowed: true, reason: null };
+    }
+    return evaluateRoleAssignment(actorRoles, introduced);
+  } catch {
+    return { allowed: false, reason: "UNKNOWN_ROLE" };
+  }
+}
+
+/**
+ * Prevents an actor from stripping their own highest management role
+ * (privilege retention). Additive self-changes that keep that role are allowed.
+ */
+export function evaluateSelfRoleRetention(
+  currentRoles: readonly string[],
+  nextRoles: readonly string[],
+): MemberManagementDecision {
+  try {
+    const current = normalizeOrgRoleIds(currentRoles);
+    const next = normalizeOrgRoleIds(nextRoles);
+    const currentRank = getHighestManagementRank(current);
+    const nextRank = getHighestManagementRank(next);
+    if (nextRank < currentRank) {
+      return { allowed: false, reason: "SELF" };
+    }
+    const retainedHighest = current.some(
+      (role) =>
+        getHighestManagementRank([role]) === currentRank && next.includes(role),
+    );
+    if (!retainedHighest) {
+      return { allowed: false, reason: "SELF" };
+    }
+    return { allowed: true, reason: null };
   } catch {
     return { allowed: false, reason: "UNKNOWN_ROLE" };
   }

@@ -422,7 +422,10 @@ describe("transferOwnershipAction", () => {
 
   it("maps a thrown MemberRoleManagementError to a typed error (expected denial) WITHOUT capturing it", async () => {
     vi.mocked(transferOrganizationOwnership).mockRejectedValue(
-      new MemberRoleManagementError("SELF", "You cannot change your own roles."),
+      new MemberRoleManagementError(
+        "SELF",
+        "You cannot remove your highest role from yourself.",
+      ),
     );
 
     const result = await transferOwnershipAction({
@@ -432,7 +435,10 @@ describe("transferOwnershipAction", () => {
 
     expect(result).toEqual({
       success: false,
-      error: { code: "SELF", message: "You cannot change your own roles." },
+      error: {
+        code: "SELF",
+        message: "You cannot remove your highest role from yourself.",
+      },
     });
     // Expected authorization outcomes are NOT incidents — never captured.
     expect(captureException).not.toHaveBeenCalled();
