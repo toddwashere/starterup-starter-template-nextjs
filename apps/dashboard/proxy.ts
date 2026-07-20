@@ -12,6 +12,7 @@ const publicPaths = [
   "/accept-invitation",
   "/status",
   "/api/ready",
+  "/api/health",
   "/api/status",
   "/dev",
 ];

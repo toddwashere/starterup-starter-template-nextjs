@@ -63,6 +63,11 @@ describe("proxy", () => {
     expect(res.status).not.toBe(307);
   });
 
+  it("allows unauthenticated user to call /api/health", () => {
+    const res = proxy(buildRequest("/api/health"));
+    expect(res.status).not.toBe(307);
+  });
+
   it("allows unauthenticated user to call /api/status", () => {
     const res = proxy(buildRequest("/api/status"));
     expect(res.status).not.toBe(307);
