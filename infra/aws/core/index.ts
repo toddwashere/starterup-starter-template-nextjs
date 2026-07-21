@@ -15,7 +15,7 @@ import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
 import { buildPoolerStack } from "./pooler-stack";
 import { buildQueues } from "./queues";
-import { buildManualSecrets } from "./manual-secrets";
+import { buildCatalogPlaceholderSecrets } from "./manual-secrets";
 import { poolerConfigFromEnv } from "../env";
 
 // --- Config loading ---------------------------------------------------------
@@ -399,11 +399,11 @@ new aws.secretsmanager.SecretVersion("direct-url-v1", {
   secretString: directUrl,
 });
 
-// --- Manually-managed secrets (empty placeholders) --------------------------
-// Third-party API keys etc. that Pulumi can't derive. Each entry in
-// `core/manual-secrets.ts` becomes an empty `/<env>/<name>` secret you
-// populate once in the console/CLI; Pulumi never stores or overwrites the value.
-const manualSecrets = buildManualSecrets({
+// --- Catalog-driven secrets (operator-filled placeholders) -------------------
+// One Secrets Manager placeholder per `SECRET_CATALOG` entry (third-party API
+// keys, webhook signing secrets, etc.) except `database-url`, which is derived
+// and populated above. Pulumi never stores or overwrites the value you set.
+const catalogSecrets = buildCatalogPlaceholderSecrets({
   secretPathPrefix: names.secretPathPrefix,
   isProduction,
   cmekKeyId,
@@ -515,9 +515,12 @@ export const queueArns = Object.fromEntries(
   Object.entries(queues).map(([key, q]) => [key, q.queue.arn]),
 );
 export const uploadsBucket = uploadsBucketResource.bucket;
-// Names + ARNs of the manually-managed placeholder secrets (empty until you set
-// their values in the console/CLI). Grant read access from consumers as needed.
-export const manualSecretArns = Object.fromEntries(manualSecrets.map((s) => [s.name, s.arn]));
+// Names (catalog `id`) + ARNs of the catalog-driven placeholder secrets (seeded
+// with a placeholder until you set their real values in the console/CLI).
+// Consumed by the apps stack to grant per-app read access.
+export const catalogSecretArns = Object.fromEntries(catalogSecrets.map((s) => [s.name, s.arn]));
+// Alias kept for backwards compatibility with existing consumers.
+export const manualSecretArns = catalogSecretArns;
 // Re-export the compliance KMS key ARN ("" when CMEK is disabled).
 export { kmsKeyArn, privateSubnetIds };
 
