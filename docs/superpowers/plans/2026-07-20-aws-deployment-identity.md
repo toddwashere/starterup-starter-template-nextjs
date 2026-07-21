@@ -15,9 +15,12 @@
 - `AWS_RESOURCE_PREFIX` is a non-secret, 1–29-character lowercase letter/number/hyphen identity; it must begin and end alphanumeric.
 - When unset, the resolved identity must remain exactly `starter`.
 - Legacy `AWS_STATE_RESOURCE_PREFIX` is a temporary alias; conflicting canonical and legacy values must fail before AWS or Pulumi runs.
-- Use the identity only for global, cross-account, public/exported, ECR-namespace, and tag surfaces. Keep account-local service names concise.
+- Use the identity for global, cross-account, public/exported, ECR-namespace, queue, and tag surfaces. Secrets and custom log groups stay environment-scoped (`/{environment}/…`).
+- Queue physical names use `{prefix}-{queue}-{environment}` and DLQs use `{prefix}-{queue}-{environment}-dlq`.
+- Concise secrets/logs (`/{environment}/…`) and tag shape (`Project` / `Environment` / `ManagedBy`) apply even when the identity defaults to `starter` (breaking rename of prior `/starter/…` and `starter-*-dlq-*` forms is accepted).
 - Keep Pulumi project names, package names, source directories, stack names, logical Pulumi resource IDs, and database username/database name unchanged.
 - Never inspect or commit local `.env` files; document variable names and examples only in `infra/.env.example`.
+- Commit after each completed task (plan Steps labeled Commit).
 
 ---
 
@@ -28,8 +31,8 @@
 - Modify: `infra/aws/bootstrap/index.ts` — ECR namespace, global bootstrap names, tags, and policy ARNs.
 - Modify: `infra/aws/bootstrap/bootstrap.mock.test.ts` — default compatibility and opt-in namespace assertions.
 - Modify: `infra/aws/core/index.ts` — tags, global resource names, secret paths, and helper inputs.
-- Modify: `infra/aws/core/queues.ts` — concise queue names plus project-aware tags.
-- Modify: `infra/aws/core/manual-secrets.ts` — concise environment-secret paths plus project-aware tags.
+- Modify: `infra/aws/core/queues.ts` — `{prefix}-{queue}-{env}[-dlq]` names plus project-aware tags.
+- Modify: `infra/aws/core/manual-secrets.ts` — environment-secret paths (`/{env}/…`) plus project-aware tags.
 - Modify: `infra/aws/core/pooler-stack.ts`, `infra/aws/core/pooler-tls.ts`, `infra/aws/core/pgbouncer.ts` — use canonical secret/log/global-name helpers.
 - Modify: `infra/aws/core/*.mock.test.ts` — explicit default and configured-name assertions for affected modules.
 - Modify: `infra/aws/apps/index.ts` — configured ECR namespace and canonical tags.
@@ -40,10 +43,10 @@
 
 ## Critical Tests
 
-- `infra/aws/naming.test.ts`: default behavior is `starter`; configured `int-health` produces canonical global names and concise local names; invalid or conflicting settings throw; legacy-only settings return a warning.
+- `infra/aws/naming.test.ts`: default behavior is `starter`; configured `int-health` produces canonical global names and `{prefix}-{queue}-{env}[-dlq]` queue names; invalid or conflicting settings throw; legacy-only settings return a warning.
 - `infra/aws/scripts/state-orchestration.test.ts`: state bucket, audit bucket, stack name, and GitHub deployment-role ARN derive the same identity.
-- `infra/aws/bootstrap/bootstrap.mock.test.ts`: configured identity produces `int-health/dashboard` ECR repositories, identity-bearing public/cross-account resources, and matching IAM ARNs; default fixtures remain unchanged.
-- `infra/aws/core/queues.mock.test.ts`: queues remain `jobs` and `jobs-dlq` while Project tags use the configured identity.
+- `infra/aws/bootstrap/bootstrap.mock.test.ts`: configured identity produces `int-health/dashboard` ECR repositories, identity-bearing public/cross-account resources, and matching IAM ARNs; default identity still resolves to `starter` names.
+- `infra/aws/core/queues.mock.test.ts`: configured identity yields `int-health-jobs-staging` and `int-health-jobs-staging-dlq` with `Project=int-health` tags.
 - `infra/aws/core/manual-secrets.mock.test.ts`: secret path remains `/staging/stripe-secret-key` while Project tags use the configured identity.
 - `infra/aws/apps/apps.mock.test.ts`: configured identity produces `123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health` and tags every app resource with `Project=int-health`.
 
@@ -68,13 +71,14 @@ describe("resolveDeploymentIdentity", () => {
     expect(resolveDeploymentIdentity({}).value).toBe("starter");
   });
 
-  it("uses AWS_RESOURCE_PREFIX for global identity and concise local names", () => {
+  it("uses AWS_RESOURCE_PREFIX for global identity and prefixed queue names", () => {
     const identity = resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" });
     const names = deploymentNames(identity, "staging");
     expect(names.ecrNamespace).toBe("int-health");
     expect(names.globalPrefix).toBe("int-health-staging");
     expect(names.secretPathPrefix).toBe("/staging");
-    expect(names.queueName("jobs")).toBe("jobs");
+    expect(names.queueName("jobs")).toBe("int-health-jobs-staging");
+    expect(names.queueName("jobs", { dlq: true })).toBe("int-health-jobs-staging-dlq");
   });
 
   it("warns for the legacy alias and rejects a conflict", () => {
@@ -115,7 +119,7 @@ export interface DeploymentNames {
   logGroupPrefix: string;
   tags: Record<string, string>;
   deployRoleName: string;
-  queueName(name: string): string;
+  queueName(name: string, options?: { dlq?: boolean }): string;
 }
 
 export function deploymentNames(identity: DeploymentIdentity, environment: AwsEnvironment): DeploymentNames {
@@ -126,7 +130,8 @@ export function deploymentNames(identity: DeploymentIdentity, environment: AwsEn
     logGroupPrefix: `/${environment}`,
     tags: { Project: identity.value, Environment: environment, ManagedBy: "pulumi" },
     deployRoleName: `${identity.value}-${environment}-github-deploy`,
-    queueName: (name) => name,
+    queueName: (name, options) =>
+      `${identity.value}-${name}-${environment}${options?.dlq ? "-dlq" : ""}`,
   };
 }
 ```
@@ -226,14 +231,15 @@ git commit -m "feat(infra): apply deployment identity to AWS bootstrap"
 
 **Interfaces:**
 - Consumes: `DeploymentNames` from Task 1.
-- Produces: concise account-local queues/secrets/log paths, canonical tags, and configured ECR registry namespace.
+- Produces: prefixed queue names, environment-scoped secrets/log paths, canonical tags, and configured ECR registry namespace.
 
 - [ ] **Step 1: Write failing core/app identity tests**
 
-Add `int-health` fixture assertions that preserve concise account-local names:
+Add `int-health` fixture assertions:
 
 ```ts
-expect(queue.inputs.name).toBe("jobs");
+expect(queue.inputs.name).toBe("int-health-jobs-staging");
+expect(dlq.inputs.name).toBe("int-health-jobs-staging-dlq");
 expect(queue.inputs.tags).toMatchObject({ Project: "int-health", Environment: "staging" });
 expect(secret.inputs.name).toBe("/staging/stripe-secret-key");
 expect(secret.inputs.tags).toMatchObject({ Project: "int-health" });
@@ -254,8 +260,9 @@ Expected: FAIL because core/app stacks either retain `starter` names or the apps
 Resolve identity once per stack after `pulumi.getStack()` and use
 `deploymentNames(identity, stack)`. Replace `baseTags` with the helper tags plus
 the appropriate `Layer` tag. Use `names.globalPrefix` for globally/exported
-names, `names.secretPathPrefix` and `names.logGroupPrefix` for internal paths,
-and literal purpose names (`jobs`, `jobs-dlq`) for account-local queues.
+names, `names.secretPathPrefix` and `names.logGroupPrefix` for secrets/custom
+logs, and `names.queueName("jobs")` / `names.queueName("jobs", { dlq: true })`
+for SQS.
 
 In `apps/index.ts`, construct the registry with `names.ecrNamespace`:
 

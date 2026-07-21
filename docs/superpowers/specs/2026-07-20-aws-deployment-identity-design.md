@@ -60,7 +60,7 @@ application boundary:
 | --- | --- | --- |
 | IAM roles used only inside the workload account | `github-deploy` | Account identity and tags provide sufficient context. |
 | ECR repository leaf | `dashboard` | The ECR namespace carries application identity. |
-| SQS queues and DLQs | `jobs`, `jobs-dlq` | Purpose is clearer than repeated branding. |
+| SQS queues and DLQs | `int-health-jobs-staging`, `int-health-jobs-staging-dlq` | Prefix + purpose + environment; `-dlq` marks dead-letter queues. |
 | Secrets Manager paths | `/staging/database-url` | Account and environment partition the secret namespace. |
 | CloudWatch log groups | `/staging/apps/dashboard` | Short operational paths remain unambiguous in a dedicated account. |
 
@@ -103,8 +103,8 @@ repositories can upgrade without setting it and retain `starter` names.
 - `infra/aws/bootstrap/bootstrap.mock.test.ts`: opt-in identity yields the
   expected ECR namespace, global bootstrap names, and matching IAM policy ARNs;
   default fixtures retain their current values.
-- `infra/aws/core/queues.mock.test.ts`: queue and DLQ names stay concise while
-  their tags carry the configured project identity.
+- `infra/aws/core/queues.mock.test.ts`: queue and DLQ names use
+  `{prefix}-{queue}-{env}[-dlq]` while tags carry the configured project identity.
 - `infra/aws/core/manual-secrets.mock.test.ts`: secret paths stay concise and
   environment-scoped while tags carry the configured project identity.
 - `infra/aws/apps/apps.mock.test.ts`: image registry resolves the configured
