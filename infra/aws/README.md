@@ -232,8 +232,8 @@ and restarting services.
 To rotate the RDS password:
 
 1. Generate a new password and update the RDS instance via console or CLI.
-2. Update the Secrets Manager secrets (`/starter/<env>/database-url`,
-   `/starter/<env>/direct-url`, `/starter/<env>/vercel-database-url`) with the
+2. Update the Secrets Manager secrets (`/<env>/database-url`,
+   `/<env>/direct-url`, `/<env>/vercel-database-url`) with the
    new password.
 3. Restart App Runner services and redeploy Lambda functions to pick up the new
    credentials.
@@ -247,7 +247,7 @@ so enable prompt/completion logging once per account/region after `pulumi up`:
 
 ```sh
 aws bedrock put-model-invocation-logging-configuration --logging-config '{
-  "cloudWatchConfig": { "logGroupName": "/starter/<env>/bedrock-invocations", "roleArn": "<bedrock-logs-role-arn>" },
+  "cloudWatchConfig": { "logGroupName": "/<env>/bedrock-invocations", "roleArn": "<bedrock-logs-role-arn>" },
   "textDataDeliveryEnabled": true, "embeddingDataDeliveryEnabled": true
 }'
 ```
@@ -281,7 +281,7 @@ aws logs tail /aws/lambda/starter-<env>-pooler-tls-exporter --follow \
   --profile starter-<env> --region us-east-2
 
 # PgBouncer and TLS materializer container logs
-aws logs tail /starter/starter-<env>/pgbouncer --follow \
+aws logs tail /<env>/pgbouncer --follow \
   --profile starter-<env> --region us-east-2
 
 # CloudWatch alarms (certificate expiration, Lambda errors)
@@ -330,8 +330,8 @@ in DNS query logs, CloudTrail logs, and third-party monitoring tools.
 Acceptable DNS label: `db.production.aws.example.com`\
 Unacceptable DNS label: `db-patient-john-doe.production.aws.example.com`
 
-Acceptable log group: `/starter/starter-production/pgbouncer`\
-Unacceptable log group: `/starter/starter-production/patient-12345-queries`
+Acceptable log group: `/production/pgbouncer`\
+Unacceptable log group: `/production/patient-12345-queries`
 
 When in doubt, use only the environment name and resource type.
 
@@ -485,12 +485,12 @@ Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate ste
 
 | Variable                    | Example                                                |
 | --------------------------- | ------------------------------------------------------ |
-| `AWS_ACCOUNT_ID`            | Selected workload environment's 12-digit ID            |
-| `AWS_REGION`                | `us-east-2`                                            |
-| `AWS_ECR_REGISTRY`          | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
-| `AWS_STATE_ACCOUNT_ID`      | Dedicated state account's 12-digit ID                  |
-| `AWS_STATE_RESOURCE_PREFIX` | `my-company-cross-account-state`                       |
-| `AWS_STATE_REGION`          | `us-east-2`                                            |
+| `AWS_ACCOUNT_ID`       | Selected workload environment's 12-digit ID            |
+| `AWS_REGION`           | `us-east-2`                                            |
+| `AWS_ECR_REGISTRY`     | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
+| `AWS_RESOURCE_PREFIX`  | Deployment identity (defaults to `starter` if unset)   |
+| `AWS_STATE_ACCOUNT_ID` | Dedicated state account's 12-digit ID                  |
+| `AWS_STATE_REGION`     | `us-east-2`                                            |
 
 ### GitHub OIDC with AWS IAM
 

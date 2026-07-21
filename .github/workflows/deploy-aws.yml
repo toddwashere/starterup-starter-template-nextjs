@@ -49,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: sandbox-aws
+    env:
+      # Prefer canonical identity; keep legacy alias for migrating environments.
+      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'starter' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,6 +85,7 @@ jobs:
       - name: Pulumi preview (core)
         uses: pulumi/actions@v6
         env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
           AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
           AWS_POOLER_APP_EGRESS_CIDRS: ${{ vars.AWS_POOLER_APP_EGRESS_CIDRS }}
           AWS_POOLER_DEVELOPER_CIDRS: ${{ vars.AWS_POOLER_DEVELOPER_CIDRS }}
@@ -89,17 +93,19 @@ jobs:
           command: preview
           stack-name: sandbox
           work-dir: infra/aws/core
-          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           comment-on-pr: true
           policy-pack: ../../shared/policies
 
       - name: Pulumi preview (apps)
         uses: pulumi/actions@v6
+        env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
         with:
           command: preview
           stack-name: sandbox
           work-dir: infra/aws/apps
-          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-sandbox-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           comment-on-pr: true
           policy-pack: ../../shared/policies
 
@@ -168,6 +174,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ github.event_name == 'workflow_dispatch' && format('{0}-aws', inputs.stack) || 'production-aws' }}
+    env:
+      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'starter' }}
     permissions:
       contents: read
       id-token: write
@@ -228,6 +236,7 @@ jobs:
       - name: Pulumi up (core)
         uses: pulumi/actions@v6
         env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
           AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
           AWS_POOLER_APP_EGRESS_CIDRS: ${{ vars.AWS_POOLER_APP_EGRESS_CIDRS }}
           AWS_POOLER_DEVELOPER_CIDRS: ${{ vars.AWS_POOLER_DEVELOPER_CIDRS }}
@@ -235,25 +244,27 @@ jobs:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
           work-dir: infra/aws/core
-          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
 
       # Deploy app services: App Runner rolling update (dashboard, www, public-api, public-mcp)
       # + workers Lambda (Function + EventSourceMapping) — all managed by the apps stack.
       # imageTag pins every service to this SHA; no separate Lambda publish step needed.
       - name: Pulumi up (apps)
         uses: pulumi/actions@v6
+        env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
         with:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
           work-dir: infra/aws/apps
-          cloud-url: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
           config-map: |
             imageTag: { value: "${{ github.sha }}" }
 
       - name: Smoke test dashboard health
         working-directory: infra/aws/apps
         env:
-          PULUMI_BACKEND_URL: "s3://${{ vars.AWS_STATE_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          PULUMI_BACKEND_URL: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
         run: |
           pulumi login "$PULUMI_BACKEND_URL"
           URL=$(pulumi stack output dashboardUrl --stack ${{ steps.stack.outputs.name }})

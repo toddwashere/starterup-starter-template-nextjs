@@ -61,9 +61,11 @@ Copy `infra/.env.example` to the gitignored `infra/.env.local`, then define:
 ```dotenv
 PULUMI_ORG=organization
 
+# Deployment identity — set once before first deploy (defaults to "starter").
+AWS_RESOURCE_PREFIX=<1-29-lowercase-letters-numbers-hyphens>
+
 AWS_STATE_ACCOUNT_ID=<state-account-id>
 AWS_STATE_PROFILE=starter-state
-AWS_STATE_RESOURCE_PREFIX=<1-29-lowercase-letters-numbers-hyphens>
 AWS_STATE_REGION=us-east-2
 AWS_SSO_REGION=<identity-center-home-region>
 
@@ -75,6 +77,15 @@ AWS_DNS_ROOT_DOMAIN=<your-root-domain>
 AWS_POOLER_APP_EGRESS_CIDRS=<comma-delimited-app-egress-cidrs>
 AWS_POOLER_DEVELOPER_CIDRS=<comma-delimited-developer-cidrs>
 ```
+
+`AWS_RESOURCE_PREFIX` is the first AWS identity choice for a downstream repo.
+It names state buckets, the ECR namespace, queues (`{prefix}-{queue}-{env}[-dlq]`),
+resource tags, and the cross-account GitHub deploy role. Leaving it unset keeps
+the template default `starter`. Changing it after an environment is deployed is
+unsupported without a new environment or an explicit migration plan.
+
+Legacy `AWS_STATE_RESOURCE_PREFIX` still works as a temporary alias (with a
+deprecation warning). If both are set, they must match.
 
 Workload profiles default to `starter-<environment>`. Override them with
 `AWS_SANDBOX_PROFILE`, `AWS_STAGING_PROFILE`, or `AWS_PRODUCTION_PROFILE` only
@@ -225,16 +236,17 @@ ACM certificate validation will fail.
    correctly configured.
 
 7. **Build and push app images (required before `apps up`):** Bootstrap creates
-   one ECR repository per image under `starter/<name>`
+   one ECR repository per image under `<identity>/<name>`
    (`dashboard`, `www`, `public-api`, `public-mcp`, `workers`, `workers-lambda`).
-   App Runner and Lambda pull `…/starter/<name>:<tag>`. Images must be
-   **`linux/amd64`** (App Runner / Lambda), and buildx attestations must be
-   disabled or pulls can fail:
+   App Runner and Lambda pull `…/<identity>/<name>:<tag>` (default identity
+   `starter`). Images must be **`linux/amd64`** (App Runner / Lambda), and buildx
+   attestations must be disabled or pulls can fail:
 
    ```bash
    export AWS_PROFILE=starter-sandbox
    export AWS_REGION=us-east-2
    export REGISTRY=<account>.dkr.ecr.us-east-2.amazonaws.com
+   export IDENTITY="${AWS_RESOURCE_PREFIX:-starter}"
    export TAG=sandbox-verify   # or a git SHA; pass the same tag to apps via imageTag
 
    aws ecr get-login-password --region "$AWS_REGION" \
@@ -246,7 +258,7 @@ ACM certificate validation will fail.
        --platform linux/amd64 \
        --provenance=false --sbom=false \
        -f "$file" \
-       -t "$REGISTRY/starter/$name:$TAG" \
+       -t "$REGISTRY/$IDENTITY/$name:$TAG" \
        --push .
    }
 
@@ -386,10 +398,10 @@ AWS_PRODUCTION_ACCOUNT_ID=3333...
 # DIY Pulumi backends always use this literal StackReference org segment.
 PULUMI_ORG=organization
 
-# Dedicated state account + required globally unique resource prefix.
+# Deployment identity + dedicated state account.
+AWS_RESOURCE_PREFIX=my-company
 AWS_STATE_ACCOUNT_ID=4444...
 AWS_STATE_PROFILE=starter-state
-AWS_STATE_RESOURCE_PREFIX=my-company-cross-account-state
 
 # Vercel OIDC identifiers for the hybrid access role (core reads these).
 VERCEL_TEAM_SLUG=my-team
@@ -439,7 +451,7 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 | Root user hardening (MFA, no keys)                                    | **Manual (console)**                     | One-time account security                                                |
 | Central Pulumi state foundation                                       | **CloudFormation via `infra:aws:state`** | Must exist independently of the Pulumi stacks it stores                  |
 | GitHub OIDC provider + deploy role                                    | **`bootstrap` stack**                    | Codified, repeatable per account                                         |
-| ECR repositories (`starter/<app>`)                                    | **`bootstrap` stack**                    | Codified                                                                 |
+| ECR repositories (`<identity>/<app>`)                                 | **`bootstrap` stack**                    | Codified                                                                 |
 | Cost budget + alerts                                                  | **`bootstrap` stack**                    | Codified                                                                 |
 | VPC, RDS, Proxy, PgBouncer, SQS, S3, Secrets, EventBridge, compliance | **`core` stack**                         | Codified                                                                 |
 | App Runner services, workers Lambda, VPC connector                    | **`apps` stack**                         | Codified                                                                 |
@@ -660,8 +672,8 @@ Two kinds of secrets, both kept out of git:
 #### Derived (automatic)
 
 `core` generates the RDS password and writes the connection-string secrets —
-`/starter/<env>/database-url`, `/starter/<env>/direct-url`, and (hybrid)
-`/starter/<env>/vercel-database-url`. You never author or commit these; they're
+`/<env>/database-url`, `/<env>/direct-url`, and (hybrid)
+`/<env>/vercel-database-url`. You never author or commit these; they're
 materialized at deploy time from the generated password and resource endpoints.
 
 #### App Runner runtime placeholders (boot only)
@@ -685,13 +697,13 @@ export const MANUAL_SECRETS: readonly ManualSecretSpec[] = [
 ];
 ```
 
-On the next `pulumi up`, core creates an **empty** `/starter/<env>/stripe-secret-key`
+On the next `pulumi up`, core creates an **empty** `/<env>/stripe-secret-key`
 secret seeded with a placeholder. Set the real value once — Pulumi never reads or
 overwrites it afterward (`ignoreChanges` on the value):
 
 ```bash
 aws secretsmanager put-secret-value \
-  --secret-id /starter/sandbox/stripe-secret-key \
+  --secret-id /sandbox/stripe-secret-key \
   --secret-string 'sk_live_…'
 ```
 
@@ -709,12 +721,13 @@ automatically**:
 ```ts
 export const QUEUES: readonly QueueSpec[] = [
   { key: "jobs", visibilityTimeoutSeconds: 60, maxReceiveCount: 5 },
-  { key: "emails" }, // gets starter-emails-<env> + starter-emails-dlq-<env>
+  { key: "emails" }, // gets {prefix}-emails-<env> + {prefix}-emails-<env>-dlq
 ];
 ```
 
-Physical names are `starter-<key>-<env>` and `starter-<key>-dlq-<env>`. Every
-queue's URL/ARN is exported via the `queueUrls` / `queueArns` maps for wiring.
+Physical names are `{prefix}-<key>-<env>` and `{prefix}-<key>-<env>-dlq` (from
+`AWS_RESOURCE_PREFIX`). Every queue's URL/ARN is exported via the `queueUrls` /
+`queueArns` maps for wiring.
 
 > The `jobs` queue is load-bearing — the workers Lambda and EventBridge Scheduler
 > in the `apps` stack consume it, so keep its `key` stable. A **new** queue needs
