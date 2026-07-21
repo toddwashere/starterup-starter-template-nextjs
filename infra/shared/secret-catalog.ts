@@ -34,13 +34,16 @@ export const SECRET_CATALOG: readonly SecretDescriptor[] = [
     id: "stripe-secret-key",
     envVar: "STRIPE_SECRET_KEY",
     generation: "placeholder",
-    readers: ["dashboard", "public-api"],
+    // packages/billing/keys.ts requires STRIPE_SECRET_KEY and
+    // STRIPE_WEBHOOK_SECRET together; @workspace/auth constructs the Stripe
+    // client at module scope, so every app importing auth needs both.
+    readers: ["dashboard", "public-api", "public-mcp"],
   },
   {
     id: "stripe-webhook-secret",
     envVar: "STRIPE_WEBHOOK_SECRET",
     generation: "placeholder",
-    readers: ["public-api"],
+    readers: ["dashboard", "public-api", "public-mcp"],
   },
   {
     id: "resend-api-key",

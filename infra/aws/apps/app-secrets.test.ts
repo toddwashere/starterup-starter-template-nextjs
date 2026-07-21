@@ -25,7 +25,9 @@ describe("buildAppRunnerRuntimeSecrets", () => {
     expect(secrets.DATABASE_URL).toBe("arn:db-url");
     expect(secrets.STRIPE_SECRET_KEY).toBe("arn:stripe");
     expect(secrets.BETTER_AUTH_SECRET).toBe("arn:auth");
-    expect(secrets.STRIPE_WEBHOOK_SECRET).toBeUndefined();
+    // billing keys() requires the secret key and webhook secret together, so
+    // every catalog reader of one is a reader of the other.
+    expect(secrets.STRIPE_WEBHOOK_SECRET).toBe("arn:whsec");
   });
 
   it("shares the same stripe ARN with public-api", () => {
