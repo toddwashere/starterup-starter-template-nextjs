@@ -60,7 +60,7 @@
 - Consumes: `NodeJS.ProcessEnv` and an optional warning callback.
 - Produces: `resolveDeploymentIdentity(env, warn): DeploymentIdentity`, `deploymentNames(identity, environment): DeploymentNames`.
 
-- [ ] **Step 1: Write failing identity-resolution tests**
+- [x] **Step 1: Write failing identity-resolution tests**
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -94,13 +94,13 @@ describe("resolveDeploymentIdentity", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --dir infra/aws exec vitest run naming.test.ts`
 
 Expected: FAIL because `infra/aws/naming.ts` does not exist.
 
-- [ ] **Step 3: Implement the pure naming module**
+- [x] **Step 3: Implement the pure naming module**
 
 ```ts
 export type AwsEnvironment = "sandbox" | "staging" | "production";
@@ -136,13 +136,13 @@ export function deploymentNames(identity: DeploymentIdentity, environment: AwsEn
 }
 ```
 
-- [ ] **Step 4: Run the naming tests**
+- [x] **Step 4: Run the naming tests**
 
 Run: `pnpm --dir infra/aws exec vitest run naming.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the naming API**
+- [x] **Step 5: Commit the naming API**
 
 ```bash
 git add infra/aws/naming.ts infra/aws/naming.test.ts

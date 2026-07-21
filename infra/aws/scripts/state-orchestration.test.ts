@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   backendUrl,
   cloudFormationDeployArgs,
@@ -18,7 +18,7 @@ import {
 const ENV = {
   AWS_STATE_ACCOUNT_ID: "444455556666",
   AWS_STATE_PROFILE: "starter-state",
-  AWS_STATE_RESOURCE_PREFIX: "myapp-cross-account-state",
+  AWS_RESOURCE_PREFIX: "myapp-cross-account-state",
   AWS_SANDBOX_ACCOUNT_ID: "111122223333",
 };
 
@@ -59,18 +59,36 @@ describe("resolveStateBootstrapConfig", () => {
     expect(result.resourcePrefix).toBe("other-state");
   });
 
-  it.each([
-    ["AWS_STATE_ACCOUNT_ID"],
-    ["AWS_STATE_PROFILE"],
-    ["AWS_STATE_RESOURCE_PREFIX"],
-    ["AWS_SANDBOX_ACCOUNT_ID"],
-  ])("rejects a missing required value: %s", (key) => {
-    expect(() =>
+  it.each([["AWS_STATE_ACCOUNT_ID"], ["AWS_STATE_PROFILE"], ["AWS_SANDBOX_ACCOUNT_ID"]])(
+    "rejects a missing required value: %s",
+    (key) => {
+      expect(() =>
+        resolveStateBootstrapConfig(["init", "sandbox"], {
+          ...ENV,
+          [key]: "",
+        }),
+      ).toThrow(key);
+    },
+  );
+
+  it("defaults the deployment identity to starter when unset", () => {
+    const { AWS_RESOURCE_PREFIX: _prefix, ...withoutPrefix } = ENV;
+    expect(resolveStateBootstrapConfig(["init", "sandbox"], withoutPrefix).resourcePrefix).toBe(
+      "starter",
+    );
+  });
+
+  it("supports the legacy alias with a deprecation warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { AWS_RESOURCE_PREFIX: _prefix, ...withoutCanonical } = ENV;
+    expect(
       resolveStateBootstrapConfig(["init", "sandbox"], {
-        ...ENV,
-        [key]: "",
-      }),
-    ).toThrow(key);
+        ...withoutCanonical,
+        AWS_STATE_RESOURCE_PREFIX: "legacy-state",
+      }).resourcePrefix,
+    ).toBe("legacy-state");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("rejects invalid environment and resource-prefix values", () => {
@@ -80,9 +98,16 @@ describe("resolveStateBootstrapConfig", () => {
     expect(() =>
       resolveStateBootstrapConfig(["init", "sandbox"], {
         ...ENV,
-        AWS_STATE_RESOURCE_PREFIX: "Not_S3_Safe",
+        AWS_RESOURCE_PREFIX: "Not_S3_Safe",
       }),
-    ).toThrow(/AWS_STATE_RESOURCE_PREFIX/);
+    ).toThrow(/AWS_RESOURCE_PREFIX/);
+    expect(() =>
+      resolveStateBootstrapConfig(["init", "sandbox"], {
+        ...ENV,
+        AWS_RESOURCE_PREFIX: "int-health",
+        AWS_STATE_RESOURCE_PREFIX: "other",
+      }),
+    ).toThrow(/must match/);
     expect(() =>
       resolveStateBootstrapConfig(["init", "sandbox"], {
         ...ENV,
@@ -165,9 +190,12 @@ describe("cross-account principals and Pulumi URLs", () => {
     expect(args.join(" ")).not.toContain("pulumi stack");
   });
 
-  it("derives the deterministic GitHub deploy role", () => {
-    expect(githubDeployRoleArn("111122223333", "sandbox")).toBe(
+  it("derives the deterministic GitHub deploy role from the shared identity", () => {
+    expect(githubDeployRoleArn("111122223333", "sandbox", "starter")).toBe(
       "arn:aws:iam::111122223333:role/starter-sandbox-github-deploy",
+    );
+    expect(githubDeployRoleArn("111122223333", "staging", "int-health")).toBe(
+      "arn:aws:iam::111122223333:role/int-health-staging-github-deploy",
     );
   });
 

@@ -2,6 +2,11 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { validatedGithubRepo } from "./bootstrap-config";
 import { poolerDnsFromEnv, type AwsEnvName } from "../env";
+import {
+  deploymentNames,
+  resolveDeploymentIdentity,
+  type AwsEnvironment,
+} from "../naming";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -14,12 +19,12 @@ import { poolerDnsFromEnv, type AwsEnvName } from "../env";
 //   AWS_PROFILE=starter-sandbox pulumi up -s sandbox
 //
 // It codifies the three things core/apps assume already exist:
-//   1. Per-app ECR repositories under the `starter/` prefix (see below).
+//   1. Per-app ECR repositories under the deployment-identity namespace.
 //   2. A GitHub Actions OIDC provider + least-privilege deploy role.
 //   3. A monthly cost budget with email alerts.
 // ---------------------------------------------------------------------------
 
-/** Image names App Runner / Lambda pull as `…/starter/<name>:<tag>`. */
+/** Image names App Runner / Lambda pull as `…/<identity>/<name>:<tag>`. */
 const ECR_IMAGE_NAMES = [
   "dashboard",
   "www",
@@ -47,20 +52,20 @@ const ecrLifecyclePolicy = JSON.stringify({
 const config = new pulumi.Config();
 const region = new pulumi.Config("aws").get("region") ?? "us-east-2";
 const stack = pulumi.getStack();
-const namePrefix = `starter-${stack}`;
-const accountId = aws.getCallerIdentityOutput({}).accountId;
-const baseTags = {
-  Project: "starter",
-  Stack: stack,
-  ManagedBy: "pulumi",
-  Layer: "bootstrap",
-};
 
 // Validate stack is a valid environment and derive pooler config
 const validEnvs: AwsEnvName[] = ["sandbox", "staging", "production"];
 if (!validEnvs.includes(stack as AwsEnvName)) {
   throw new Error(`Stack must be one of ${validEnvs.join(", ")}; got ${stack}.`);
 }
+const identity = resolveDeploymentIdentity(process.env);
+const names = deploymentNames(identity, stack as AwsEnvironment);
+const namePrefix = names.globalPrefix;
+const accountId = aws.getCallerIdentityOutput({}).accountId;
+const baseTags = {
+  ...names.tags,
+  Layer: "bootstrap",
+};
 const poolerDns = poolerDnsFromEnv(stack as AwsEnvName);
 
 // Required "owner/repo" scope. Failing closed prevents an unscoped OIDC role
@@ -72,11 +77,11 @@ const complianceMode = config.get("complianceMode") ?? "none";
 const isCompliant = complianceMode !== "none";
 
 // --- 1. ECR repositories for app images -------------------------------------
-// Apps resolve images as `<account>.dkr.ecr.<region>.amazonaws.com/starter/<name>:<tag>`.
-// A single bare `starter` repo is not enough — each app needs its own repository.
+// Apps resolve images as `<account>.dkr.ecr.<region>.amazonaws.com/<identity>/<name>:<tag>`.
+// A single bare identity repo is not enough — each app needs its own repository.
 const ecrRepos = ECR_IMAGE_NAMES.map((imageName) => {
   const repo = new aws.ecr.Repository(`app-images-${imageName}`, {
-    name: `starter/${imageName}`,
+    name: `${names.ecrNamespace}/${imageName}`,
     imageTagMutability: "MUTABLE",
     imageScanningConfiguration: { scanOnPush: true },
     encryptionConfigurations: [{ encryptionType: "AES256" }],
@@ -102,7 +107,7 @@ const githubOidc = new aws.iam.OpenIdConnectProvider("github-oidc", {
 });
 
 const deployRole = new aws.iam.Role("github-deploy", {
-  name: `${namePrefix}-github-deploy`,
+  name: names.deployRoleName,
   description: "Assumed by GitHub Actions (OIDC) to deploy the core + apps stacks",
   assumeRolePolicy: githubOidc.arn.apply((providerArn) =>
     JSON.stringify({
@@ -177,23 +182,15 @@ const hostedZone = new aws.route53.Zone(
 // grant this deterministic role cross-account access; this identity policy is
 // the matching workload-account half of that authorization.
 const stateAccountId = process.env.AWS_STATE_ACCOUNT_ID?.trim();
-const stateResourcePrefix = process.env.AWS_STATE_RESOURCE_PREFIX?.trim();
 const stateRegion = process.env.AWS_STATE_REGION?.trim() ?? "us-east-2";
 if (!stateAccountId || !/^\d{12}$/.test(stateAccountId)) {
   throw new Error("AWS_STATE_ACCOUNT_ID must be a 12-digit account ID.");
 }
-if (
-  !stateResourcePrefix ||
-  stateResourcePrefix.length > 29 ||
-  !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(stateResourcePrefix)
-) {
-  throw new Error("AWS_STATE_RESOURCE_PREFIX must be 1-29 lowercase letters, numbers, or hyphens.");
-}
 if (stateRegion !== "us-east-2") {
   throw new Error("AWS_STATE_REGION must be us-east-2.");
 }
-const stateBucketName = `${stateResourcePrefix}-${stack}-${stateAccountId}-${stateRegion}`;
-const stateKmsAlias = `alias/${stateResourcePrefix}-${stack}`;
+const stateBucketName = `${identity.value}-${stack}-${stateAccountId}-${stateRegion}`;
+const stateKmsAlias = `alias/${identity.value}-${stack}`;
 new aws.iam.RolePolicy("github-state-access", {
   role: deployRole.name,
   policy: JSON.stringify({
@@ -333,7 +330,7 @@ new aws.iam.RolePolicy("github-deploy-access", {
           ],
           Resource: [
             `arn:aws:logs:${region}:*:log-group:/aws/lambda/${namePrefix}-*`,
-            `arn:aws:logs:${region}:*:log-group:/starter/${namePrefix}/*`,
+            `arn:aws:logs:${region}:*:log-group:${names.logGroupPrefix}/*`,
           ],
         },
         {
@@ -377,7 +374,7 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "secretsmanager:DeleteSecret",
             "secretsmanager:TagResource",
           ],
-          Resource: `arn:aws:secretsmanager:${region}:*:secret:/starter/${stack}/*`,
+          Resource: `arn:aws:secretsmanager:${region}:*:secret:${names.secretPathPrefix}/*`,
         },
         {
           Sid: "SecretsManagerList",
@@ -646,8 +643,8 @@ if (budgetNotificationEmail) {
 // --- Exports ----------------------------------------------------------------
 // Feed these into GitHub Actions (AWS_DEPLOY_ROLE_ARN, AWS_ECR_REGISTRY) and the
 // apps stack's `imageRegistry` config.
-// Registry prefix shared by every `starter/<name>` repository (not a single repo URL).
-export const ecrRepositoryUrl = pulumi.interpolate`${accountId}.dkr.ecr.${region}.amazonaws.com/starter`;
+// Registry prefix shared by every `<identity>/<name>` repository (not a single repo URL).
+export const ecrRepositoryUrl = pulumi.interpolate`${accountId}.dkr.ecr.${region}.amazonaws.com/${names.ecrNamespace}`;
 export const ecrRepositoryUrls = Object.fromEntries(
   ecrRepos.map((repo, i) => [ECR_IMAGE_NAMES[i], repo.repositoryUrl]),
 );

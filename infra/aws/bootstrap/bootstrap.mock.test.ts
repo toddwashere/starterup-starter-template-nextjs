@@ -20,8 +20,10 @@ describe("aws bootstrap layer (mocked)", () => {
   });
 
   beforeAll(async () => {
+    // Default identity is `starter` when AWS_RESOURCE_PREFIX is unset.
+    vi.stubEnv("AWS_RESOURCE_PREFIX", "");
+    vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "");
     vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
-    vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "myapp-cross-account-state");
     vi.stubEnv("AWS_DNS_ROOT_DOMAIN", "example.com");
     vi.stubEnv("AWS_POOLER_APP_EGRESS_CIDRS", "");
     vi.stubEnv("AWS_POOLER_DEVELOPER_CIDRS", "");
@@ -138,12 +140,15 @@ describe("aws bootstrap layer (mocked)", () => {
     const policy = await new Promise<string>((resolve) =>
       pulumi.output(statePolicy!.inputs.policy as string).apply(resolve),
     );
-    expect(policy).toContain(
-      "arn:aws:s3:::myapp-cross-account-state-sandbox-444455556666-us-east-2",
-    );
+    expect(policy).toContain("arn:aws:s3:::starter-sandbox-444455556666-us-east-2");
     expect(policy).toContain("arn:aws:kms:us-east-2:444455556666:key/*");
-    expect(policy).toContain("alias/myapp-cross-account-state-sandbox");
+    expect(policy).toContain("alias/starter-sandbox");
     expect(policy).not.toContain('"Resource":"*"');
+  });
+
+  it("names the GitHub deploy role with the default starter identity", () => {
+    const roles = recorded.filter((r) => r.type === "aws:iam/role:Role");
+    expect(roles[0]?.inputs.name).toBe("starter-sandbox-github-deploy");
   });
 
   it("creates a monthly budget when a notification email is set", () => {
@@ -279,9 +284,7 @@ describe("aws bootstrap layer (mocked)", () => {
     const logStatement = parsed.Statement.find(
       (statement: { Sid?: string }) => statement.Sid === "CloudWatchLogs",
     );
-    expect(logStatement.Resource).toContain(
-      "arn:aws:logs:us-east-2:*:log-group:/starter/starter-sandbox/*",
-    );
+    expect(logStatement.Resource).toContain("arn:aws:logs:us-east-2:*:log-group:/sandbox/*");
     const ecsUnscoped = parsed.Statement.find(
       (statement: { Sid?: string }) => statement.Sid === "EcsUnscopedOperations",
     );
@@ -294,8 +297,8 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(ecsDeployment.Action).toContain("ecs:DescribeClusters");
     expect(ecsDeployment.Resource).toContain("arn:aws:ecs:us-east-2:*:cluster/starter-sandbox-*");
     // Secrets scope must match the actual secret names the core stack creates
-    // (all use the leading-slash /starter/<stack>/ prefix).
-    expect(policy).toContain("secret:/starter/sandbox/*");
+    // (environment-scoped /<stack>/ prefix).
+    expect(policy).toContain("secret:/sandbox/*");
     // KMS data-plane actions must be region-scoped, not bare "*"
     const kmsStatements = parsed.Statement.filter((s: { Action?: string[] }) =>
       s.Action?.some((a: string) => a.includes("kms:")),

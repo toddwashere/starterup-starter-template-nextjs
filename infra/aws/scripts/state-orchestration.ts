@@ -1,3 +1,5 @@
+import { resolveDeploymentIdentity } from "../naming";
+
 export const AWS_ENVIRONMENTS = ["sandbox", "staging", "production"] as const;
 
 export type AwsEnvironment = (typeof AWS_ENVIRONMENTS)[number];
@@ -25,7 +27,6 @@ export interface StateNames {
 
 const DEFAULT_REGION = "us-east-2";
 const ACCOUNT_ID_PATTERN = /^\d{12}$/;
-const PREFIX_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 function optionValue(argv: readonly string[], name: string): string | undefined {
   const equalsPrefix = `${name}=`;
@@ -46,15 +47,6 @@ function required(value: string | undefined, label: string): string {
 function validateAccountId(value: string, label: string): void {
   if (!ACCOUNT_ID_PATTERN.test(value)) {
     throw new Error(`${label} must be a 12-digit AWS account ID.`);
-  }
-}
-
-function validatePrefix(value: string): void {
-  if (!PREFIX_PATTERN.test(value) || value.length > 29) {
-    throw new Error(
-      "AWS_STATE_RESOURCE_PREFIX must be 1-29 lowercase letters, numbers, or hyphens; " +
-        "it must start and end with a letter or number.",
-    );
   }
 }
 
@@ -101,14 +93,17 @@ export function resolveStateBootstrapConfig(
       `starter-${environment}`,
     `AWS_${environmentKey}_PROFILE`,
   );
-  const resourcePrefix = required(
-    optionValue(argv, "--resource-prefix") || env.AWS_STATE_RESOURCE_PREFIX,
-    "AWS_STATE_RESOURCE_PREFIX",
-  );
+  const cliResourcePrefix = optionValue(argv, "--resource-prefix")?.trim();
+  const identityEnv: EnvironmentValues = { ...env };
+  if (cliResourcePrefix) {
+    identityEnv.AWS_RESOURCE_PREFIX = cliResourcePrefix;
+    // CLI override is authoritative; ignore a conflicting legacy env value.
+    delete identityEnv.AWS_STATE_RESOURCE_PREFIX;
+  }
+  const resourcePrefix = resolveDeploymentIdentity(identityEnv).value;
 
   validateAccountId(stateAccountId, "AWS_STATE_ACCOUNT_ID");
   validateAccountId(workloadAccountId, `AWS_${environmentKey}_ACCOUNT_ID`);
-  validatePrefix(resourcePrefix);
   if (stateAccountId === workloadAccountId) {
     throw new Error("AWS_STATE_ACCOUNT_ID and the workload account ID must differ.");
   }
@@ -187,8 +182,9 @@ export function iamRoleArnFromCallerArn(callerArn: string, ssoRegion: string): s
 export function githubDeployRoleArn(
   workloadAccountId: string,
   environment: AwsEnvironment,
+  resourcePrefix: string,
 ): string {
-  return `arn:aws:iam::${workloadAccountId}:role/starter-${environment}-github-deploy`;
+  return `arn:aws:iam::${workloadAccountId}:role/${resourcePrefix}-${environment}-github-deploy`;
 }
 
 export function cloudFormationDeployArgs(
@@ -198,7 +194,11 @@ export function cloudFormationDeployArgs(
 ): string[] {
   const names = stateNames(config);
   const retention = retentionForEnvironment(config.environment);
-  const githubRoleArn = githubDeployRoleArn(config.workloadAccountId, config.environment);
+  const githubRoleArn = githubDeployRoleArn(
+    config.workloadAccountId,
+    config.environment,
+    config.resourcePrefix,
+  );
   const githubRoleName = githubRoleArn.slice(githubRoleArn.lastIndexOf("/") + 1);
 
   return [

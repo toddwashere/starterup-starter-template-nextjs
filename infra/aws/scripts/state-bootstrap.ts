@@ -245,7 +245,7 @@ function usage(): string {
     "  --resource-prefix <s3-safe prefix>",
     "  --sso-region <identity center region>",
     "",
-    "Defaults come from infra/.env.local. AWS_STATE_RESOURCE_PREFIX is required.",
+    "Defaults come from infra/.env.local. AWS_RESOURCE_PREFIX defaults to starter.",
   ].join("\n");
 }
 
