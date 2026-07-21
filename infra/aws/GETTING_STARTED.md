@@ -673,7 +673,7 @@ Two kinds of secrets, both kept out of git:
 
 `core` generates the RDS password and writes the connection-string secrets —
 `/<env>/database-url`, `/<env>/direct-url`, and (hybrid)
-`/<env>/vercel-database-url`. When the pooler is enabled, `core` also creates
+`/<env>/vercel-database-url`. `core` also always creates
 `/<env>/rds-proxy-auth` (the RDS Proxy's own database credential). You never
 author or commit any of these; they're materialized at deploy time from the
 generated password and resource endpoints.
