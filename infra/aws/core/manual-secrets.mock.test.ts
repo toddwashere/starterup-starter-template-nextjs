@@ -14,12 +14,18 @@ const recorded: RecordedResource[] = [];
 // Pulumi's mock `newResource` callback only ever sees `args.inputs` — it never
 // receives the resource options (`opts`) a resource was constructed with. That
 // means the mock alone can't prove `ignoreChanges: ["secretString"]` was passed
-// to `SecretVersion`. To verify it for real, we intercept the `SecretVersion`
-// constructor itself (via `vi.mock` + `vi.hoisted`, since `vi.mock` factories
-// are hoisted above all other module-level code) and capture its third
-// argument — the actual `pulumi.CustomResourceOptions` the implementation used.
-const { recordedVersionOpts } = vi.hoisted(() => ({
+// to `SecretVersion`. Likewise, the Secrets Manager provider schema marks
+// `secretString` as sensitive, so the mock's recorded `inputs.secretString` is
+// redacted/unusable — the real AWS SDK wraps it in `pulumi.secret(...)` before
+// the mock ever sees it. To verify both for real, we intercept the
+// `SecretVersion` constructor itself (via `vi.mock` + `vi.hoisted`, since
+// `vi.mock` factories are hoisted above all other module-level code) and
+// capture its second and third arguments — the actual `secretString` the
+// builder passed (still a plain string here, pre-wrapping) and the
+// `pulumi.CustomResourceOptions` the implementation used.
+const { recordedVersionOpts, recordedVersionSecretStrings } = vi.hoisted(() => ({
   recordedVersionOpts: [] as (pulumi.CustomResourceOptions | undefined)[],
+  recordedVersionSecretStrings: [] as { name: string; secretString: unknown }[],
 }));
 
 vi.mock("@pulumi/aws", async (importOriginal) => {
@@ -30,6 +36,7 @@ vi.mock("@pulumi/aws", async (importOriginal) => {
   class SpySecretVersion extends actual.secretsmanager.SecretVersion {
     constructor(name: string, args: VersionArgs, opts?: VersionOpts) {
       recordedVersionOpts.push(opts);
+      recordedVersionSecretStrings.push({ name, secretString: args.secretString });
       super(name, args, opts);
     }
   }
@@ -71,6 +78,7 @@ describe("buildCatalogPlaceholderSecrets", () => {
     vi.resetModules();
     recorded.length = 0;
     recordedVersionOpts.length = 0;
+    recordedVersionSecretStrings.length = 0;
     installMocks();
     const mod = await import("./manual-secrets.js");
     const names = deploymentNames(resolveDeploymentIdentity({}), "sandbox");
@@ -109,14 +117,20 @@ describe("buildCatalogPlaceholderSecrets", () => {
   });
 
   it("seeds the plain-string catalog placeholder (not JSON) for each secret", () => {
-    // The Secrets Manager provider schema marks `secretString` as sensitive, so
-    // the mock's recorded `inputs.secretString` isn't a reliable plaintext read.
-    // Assert against the seed helper directly instead — it's the single source
-    // of truth the implementation is required to consume.
+    // Assert against what the builder actually passed as `secretString` to the
+    // `SecretVersion` constructor (captured pre-wrapping by `SpySecretVersion`
+    // above), matched to each secret by the resource name the builder gives
+    // it (`manual-<id>-placeholder`) rather than by array order.
+    expect(recordedVersionSecretStrings.length).toBe(awsCatalogAppSecrets().length);
     for (const spec of awsCatalogAppSecrets()) {
-      const seed = awsCatalogPlaceholderSeed(spec.id);
-      expect(typeof seed).toBe("string");
-      expect(() => JSON.parse(seed)).toThrow();
+      const recordedVersion = recordedVersionSecretStrings.find(
+        (v) => v.name === `manual-${spec.id}-placeholder`,
+      );
+      expect(recordedVersion).toBeDefined();
+      const secretString = recordedVersion?.secretString;
+      expect(typeof secretString).toBe("string");
+      expect(secretString).toBe(awsCatalogPlaceholderSeed(spec.id));
+      expect(() => JSON.parse(secretString as string)).toThrow();
     }
   });
 
@@ -133,6 +147,7 @@ describe("buildCatalogPlaceholderSecrets configured identity", () => {
     vi.resetModules();
     recorded.length = 0;
     recordedVersionOpts.length = 0;
+    recordedVersionSecretStrings.length = 0;
     installMocks();
     const mod = await import("./manual-secrets.js");
     const names = deploymentNames(
