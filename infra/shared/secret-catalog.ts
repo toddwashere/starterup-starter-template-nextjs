@@ -16,7 +16,12 @@ export const SECRET_CATALOG: readonly SecretDescriptor[] = [
     id: "database-url",
     envVar: "DATABASE_URL",
     generation: "generated",
-    readers: ["dashboard", "public-api", "public-mcp", "workers"],
+    // www is a reader because apps/www/app/email/* imports @workspace/campaigns
+    // -> email-preference-repo -> packages/database/src/client.ts, which
+    // constructs Prisma at module scope. Without DATABASE_URL those route
+    // modules fail to load and return an unhandled 500 (www itself still boots
+    // fine — nothing on its boot path touches the database).
+    readers: ["dashboard", "www", "public-api", "public-mcp", "workers"],
   },
   {
     id: "better-auth-secret",
@@ -28,7 +33,10 @@ export const SECRET_CATALOG: readonly SecretDescriptor[] = [
     id: "campaign-unsubscribe-secret",
     envVar: "CAMPAIGN_UNSUBSCRIBE_SECRET",
     generation: "generated",
-    readers: ["dashboard", "workers"],
+    // www hosts the RFC 8058 one-click unsubscribe and click-tracking routes
+    // (/email/*), which verify the marketing token. database-url alone only
+    // restores a handled 400; the token verification needs this secret too.
+    readers: ["dashboard", "www", "workers"],
   },
   {
     id: "stripe-secret-key",

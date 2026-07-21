@@ -24,16 +24,18 @@ describe("planAppIam", () => {
     expect(planAppIam(APPS_BY_NAME["public-mcp"]).roles).not.toContain("roles/storage.objectAdmin");
   });
 
-  it("gives www no roles and no secret access", () => {
+  it("gives www no roles, and secret access only to its /email/* route needs", () => {
     const plan = planAppIam(APPS_BY_NAME.www);
     expect(plan.roles).toEqual([]);
-    expect(plan.secretAccessorIds).toEqual([]);
+    expect(plan.secretAccessorIds.sort()).toEqual(["campaign-unsubscribe-secret", "database-url"]);
   });
 
   it("secretAccessorIds matches secretsForApp", () => {
     const plan = planAppIam(APPS_BY_NAME.dashboard);
     expect(plan.secretAccessorIds.sort()).toEqual(
-      secretsForApp("dashboard").map((s) => s.id).sort(),
+      secretsForApp("dashboard")
+        .map((s) => s.id)
+        .sort(),
     );
   });
 });

@@ -46,8 +46,16 @@ describe("generated vs placeholder partition", () => {
 });
 
 describe("secretsForApp", () => {
-  it("returns no secrets for www", () => {
-    expect(secretsForApp("www")).toEqual([]);
+  it("gives www exactly the two secrets its /email/* routes need", () => {
+    // www's boot path needs nothing, but its /email/* routes load
+    // @workspace/campaigns (module-scope Prisma) and verify the unsubscribe
+    // token, so it reads database-url and campaign-unsubscribe-secret -- and
+    // nothing else.
+    expect(
+      secretsForApp("www")
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(["campaign-unsubscribe-secret", "database-url"]);
   });
 
   it("includes database-url and better-auth-secret for dashboard", () => {

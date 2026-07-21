@@ -688,15 +688,19 @@ one `/<env>/<id>` Secrets Manager secret for **every catalog entry except
 | id                            | env var                       | read by                                    |
 | ----------------------------- | ----------------------------- | ------------------------------------------ |
 | `better-auth-secret`          | `BETTER_AUTH_SECRET`          | dashboard, public-api, public-mcp          |
-| `campaign-unsubscribe-secret` | `CAMPAIGN_UNSUBSCRIBE_SECRET` | dashboard, workers                         |
+| `campaign-unsubscribe-secret` | `CAMPAIGN_UNSUBSCRIBE_SECRET` | dashboard, www, workers                    |
 | `stripe-secret-key`           | `STRIPE_SECRET_KEY`           | dashboard, public-api, public-mcp          |
 | `stripe-webhook-secret`       | `STRIPE_WEBHOOK_SECRET`       | dashboard, public-api, public-mcp          |
 | `resend-api-key`              | `RESEND_API_KEY`              | dashboard, public-api, workers             |
 | `openrouter-api-key`          | `OPENROUTER_API_KEY`          | dashboard, workers                         |
 | `sentry-dsn`                  | `SENTRY_DSN`                  | dashboard, public-api, public-mcp, workers |
 
-(`www` is not a reader of anything — it boots with no secrets at all, by
-design.) Each secret is seeded with a plain-string placeholder and created with
+(`www` boots with no secrets at all, by design — nothing on its boot path
+needs one. It reads `database-url` (not in the table above; `core` derives it)
+and `campaign-unsubscribe-secret` purely at request time, for its `/email/*`
+unsubscribe and click-tracking routes, which load `@workspace/campaigns` and
+verify the marketing token.) Each secret is seeded with a plain-string
+placeholder and created with
 `ignoreChanges: ["secretString"]`, so `pulumi up` never overwrites a value
 you've filled in. To add a new app secret, add an entry to `SECRET_CATALOG` —
 there is no AWS-specific list to hand-maintain anymore.

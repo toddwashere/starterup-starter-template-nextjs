@@ -223,7 +223,7 @@ const serviceUrls: Record<string, pulumi.Output<string>> = {};
 for (const app of apprunnerApps) {
   // Catalog-driven runtime secrets: App Runner injects each env var from the
   // referenced Secrets Manager ARN at container start.  Readers of the same
-  // secret share the identical ARN.  `www` reads nothing, so this is `{}`.
+  // secret share the identical ARN.
   const runtimeEnvironmentSecrets: Record<string, pulumi.Input<string>> = Object.fromEntries(
     secretsForApp(app.name).map((secret) => [secret.envVar, secretArnOutput(secret.id)]),
   );

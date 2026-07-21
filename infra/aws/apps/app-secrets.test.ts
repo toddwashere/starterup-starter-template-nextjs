@@ -36,8 +36,11 @@ describe("buildAppRunnerRuntimeSecrets", () => {
     expect(dash.STRIPE_SECRET_KEY).toBe(api.STRIPE_SECRET_KEY);
   });
 
-  it("returns empty map for www", () => {
-    expect(buildAppRunnerRuntimeSecrets("www", arns)).toEqual({});
+  it("gives www only its /email/* route secrets", () => {
+    expect(buildAppRunnerRuntimeSecrets("www", arns)).toEqual({
+      DATABASE_URL: "arn:db-url",
+      CAMPAIGN_UNSUBSCRIBE_SECRET: "arn:unsub",
+    });
   });
 });
 

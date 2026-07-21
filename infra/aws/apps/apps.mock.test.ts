@@ -231,13 +231,21 @@ describe("aws apps configured identity (mocked)", () => {
     },
   );
 
-  // Called out separately: `www` has no catalog readers at all, so it must lose
-  // DATABASE_URL entirely. This is the deliberate, surprising behavior that
-  // would otherwise regress silently.
-  it("gives www no runtime secrets at all (not even DATABASE_URL)", () => {
+  // Called out separately: `www` reads exactly two secrets, and only because
+  // its /email/* routes need them (module-scope Prisma in @workspace/campaigns,
+  // plus unsubscribe-token verification). Everything else stays off www, so a
+  // future catalog edit that widens www's grants trips this test.
+  it("gives www exactly DATABASE_URL and CAMPAIGN_UNSUBSCRIBE_SECRET", () => {
     const secrets = imageConfiguration("www").runtimeEnvironmentSecrets ?? {};
-    expect(secrets).toEqual({});
-    expect(secretsForApp("www")).toEqual([]);
+    expect(secrets).toEqual({
+      DATABASE_URL: expectedSecretArn("database-url"),
+      CAMPAIGN_UNSUBSCRIBE_SECRET: expectedSecretArn("campaign-unsubscribe-secret"),
+    });
+    expect(
+      secretsForApp("www")
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(["campaign-unsubscribe-secret", "database-url"]);
   });
 
   it.each(APP_RUNNER_APPS)("keeps plaintext secrets out of %s's env vars", (appName: string) => {
