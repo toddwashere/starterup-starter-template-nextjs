@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import * as pulumi from "@pulumi/pulumi";
 
+import { SECRET_CATALOG } from "../../shared/secret-catalog";
+
 interface RecordedResource {
   type: string;
   name: string;
@@ -14,12 +16,19 @@ const CORE_OUTPUTS: Record<string, unknown> = {
   appSecurityGroupId: "sg-app",
   databaseUrlSecretArn:
     "arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/database-url",
-  directUrlSecretArn:
-    "arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/direct-url",
+  directUrlSecretArn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/direct-url",
   sqsQueueUrl: "https://sqs.us-east-2.amazonaws.com/123456789012/int-health-jobs-staging",
   sqsQueueArn: "arn:aws:sqs:us-east-2:123456789012:int-health-jobs-staging",
   uploadsBucket: "int-health-staging-uploads-abc",
   wafWebAclArn: "",
+  // Catalog placeholder ARNs the core stack now exports (everything in
+  // SECRET_CATALOG except `database-url`).
+  catalogSecretArns: Object.fromEntries(
+    SECRET_CATALOG.filter((s) => s.id !== "database-url").map((s) => [
+      s.id,
+      `arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/${s.id}`,
+    ]),
+  ),
 };
 
 describe("aws apps configured identity (mocked)", () => {
@@ -94,9 +103,7 @@ describe("aws apps configured identity (mocked)", () => {
     const imageRegistry = await new Promise<string>((resolve) =>
       pulumi.output(infra.imageRegistry).apply(resolve),
     );
-    expect(imageRegistry).toBe(
-      "123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health",
-    );
+    expect(imageRegistry).toBe("123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health");
   });
 
   it("tags app resources with the configured Project identity", () => {

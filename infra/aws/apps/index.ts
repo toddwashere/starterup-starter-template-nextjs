@@ -5,12 +5,10 @@ import { config as sandboxConfig } from "../config.sandbox";
 import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
 import { coreStackRefFromEnv } from "../env";
-import {
-  deploymentNames,
-  resolveDeploymentIdentity,
-  type AwsEnvironment,
-} from "../naming";
+import { deploymentNames, resolveDeploymentIdentity, type AwsEnvironment } from "../naming";
 import { resolveCompliance } from "../../shared/compliance";
+import { secretsForApp } from "../../shared/secret-catalog";
+import { appRunnerInstanceSecretArns, workersRuntimeSecretIds } from "./app-secrets";
 
 // --- Config loading ---------------------------------------------------------
 // Mirror the core stack exactly: import all per-stack configs statically and
@@ -74,6 +72,21 @@ const uploadsBucket = coreStack.getOutput("uploadsBucket");
 // this output currently resolves to `undefined` and every WAF association below
 // is a guarded no-op.  See the CONCERN in the task report.
 const wafWebAclArn = coreStack.getOutput("wafWebAclArn");
+// catalog id -> Secrets Manager ARN for every SECRET_CATALOG entry except
+// `database-url` (core derives that one separately, above).
+const catalogSecretArns = coreStack.getOutput("catalogSecretArns") as pulumi.Output<
+  Record<string, string>
+>;
+
+/** Resolve one catalog secret id to its ARN as a Pulumi output. */
+function secretArnOutput(id: string): pulumi.Output<string> {
+  if (id === "database-url") return databaseUrlSecretArn as pulumi.Output<string>;
+  return catalogSecretArns.apply((map) => {
+    const arn = (map ?? {})[id];
+    if (!arn) throw new Error(`Missing catalogSecretArns[${id}]`);
+    return arn;
+  });
+}
 
 // S3 ARNs are derived from the bucket NAME the core stack exports.
 const uploadsBucketArn = pulumi.interpolate`arn:aws:s3:::${uploadsBucket}`;
@@ -105,13 +118,9 @@ const bedrockStatements =
     ? [
         {
           Effect: "Allow",
-          Action: [
-            "bedrock:InvokeModel",
-            "bedrock:InvokeModelWithResponseStream",
-          ],
+          Action: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
           Resource: cfg.ai.bedrockModels.map(
-            (model) =>
-              `arn:aws:bedrock:${cfg.ai.bedrockRegion}::foundation-model/${model}`,
+            (model) => `arn:aws:bedrock:${cfg.ai.bedrockRegion}::foundation-model/${model}`,
           ),
         },
       ]
@@ -131,16 +140,13 @@ const vpcConnector = new aws.apprunner.VpcConnector("apps-vpc-connector", {
 });
 
 // Shared autoscaling config: sizing comes straight from cfg.apps.
-const autoScaling = new aws.apprunner.AutoScalingConfigurationVersion(
-  "apps-autoscaling",
-  {
-    autoScalingConfigurationName: `${namePrefix}-asc`,
-    minSize: cfg.apps.minSize,
-    maxSize: cfg.apps.maxSize,
-    maxConcurrency: cfg.apps.maxConcurrency,
-    tags: baseTags,
-  },
-);
+const autoScaling = new aws.apprunner.AutoScalingConfigurationVersion("apps-autoscaling", {
+  autoScalingConfigurationName: `${namePrefix}-asc`,
+  minSize: cfg.apps.minSize,
+  maxSize: cfg.apps.maxSize,
+  maxConcurrency: cfg.apps.maxConcurrency,
+  tags: baseTags,
+});
 
 // Shared ECR-access role: App Runner's build-side principal pulls the image.
 const ecrAccessRole = new aws.iam.Role("apprunner-ecr-access", {
@@ -151,12 +157,24 @@ const ecrAccessRole = new aws.iam.Role("apprunner-ecr-access", {
 });
 new aws.iam.RolePolicyAttachment("apprunner-ecr-access-policy", {
   role: ecrAccessRole.name,
-  policyArn:
-    "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
 });
 
+// Explicit ARN union the single shared instance role may read: the two DB
+// secrets plus every catalog placeholder.  Deliberately NOT a `/<env>/*`
+// wildcard — readers share one ARN per secret, enumerated here.
+const instanceSecretResources = pulumi
+  .all([databaseUrlSecretArn, directUrlSecretArn, catalogSecretArns])
+  .apply(([db, direct, catalog]) =>
+    appRunnerInstanceSecretArns({
+      databaseUrlSecretArn: db as string,
+      directUrlSecretArn: direct as string,
+      catalogSecretArns: (catalog ?? {}) as Record<string, string>,
+    }),
+  );
+
 // Shared instance (runtime) role: the running container assumes this to fetch
-// runtimeEnvironmentSecrets (DATABASE_URL) and to read/write the uploads bucket.
+// its runtimeEnvironmentSecrets and to read/write the uploads bucket.
 const instanceRole = new aws.iam.Role("apprunner-instance", {
   assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
     Service: "tasks.apprunner.amazonaws.com",
@@ -171,16 +189,11 @@ new aws.iam.RolePolicy("apprunner-instance-policy", {
       {
         Effect: "Allow",
         Action: ["secretsmanager:GetSecretValue"],
-        Resource: [databaseUrlSecretArn, directUrlSecretArn],
+        Resource: instanceSecretResources,
       },
       {
         Effect: "Allow",
-        Action: [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket",
-        ],
+        Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
         Resource: [uploadsBucketArn, uploadsObjectsArn],
       },
       ...bedrockStatements,
@@ -208,6 +221,13 @@ const apprunnerApps: AppRunnerApp[] = [
 const serviceUrls: Record<string, pulumi.Output<string>> = {};
 
 for (const app of apprunnerApps) {
+  // Catalog-driven runtime secrets: App Runner injects each env var from the
+  // referenced Secrets Manager ARN at container start.  Readers of the same
+  // secret share the identical ARN.  `www` reads nothing, so this is `{}`.
+  const runtimeEnvironmentSecrets: Record<string, pulumi.Input<string>> = Object.fromEntries(
+    secretsForApp(app.name).map((secret) => [secret.envVar, secretArnOutput(secret.id)]),
+  );
+
   const service = new aws.apprunner.Service(app.name, {
     serviceName: `${namePrefix}-${app.name}`,
     sourceConfiguration: {
@@ -228,13 +248,11 @@ for (const app of apprunnerApps) {
             // The AI SDK's Bedrock provider reads AWS_REGION; App Runner does
             // not set it automatically (Lambda does, as a reserved var).
             AWS_REGION: cfg.ai.bedrockRegion,
-            // Bootstrapping placeholders so auth/billing modules can load and
-            // health checks pass. Replace with Secrets Manager
-            // (runtimeEnvironmentSecrets) + real public URLs before real traffic.
+            // Secret values now come from Secrets Manager via
+            // `runtimeEnvironmentSecrets` below.  What remains here are
+            // non-secret bootstrapping URLs — replace with the real public
+            // URLs after the first deploy.
             // See infra/aws/GETTING_STARTED.md § Secrets.
-            STRIPE_SECRET_KEY: "sk_test_sandbox_placeholder",
-            STRIPE_WEBHOOK_SECRET: "whsec_sandbox_placeholder",
-            BETTER_AUTH_SECRET: "sandbox-better-auth-secret-min-32-chars",
             BETTER_AUTH_URL: "http://127.0.0.1:4000",
             NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:4000",
             // public-mcp asserts NEXT_PUBLIC_MCP_URL at process start; PORT is
@@ -243,9 +261,7 @@ for (const app of apprunnerApps) {
               ? { NEXT_PUBLIC_MCP_URL: `http://127.0.0.1:${app.port}` }
               : {}),
           },
-          runtimeEnvironmentSecrets: {
-            DATABASE_URL: databaseUrlSecretArn,
-          },
+          runtimeEnvironmentSecrets,
         },
       },
     },
@@ -297,6 +313,11 @@ for (const app of apprunnerApps) {
 // Workers Lambda + SQS event source mapping
 // ===========================================================================
 
+// Explicit ARN list for every secret the workers Lambda reads (catalog-driven).
+const workersSecretResources = pulumi.all(
+  workersRuntimeSecretIds().map((id) => secretArnOutput(id)),
+);
+
 // Lambda execution role: VPC ENI mgmt + logs (managed policies) plus an inline
 // policy for SQS consume, secret read, and uploads-bucket access.
 const workersRole = new aws.iam.Role("workers-lambda-role", {
@@ -307,13 +328,11 @@ const workersRole = new aws.iam.Role("workers-lambda-role", {
 });
 new aws.iam.RolePolicyAttachment("workers-vpc-access", {
   role: workersRole.name,
-  policyArn:
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
 });
 new aws.iam.RolePolicyAttachment("workers-basic-exec", {
   role: workersRole.name,
-  policyArn:
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
 });
 new aws.iam.RolePolicy("workers-inline", {
   role: workersRole.id,
@@ -322,26 +341,17 @@ new aws.iam.RolePolicy("workers-inline", {
     Statement: [
       {
         Effect: "Allow",
-        Action: [
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes",
-        ],
+        Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
         Resource: sqsQueueArn,
       },
       {
         Effect: "Allow",
         Action: ["secretsmanager:GetSecretValue"],
-        Resource: databaseUrlSecretArn,
+        Resource: workersSecretResources,
       },
       {
         Effect: "Allow",
-        Action: [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket",
-        ],
+        Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
         Resource: [uploadsBucketArn, uploadsObjectsArn],
       },
       ...bedrockStatements,
@@ -357,6 +367,22 @@ new aws.iam.RolePolicy("workers-inline", {
 const dbSecret = aws.secretsmanager.getSecretVersionOutput({
   secretId: databaseUrlSecretArn,
 });
+
+// Same treatment for the workers' remaining catalog secrets: resolve each
+// version at deploy time and inject it under the catalog's env var name.
+// `pulumi.secret(...)` keeps the plaintext out of stack state output.
+const workersSecretEnv: Record<string, pulumi.Output<string>> = Object.fromEntries(
+  secretsForApp("workers")
+    .filter((secret) => secret.id !== "database-url")
+    .map((secret) => [
+      secret.envVar,
+      pulumi.secret(
+        aws.secretsmanager.getSecretVersionOutput({
+          secretId: secretArnOutput(secret.id),
+        }).secretString,
+      ),
+    ]),
+);
 
 // Container-image packaging: matches the existing Docker pipeline (one image
 // per app in ECR) so there is no separate zip build. NOTE this points at the
@@ -383,6 +409,7 @@ const workersFn = new aws.lambda.Function("workers", {
       WORKER_QUEUE_ADAPTER: "sqs",
       SQS_QUEUE_URL: sqsQueueUrl,
       DATABASE_URL: pulumi.secret(dbSecret.secretString),
+      ...workersSecretEnv,
     },
   },
   tags: { ...baseTags, Name: `${namePrefix}-workers` },
@@ -415,9 +442,7 @@ new aws.iam.RolePolicy("scheduler-sqs", {
   role: schedulerRole.id,
   policy: pulumi.jsonStringify({
     Version: "2012-10-17",
-    Statement: [
-      { Effect: "Allow", Action: ["sqs:SendMessage"], Resource: sqsQueueArn },
-    ],
+    Statement: [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: sqsQueueArn }],
   }),
 });
 
