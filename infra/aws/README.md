@@ -136,10 +136,12 @@ hand-wiring resources (details + examples in [`GETTING_STARTED.md`](./GETTING_ST
   dead-letter queue + redrive policy automatically. Names: `starter-<key>-<env>`
   and `starter-<key>-dlq-<env>`. New queues need a consumer wired in the apps
   stack. The `jobs` queue is load-bearing — keep its key stable.
-- **Manual secrets** — append a `ManualSecretSpec` to `core/manual-secrets.ts` for
-  third-party keys Pulumi can't derive. Pulumi creates an **empty** placeholder
-  secret; you set the real value once via console/CLI and Pulumi never overwrites
-  it (`ignoreChanges`). Real values never live in git. Derived connection-string
+- **Catalog app secrets** — add an entry to `SECRET_CATALOG` in
+  `infra/shared/secret-catalog.ts` for third-party keys Pulumi can't derive.
+  `core/manual-secrets.ts` (`buildCatalogPlaceholderSecrets`) creates a
+  placeholder secret for every catalog entry except `database-url`; you set
+  the real value once via console/CLI and Pulumi never overwrites it
+  (`ignoreChanges`). Real values never live in git. Derived connection-string
   secrets remain fully managed by Pulumi.
 
 ---
@@ -483,8 +485,8 @@ Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate ste
 
 ### Required variables
 
-| Variable                    | Example                                                |
-| --------------------------- | ------------------------------------------------------ |
+| Variable               | Example                                                |
+| ---------------------- | ------------------------------------------------------ |
 | `AWS_ACCOUNT_ID`       | Selected workload environment's 12-digit ID            |
 | `AWS_REGION`           | `us-east-2`                                            |
 | `AWS_ECR_REGISTRY`     | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |

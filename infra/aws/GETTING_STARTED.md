@@ -673,33 +673,41 @@ Two kinds of secrets, both kept out of git:
 
 `core` generates the RDS password and writes the connection-string secrets —
 `/<env>/database-url`, `/<env>/direct-url`, and (hybrid)
-`/<env>/vercel-database-url`. You never author or commit these; they're
-materialized at deploy time from the generated password and resource endpoints.
+`/<env>/vercel-database-url`. When the pooler is enabled, `core` also creates
+`/<env>/rds-proxy-auth` (the RDS Proxy's own database credential). You never
+author or commit any of these; they're materialized at deploy time from the
+generated password and resource endpoints.
 
-#### App Runner runtime placeholders (boot only)
+#### Catalog app secrets (manual fill)
 
-The apps stack ships non-secret **bootstrapping** env vars so containers can
-start and pass health checks (`STRIPE_*`, `BETTER_AUTH_*`, etc.). They are **not**
-production values: auth redirects and billing will fail until you set real
-secrets (Secrets Manager + `runtimeEnvironmentSecrets`) and point
-`BETTER_AUTH_URL` / public URLs at your App Runner or custom domain. Prefer
-Secrets Manager for anything sensitive — do not commit live keys into
-`apps/index.ts`.
+Every other app secret is driven by `infra/shared/secret-catalog.ts`
+(`SECRET_CATALOG`). `core` calls `buildCatalogPlaceholderSecrets`, which creates
+one `/<env>/<id>` Secrets Manager secret for **every catalog entry except
+`database-url`** — today that's 7 secrets:
 
-#### Manually-managed (placeholders)
+| id                            | env var                       | read by                                    |
+| ----------------------------- | ----------------------------- | ------------------------------------------ |
+| `better-auth-secret`          | `BETTER_AUTH_SECRET`          | dashboard, public-api, public-mcp          |
+| `campaign-unsubscribe-secret` | `CAMPAIGN_UNSUBSCRIBE_SECRET` | dashboard, workers                         |
+| `stripe-secret-key`           | `STRIPE_SECRET_KEY`           | dashboard, public-api, public-mcp          |
+| `stripe-webhook-secret`       | `STRIPE_WEBHOOK_SECRET`       | dashboard, public-api, public-mcp          |
+| `resend-api-key`              | `RESEND_API_KEY`              | dashboard, public-api, workers             |
+| `openrouter-api-key`          | `OPENROUTER_API_KEY`          | dashboard, workers                         |
+| `sentry-dsn`                  | `SENTRY_DSN`                  | dashboard, public-api, public-mcp, workers |
 
-For secrets Pulumi can't derive (third-party API keys, webhook signing secrets),
-add an entry to `infra/aws/core/manual-secrets.ts`:
+(`www` is not a reader of anything — it boots with no secrets at all, by
+design.) Each secret is seeded with a plain-string placeholder and created with
+`ignoreChanges: ["secretString"]`, so `pulumi up` never overwrites a value
+you've filled in. To add a new app secret, add an entry to `SECRET_CATALOG` —
+there is no AWS-specific list to hand-maintain anymore.
 
-```ts
-export const MANUAL_SECRETS: readonly ManualSecretSpec[] = [
-  { name: "stripe-secret-key", description: "Stripe secret API key" },
-];
-```
+Secrets are **shared** across readers: one Secrets Manager entry and one ARN
+per id, referenced by every app entitled to read it (`readers` in the catalog)
+— there are no per-app copies. Core exports the id → ARN map as
+`catalogSecretArns` (aliased as `manualSecretArns`); the apps stack consumes it
+to wire up both App Runner and the workers Lambda.
 
-On the next `pulumi up`, core creates an **empty** `/<env>/stripe-secret-key`
-secret seeded with a placeholder. Set the real value once — Pulumi never reads or
-overwrites it afterward (`ignoreChanges` on the value):
+Set the real value once per environment:
 
 ```bash
 aws secretsmanager put-secret-value \
@@ -707,8 +715,36 @@ aws secretsmanager put-secret-value \
   --secret-string 'sk_live_…'
 ```
 
-This is why **real secret values never live in git**. Grant read access to the
-secret from whichever app role needs it.
+**`infra:secrets:*` (`pnpm infra:secrets:status` / `infra:secrets:set`) manages
+GCP Secret Manager only — it does not touch AWS.** For AWS, `put-secret-value`
+above is the only path.
+
+How the new value reaches running workloads differs by compute type:
+
+- **App Runner** (dashboard, www, public-api, public-mcp) — services get
+  `runtimeEnvironmentSecrets` pointing at the secret ARN; App Runner resolves
+  the current value itself on the next deployment or instance restart. No
+  Pulumi change is required.
+- **Lambda** (workers) — AWS Lambda has no native secret-injection mechanism,
+  so the apps stack resolves each secret's value at **deploy time**
+  (`getSecretVersionOutput`) and bakes it into the function's environment
+  (wrapped as a Pulumi secret so it's redacted from stack output). This means
+  **after filling or rotating any secret the workers Lambda reads, you must
+  re-run `pulumi up` on the apps stack** for the new value to reach the
+  running Lambda — simply calling `put-secret-value` is not enough for
+  workers, unlike App Runner.
+
+#### App Runner non-secret bootstrapping (boot only)
+
+The apps stack still ships a small set of non-secret **bootstrapping** URL env
+vars so containers can start and pass health checks: `BETTER_AUTH_URL`,
+`NEXT_PUBLIC_BETTER_AUTH_URL`, and (public-mcp only) `NEXT_PUBLIC_MCP_URL`.
+They default to loopback placeholders and are **not** production values — auth
+redirects will misbehave until you point them at your real App Runner or
+custom domain URLs. Stripe and Better Auth secret values are no longer part of
+`runtimeEnvironmentVariables` at all; they come exclusively from Secrets
+Manager via `runtimeEnvironmentSecrets` (see above). Do not commit live keys
+into `apps/index.ts`.
 
 ---
 
