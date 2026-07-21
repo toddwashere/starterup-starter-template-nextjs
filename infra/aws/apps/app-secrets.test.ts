@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAppRunnerRuntimeSecrets,
   appRunnerInstanceSecretArns,
+  resolveSecretArn,
   workersRuntimeSecretIds,
 } from "./app-secrets";
 
@@ -18,6 +19,27 @@ const arns = {
     "sentry-dsn": "arn:sentry",
   },
 };
+
+describe("resolveSecretArn", () => {
+  it("special-cases database-url, which is not in catalogSecretArns", () => {
+    expect(resolveSecretArn("database-url", arns)).toBe("arn:db-url");
+  });
+
+  // Binding constraint: a missing ARN must fail the deploy loudly. Returning
+  // undefined would silently ship an App Runner service (or Lambda) whose env
+  // var points at nothing. index.ts calls this same function, so this covers
+  // the shipped path, not a parallel copy of the rule.
+  it("throws rather than returning undefined for an unknown secret", () => {
+    expect(() => resolveSecretArn("nope", arns)).toThrow(/nope/);
+  });
+
+  it("throws when a known catalog id is absent from the bag", () => {
+    const empty = { ...arns, catalogSecretArns: {} };
+    expect(() => resolveSecretArn("stripe-secret-key", empty)).toThrow(
+      /Missing catalogSecretArns\[stripe-secret-key\]/,
+    );
+  });
+});
 
 describe("buildAppRunnerRuntimeSecrets", () => {
   it("maps catalog env vars to shared ARNs for dashboard", () => {

@@ -16,7 +16,13 @@ export interface CatalogSecretArnBag {
 /**
  * Resolve the ARN for a single catalog secret id, special-casing
  * `database-url` since it is not present in `catalogSecretArns`.
- * Throws if a required secret has no known ARN.
+ * Throws if a required secret has no known ARN — never returns undefined, which
+ * would silently produce an env var pointing at nothing.
+ *
+ * The message deliberately carries no app name: callers reach this from inside
+ * a Pulumi `apply`, so the failing resource's URN is already in the error
+ * output, and threading a context string through would be the only reason for
+ * the parameter to exist.
  */
 export function resolveSecretArn(id: string, arns: CatalogSecretArnBag): string {
   if (id === "database-url") return arns.databaseUrlSecretArn;

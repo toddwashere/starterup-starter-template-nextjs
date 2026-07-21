@@ -82,11 +82,19 @@ function secretReadResources(policyName: string): string[] {
 }
 
 /**
- * Pulumi's well-known signature key marking a value as a wrapped secret
- * (`@pulumi/pulumi`'s `specialSigKey`/`specialSecretSig` in `runtime/rpc.js`).
- * This is the JS SDK's internal sentinel, not the gRPC wire-format one.
+ * `specialSigKey` from `@pulumi/pulumi`'s `runtime/rpc.js` — the wire-format
+ * signature key present on *any* Pulumi special serialized form (secret, asset,
+ * archive, resource reference), not secrets specifically.
  */
 const PULUMI_SECRET_SIG = "4dabf18193072939515e22adb298388d";
+
+/**
+ * `specialSecretSig` from the same module — the *value* stored under
+ * `specialSigKey` that identifies the special form as a secret in particular.
+ * Asserting both is what distinguishes "wrapped as a secret" from "wrapped as
+ * some other special value".
+ */
+const PULUMI_SECRET_SIG_VALUE = "1b47061264138c4ac30d75fd1eb44270";
 
 /**
  * Pulumi wraps an input containing a secret in `{ <sig>: <sig>, value: ... }`.
@@ -100,7 +108,7 @@ function workersLambdaEnvVars(): Record<string, string> {
     string,
     unknown
   >;
-  expect(environment).toHaveProperty(PULUMI_SECRET_SIG);
+  expect(environment[PULUMI_SECRET_SIG]).toBe(PULUMI_SECRET_SIG_VALUE);
   expect("value" in environment).toBe(true);
   const unwrapped = environment.value as {
     variables: Record<string, string>;

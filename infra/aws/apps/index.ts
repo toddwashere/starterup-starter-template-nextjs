@@ -8,7 +8,13 @@ import { coreStackRefFromEnv } from "../env";
 import { deploymentNames, resolveDeploymentIdentity, type AwsEnvironment } from "../naming";
 import { resolveCompliance } from "../../shared/compliance";
 import { secretsForApp } from "../../shared/secret-catalog";
-import { appRunnerInstanceSecretArns, workersRuntimeSecretIds } from "./app-secrets";
+import {
+  appRunnerInstanceSecretArns,
+  buildAppRunnerRuntimeSecrets,
+  resolveSecretArn,
+  workersRuntimeSecretIds,
+  type CatalogSecretArnBag,
+} from "./app-secrets";
 
 // --- Config loading ---------------------------------------------------------
 // Mirror the core stack exactly: import all per-stack configs statically and
@@ -78,14 +84,21 @@ const catalogSecretArns = coreStack.getOutput("catalogSecretArns") as pulumi.Out
   Record<string, string>
 >;
 
+// The single ARN bag every secret lookup on this stack goes through. Resolution
+// itself (including the `database-url` special case and the throw-on-missing
+// rule) lives in `app-secrets.ts` and is unit-tested there — this file must not
+// re-implement it.
+const arnBag: pulumi.Output<CatalogSecretArnBag> = pulumi
+  .all([databaseUrlSecretArn, directUrlSecretArn, catalogSecretArns])
+  .apply(([db, direct, catalog]) => ({
+    databaseUrlSecretArn: db as string,
+    directUrlSecretArn: direct as string,
+    catalogSecretArns: (catalog ?? {}) as Record<string, string>,
+  }));
+
 /** Resolve one catalog secret id to its ARN as a Pulumi output. */
 function secretArnOutput(id: string): pulumi.Output<string> {
-  if (id === "database-url") return databaseUrlSecretArn as pulumi.Output<string>;
-  return catalogSecretArns.apply((map) => {
-    const arn = (map ?? {})[id];
-    if (!arn) throw new Error(`Missing catalogSecretArns[${id}]`);
-    return arn;
-  });
+  return arnBag.apply((bag) => resolveSecretArn(id, bag));
 }
 
 // S3 ARNs are derived from the bucket NAME the core stack exports.
@@ -163,15 +176,7 @@ new aws.iam.RolePolicyAttachment("apprunner-ecr-access-policy", {
 // Explicit ARN union the single shared instance role may read: the two DB
 // secrets plus every catalog placeholder.  Deliberately NOT a `/<env>/*`
 // wildcard — readers share one ARN per secret, enumerated here.
-const instanceSecretResources = pulumi
-  .all([databaseUrlSecretArn, directUrlSecretArn, catalogSecretArns])
-  .apply(([db, direct, catalog]) =>
-    appRunnerInstanceSecretArns({
-      databaseUrlSecretArn: db as string,
-      directUrlSecretArn: direct as string,
-      catalogSecretArns: (catalog ?? {}) as Record<string, string>,
-    }),
-  );
+const instanceSecretResources = arnBag.apply(appRunnerInstanceSecretArns);
 
 // Shared instance (runtime) role: the running container assumes this to fetch
 // its runtimeEnvironmentSecrets and to read/write the uploads bucket.
@@ -224,8 +229,8 @@ for (const app of apprunnerApps) {
   // Catalog-driven runtime secrets: App Runner injects each env var from the
   // referenced Secrets Manager ARN at container start.  Readers of the same
   // secret share the identical ARN.
-  const runtimeEnvironmentSecrets: Record<string, pulumi.Input<string>> = Object.fromEntries(
-    secretsForApp(app.name).map((secret) => [secret.envVar, secretArnOutput(secret.id)]),
+  const runtimeEnvironmentSecrets = arnBag.apply((bag) =>
+    buildAppRunnerRuntimeSecrets(app.name, bag),
   );
 
   const service = new aws.apprunner.Service(app.name, {
