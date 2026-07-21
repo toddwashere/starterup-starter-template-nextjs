@@ -82,18 +82,39 @@ function secretReadResources(policyName: string): string[] {
 }
 
 /**
+ * Pulumi's well-known signature key marking a value as a wrapped secret
+ * (`@pulumi/pulumi`'s `specialSigKey`/`specialSecretSig` in `runtime/rpc.js`).
+ * This is the JS SDK's internal sentinel, not the gRPC wire-format one.
+ */
+const PULUMI_SECRET_SIG = "4dabf18193072939515e22adb298388d";
+
+/**
  * Pulumi wraps an input containing a secret in `{ <sig>: <sig>, value: ... }`.
- * The workers Lambda's env holds `pulumi.secret(...)` values, so unwrap first.
+ * The workers Lambda's env holds `pulumi.secret(...)` values, so it must arrive
+ * wrapped. Assert the wrapper rather than falling back to the raw value: a
+ * silent fallback would let `pulumi.secret(...)` be dropped from index.ts
+ * without any test noticing that the env is now plaintext in stack state.
  */
 function workersLambdaEnvVars(): Record<string, string> {
   const environment = findResource(FUNCTION_TYPE, "workers").inputs.environment as Record<
     string,
     unknown
   >;
-  const unwrapped = ("value" in environment ? environment.value : environment) as {
+  expect(environment).toHaveProperty(PULUMI_SECRET_SIG);
+  expect("value" in environment).toBe(true);
+  const unwrapped = environment.value as {
     variables: Record<string, string>;
   };
   return unwrapped.variables;
+}
+
+/**
+ * Matches the mock `getSecretVersion` handler below: the canned secret string
+ * with the requested secret's own ARN appended, so each env var's resolved
+ * value can be tied back to the specific secret it was supposed to read.
+ */
+function secretStringForArn(arn: string): string {
+  return `postgresql://starter:pass@db/starter?ref=${arn}`;
 }
 
 const CATALOG_ARNS = CORE_OUTPUTS.catalogSecretArns as Record<string, string>;
@@ -153,8 +174,11 @@ describe("aws apps configured identity (mocked)", () => {
             }
           }
           if (args.token.includes("getSecretVersion")) {
+            const secretId = (args.inputs as { secretId?: string }).secretId;
             return {
-              secretString: "postgresql://starter:pass@db/starter",
+              secretString: secretId
+                ? secretStringForArn(secretId)
+                : "postgresql://starter:pass@db/starter",
               versionId: "1",
             };
           }
@@ -262,16 +286,21 @@ describe("aws apps configured identity (mocked)", () => {
     expect([...resources].sort()).toEqual(workersRuntimeSecretIds().map(expectedSecretArn).sort());
   });
 
-  it("injects the catalog's workers secrets into the Lambda environment", () => {
-    // Values are Pulumi secrets resolved from getSecretVersion (the mock returns
-    // one canned string for all of them), so only the key set is meaningful here.
-    const keys = Object.keys(workersLambdaEnvVars()).sort();
+  it("injects the catalog's workers secrets into the Lambda environment, wired to their own secret", () => {
+    const envVars = workersLambdaEnvVars();
+    const workersSecrets = secretsForApp("workers");
+
+    const keys = Object.keys(envVars).sort();
     expect(keys).toEqual(
-      [
-        ...secretsForApp("workers").map((s) => s.envVar),
-        "WORKER_QUEUE_ADAPTER",
-        "SQS_QUEUE_URL",
-      ].sort(),
+      [...workersSecrets.map((s) => s.envVar), "WORKER_QUEUE_ADAPTER", "SQS_QUEUE_URL"].sort(),
     );
+
+    // The mock's getSecretVersion echoes back the requested secretId (ARN), so
+    // each env var's resolved value can be tied to the specific secret it was
+    // supposed to read -- catching an envVar mis-wired to a different secret's
+    // ARN, which a key-set-only check would miss.
+    for (const secret of workersSecrets) {
+      expect(envVars[secret.envVar]).toBe(secretStringForArn(expectedSecretArn(secret.id)));
+    }
   });
 });
