@@ -685,15 +685,15 @@ Every other app secret is driven by `infra/shared/secret-catalog.ts`
 one `/<env>/<id>` Secrets Manager secret for **every catalog entry except
 `database-url`** — today that's 7 secrets:
 
-| id                            | env var                       | read by                                    |
-| ----------------------------- | ----------------------------- | ------------------------------------------ |
-| `better-auth-secret`          | `BETTER_AUTH_SECRET`          | dashboard, public-api, public-mcp          |
-| `campaign-unsubscribe-secret` | `CAMPAIGN_UNSUBSCRIBE_SECRET` | dashboard, www, workers                    |
-| `stripe-secret-key`           | `STRIPE_SECRET_KEY`           | dashboard, public-api, public-mcp          |
-| `stripe-webhook-secret`       | `STRIPE_WEBHOOK_SECRET`       | dashboard, public-api, public-mcp          |
-| `resend-api-key`              | `RESEND_API_KEY`              | dashboard, public-api, workers             |
-| `openrouter-api-key`          | `OPENROUTER_API_KEY`          | dashboard, workers                         |
-| `sentry-dsn`                  | `SENTRY_DSN`                  | dashboard, public-api, public-mcp, workers |
+| id                               | env var                       | read by                                    |
+| -------------------------------- | ----------------------------- | ------------------------------------------ |
+| `better-auth-secret` ⚠️          | `BETTER_AUTH_SECRET`          | dashboard, public-api, public-mcp          |
+| `campaign-unsubscribe-secret` ⚠️ | `CAMPAIGN_UNSUBSCRIBE_SECRET` | dashboard, www, workers                    |
+| `stripe-secret-key`              | `STRIPE_SECRET_KEY`           | dashboard, public-api, public-mcp          |
+| `stripe-webhook-secret`          | `STRIPE_WEBHOOK_SECRET`       | dashboard, public-api, public-mcp          |
+| `resend-api-key`                 | `RESEND_API_KEY`              | dashboard, public-api, workers             |
+| `openrouter-api-key`             | `OPENROUTER_API_KEY`          | dashboard, workers                         |
+| `sentry-dsn`                     | `SENTRY_DSN`                  | dashboard, public-api, public-mcp, workers |
 
 (`www` boots with no secrets at all, by design — nothing on its boot path
 needs one. It reads `database-url` (not in the table above; `core` derives it)
@@ -737,6 +737,41 @@ How the new value reaches running workloads differs by compute type:
   re-run `pulumi up` on the apps stack** for the new value to reach the
   running Lambda — simply calling `put-secret-value` is not enough for
   workers, unlike App Runner.
+
+#### ⚠️ `better-auth-secret` and `campaign-unsubscribe-secret` must be filled
+
+The two ⚠️ rows in the table above. The catalog marks them `generation:
+"generated"`, but that field drives **GCP only** — on AWS they are ordinary
+operator-filled placeholders, seeded from `infra/shared/aws-catalog-secrets.ts`
+with values that are **committed to this repository**:
+
+```
+better-auth-secret          → replace-me-better-auth-secret-min-32-chars
+campaign-unsubscribe-secret → replace-me-campaign-unsubscribe-secret-min-32
+```
+
+Both seeds are long enough to pass their `.min(32)` validation, and that is
+exactly the hazard: an AWS deploy where nobody ran `put-secret-value` **comes up
+healthy** — containers start, health checks pass, nothing warns — while Better
+Auth signs session cookies and the campaigns package signs unsubscribe links
+with a key every reader of this repo already has. Those signatures are
+forgeable by anyone. There is deliberately no AWS preflight check for this, and
+`pnpm infra:secrets:status` is GCP-only, so **a healthy service is not evidence
+these were filled.**
+
+Filling both with real random values is **mandatory before any real traffic**,
+in every environment:
+
+```bash
+for id in better-auth-secret campaign-unsubscribe-secret; do
+  aws secretsmanager put-secret-value \
+    --secret-id "/sandbox/$id" \
+    --secret-string "$(openssl rand -base64 48)"
+done
+```
+
+`campaign-unsubscribe-secret` is read by the workers Lambda, so re-run
+`pulumi up` on the apps stack afterwards (per the Lambda note above).
 
 #### App Runner non-secret bootstrapping (boot only)
 
