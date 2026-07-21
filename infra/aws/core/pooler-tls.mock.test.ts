@@ -69,6 +69,7 @@ async function build() {
   const mod = await import("./pooler-tls.js");
   const result = mod.buildPoolerTls({
     namePrefix: "starter-sandbox",
+    secretPathPrefix: "/sandbox",
     region: "us-east-2",
     accountId: "123456789012",
     hostname: "db.sandbox.aws.example.com",
@@ -289,6 +290,7 @@ describe("buildPoolerTlsRenewal", () => {
     // Build the TLS resources first
     const tlsResult = mod.buildPoolerTls({
       namePrefix: "starter-sandbox",
+      secretPathPrefix: "/sandbox",
       region: "us-east-2",
       accountId: "123456789012",
       hostname: "db.sandbox.aws.example.com",
@@ -363,6 +365,7 @@ describe("buildPoolerTlsRenewal", () => {
     // Build TLS foundation
     const tlsResult = mod.buildPoolerTls({
       namePrefix: "starter-sandbox",
+      secretPathPrefix: "/sandbox",
       region: "us-east-2",
       accountId: "123456789012",
       hostname: "db.sandbox.aws.example.com",

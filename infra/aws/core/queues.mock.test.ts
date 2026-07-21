@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import * as pulumi from "@pulumi/pulumi";
+import { deploymentNames, resolveDeploymentIdentity } from "../naming";
 
 interface RecordedResource {
   type: string;
@@ -40,9 +41,10 @@ describe("buildQueues", () => {
     recorded.length = 0;
     installMocks();
     const mod = await import("./queues.js");
+    const names = deploymentNames(resolveDeploymentIdentity({}), "sandbox");
     result = mod.buildQueues({
-      stack: "sandbox",
-      tags: { Project: "starter" },
+      tags: names.tags,
+      queueName: names.queueName,
       specs: [
         {
           key: "jobs",
@@ -62,9 +64,9 @@ describe("buildQueues", () => {
     expect(queues).toHaveLength(4);
     const names = queues.map((q) => q.inputs.name);
     expect(names).toContain("starter-jobs-sandbox");
-    expect(names).toContain("starter-jobs-dlq-sandbox");
+    expect(names).toContain("starter-jobs-sandbox-dlq");
     expect(names).toContain("starter-emails-sandbox");
-    expect(names).toContain("starter-emails-dlq-sandbox");
+    expect(names).toContain("starter-emails-sandbox-dlq");
   });
 
   it("wires a redrive policy from the main queue to its DLQ", () => {
@@ -79,9 +81,7 @@ describe("buildQueues", () => {
   });
 
   it("applies sensible defaults when a spec omits them", () => {
-    const emails = recorded.find(
-      (r) => r.inputs.name === "starter-emails-sandbox",
-    );
+    const emails = recorded.find((r) => r.inputs.name === "starter-emails-sandbox");
     expect(emails!.inputs.visibilityTimeoutSeconds).toBe(60);
     const redrive = JSON.parse(emails!.inputs.redrivePolicy as string) as {
       maxReceiveCount: number;
@@ -91,5 +91,35 @@ describe("buildQueues", () => {
 
   it("returns a map keyed by the spec key", () => {
     expect(Object.keys(result).sort()).toEqual(["emails", "jobs"]);
+  });
+});
+
+describe("buildQueues configured identity", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    recorded.length = 0;
+    installMocks();
+    const mod = await import("./queues.js");
+    const names = deploymentNames(
+      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" }),
+      "staging",
+    );
+    mod.buildQueues({
+      tags: { ...names.tags, Layer: "core" },
+      queueName: names.queueName,
+      specs: [{ key: "jobs" }],
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }, 10000);
+
+  it("uses {prefix}-{queue}-{env}[-dlq] and project tags", () => {
+    const queue = recorded.find((r) => r.inputs.name === "int-health-jobs-staging");
+    const dlq = recorded.find((r) => r.inputs.name === "int-health-jobs-staging-dlq");
+    expect(queue).toBeDefined();
+    expect(dlq).toBeDefined();
+    expect(queue!.inputs.tags).toMatchObject({
+      Project: "int-health",
+      Environment: "staging",
+    });
   });
 });

@@ -4,6 +4,8 @@ import * as aws from "@pulumi/aws";
 export interface PgBouncerArgs {
   /** Short prefix used in every Pulumi logical name and AWS resource name. */
   namePrefix: string;
+  /** Environment-scoped CloudWatch log group prefix, e.g. `/staging`. */
+  logGroupPrefix: string;
   region: string;
   vpcId: pulumi.Input<string>;
   /** Public subnets for the NLB (only used when pooler.publicListener). */
@@ -183,7 +185,7 @@ export function buildPgBouncer(args: PgBouncerArgs): PgBouncerResult {
   });
 
   const logGroup = new aws.cloudwatch.LogGroup(`${namePrefix}-pgbouncer-logs`, {
-    name: `/starter/${namePrefix}/pgbouncer`,
+    name: `${args.logGroupPrefix}/pgbouncer`,
     retentionInDays: 30,
     tags,
   });

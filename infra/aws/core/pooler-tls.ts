@@ -34,6 +34,7 @@ function bundleCertificateExporter(): pulumi.asset.AssetArchive {
 
 export interface PoolerTlsArgs {
   namePrefix: string;
+  secretPathPrefix: string;
   region: string;
   accountId: pulumi.Input<string>;
   hostname: string;
@@ -77,6 +78,7 @@ export interface PoolerTlsRenewalArgs {
 export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
   const {
     namePrefix,
+    secretPathPrefix,
     region,
     accountId,
     hostname,
@@ -133,7 +135,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
 
   // --- 5. KMS-encrypted Secrets Manager secret ----------------------------------
   const tlsSecret = new aws.secretsmanager.Secret(`${namePrefix}-pooler-tls-secret`, {
-    name: `/starter/${pulumi.getStack()}/pooler-tls`,
+    name: `${secretPathPrefix}/pooler-tls`,
     description: `Exported TLS certificate material for ${hostname} pooler`,
     kmsKeyId: tlsKey.id,
     recoveryWindowInDays: isProduction ? 7 : 0,

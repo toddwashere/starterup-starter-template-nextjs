@@ -5,6 +5,11 @@ import { config as sandboxConfig } from "../config.sandbox";
 import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
 import { coreStackRefFromEnv } from "../env";
+import {
+  deploymentNames,
+  resolveDeploymentIdentity,
+  type AwsEnvironment,
+} from "../naming";
 import { resolveCompliance } from "../../shared/compliance";
 
 // --- Config loading ---------------------------------------------------------
@@ -41,11 +46,14 @@ const imageTag = config.get("imageTag") ?? cfg.apps.imageTag;
 // config's region so both stay in sync (kept identical to core).
 const region = new pulumi.Config("aws").get("region") ?? cfg.aws.region;
 
-// ECR registry URL: `<account>.dkr.ecr.<region>.amazonaws.com/starter`.
-const imageRegistry = pulumi.interpolate`${registryAccountId}.dkr.ecr.${region}.amazonaws.com/starter`;
+const identity = resolveDeploymentIdentity(process.env);
+const names = deploymentNames(identity, stack as AwsEnvironment);
 
-const namePrefix = `starter-${stack}`;
-const baseTags = { Project: "starter", Stack: stack, ManagedBy: "pulumi" };
+// ECR registry URL: `<account>.dkr.ecr.<region>.amazonaws.com/<identity>`.
+const imageRegistry = pulumi.interpolate`${registryAccountId}.dkr.ecr.${region}.amazonaws.com/${names.ecrNamespace}`;
+
+const namePrefix = names.globalPrefix;
+const baseTags = { ...names.tags, Layer: "apps" };
 
 // --- Compliance -------------------------------------------------------------
 // Derive per-feature flags from the coarse complianceMode.  cloudArmor gates
@@ -428,6 +436,7 @@ new aws.scheduler.Schedule("cleanup-expired-sessions", {
 });
 
 // --- Exports ----------------------------------------------------------------
+export { imageRegistry };
 export const dashboardUrl = serviceUrls["dashboard"];
 export const wwwUrl = serviceUrls["www"];
 export const publicApiUrl = serviceUrls["public-api"];

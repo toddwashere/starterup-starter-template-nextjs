@@ -137,6 +137,8 @@ describe("buildPoolerStack integration", () => {
 
     mod.buildPoolerStack({
       namePrefix: "starter-sandbox",
+      secretPathPrefix: "/sandbox",
+      logGroupPrefix: "/sandbox",
       region: "us-east-2",
       accountId: "123456789012",
       poolerConfig: {

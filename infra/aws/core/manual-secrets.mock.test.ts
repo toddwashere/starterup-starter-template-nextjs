@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import * as pulumi from "@pulumi/pulumi";
+import { deploymentNames, resolveDeploymentIdentity } from "../naming";
 
 interface RecordedResource {
   type: string;
@@ -38,13 +39,12 @@ describe("buildManualSecrets", () => {
     recorded.length = 0;
     installMocks();
     const mod = await import("./manual-secrets.js");
+    const names = deploymentNames(resolveDeploymentIdentity({}), "sandbox");
     mod.buildManualSecrets({
-      stack: "sandbox",
+      secretPathPrefix: names.secretPathPrefix,
       isProduction: false,
-      tags: { Project: "starter" },
-      specs: [
-        { name: "stripe-secret-key", description: "Stripe secret API key" },
-      ],
+      tags: names.tags,
+      specs: [{ name: "stripe-secret-key", description: "Stripe secret API key" }],
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }, 10000);
@@ -52,7 +52,7 @@ describe("buildManualSecrets", () => {
   it("creates a namespaced secret container per spec", () => {
     const secrets = recorded.filter((r) => r.type === SECRET_TYPE);
     expect(secrets).toHaveLength(1);
-    expect(secrets[0].inputs.name).toBe("/starter/sandbox/stripe-secret-key");
+    expect(secrets[0].inputs.name).toBe("/sandbox/stripe-secret-key");
     // Non-prod: force delete so the name is reusable on the next deploy.
     expect(secrets[0].inputs.recoveryWindowInDays).toBe(0);
   });
@@ -64,5 +64,31 @@ describe("buildManualSecrets", () => {
     const versions = recorded.filter((r) => r.type === VERSION_TYPE);
     expect(versions).toHaveLength(1);
     expect(versions[0].inputs.secretId).toBeDefined();
+  });
+});
+
+describe("buildManualSecrets configured identity", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    recorded.length = 0;
+    installMocks();
+    const mod = await import("./manual-secrets.js");
+    const names = deploymentNames(
+      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" }),
+      "staging",
+    );
+    mod.buildManualSecrets({
+      secretPathPrefix: names.secretPathPrefix,
+      isProduction: false,
+      tags: names.tags,
+      specs: [{ name: "stripe-secret-key", description: "Stripe secret API key" }],
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }, 10000);
+
+  it("keeps environment-scoped secret paths with project tags", () => {
+    const secret = recorded.find((r) => r.type === SECRET_TYPE);
+    expect(secret?.inputs.name).toBe("/staging/stripe-secret-key");
+    expect(secret?.inputs.tags).toMatchObject({ Project: "int-health" });
   });
 });

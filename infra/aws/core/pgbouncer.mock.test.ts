@@ -55,6 +55,7 @@ async function build() {
   const mod = await import("./pgbouncer.js");
   const result = mod.buildPgBouncer({
     namePrefix: "starter-sandbox",
+    logGroupPrefix: "/sandbox",
     region: "us-east-2",
     vpcId: "vpc-123",
     publicSubnetIds: ["subnet-pub-a", "subnet-pub-b"],
@@ -63,7 +64,7 @@ async function build() {
     dbHost: "starter-sandbox-db.rds.amazonaws.com",
     dbName: "starter",
     dbSecretArn:
-      "arn:aws:secretsmanager:us-east-2:123456789012:secret:/starter/sandbox/rds-proxy-auth",
+      "arn:aws:secretsmanager:us-east-2:123456789012:secret:/sandbox/rds-proxy-auth",
     pooler: { poolSize: 25, publicListener: true },
     allowedCidrs: [
       { cidr: "203.0.113.10/32", source: "application" },

@@ -6,15 +6,14 @@ import * as aws from "@pulumi/aws";
  *
  * Add a queue by appending a {@link QueueSpec} to {@link QUEUES}. Each entry gets
  * a matching dead-letter queue automatically — you never hand-wire a DLQ. The
- * physical names are `starter-<key>-<stack>` and `starter-<key>-dlq-<stack>`, so
- * they stay unique per environment.
+ * physical names are `{prefix}-{key}-{env}` and `{prefix}-{key}-{env}-dlq`.
  *
  * The `jobs` queue is load-bearing (the workers Lambda + EventBridge Scheduler in
  * the apps stack consume it). Keep its `key` stable. New queues need their own
  * consumer wiring in `infra/aws/apps/index.ts`.
  */
 export interface QueueSpec {
-  /** Logical + physical name key. Physical name: `starter-<key>-<stack>`. */
+  /** Logical key used in `{prefix}-{key}-{env}[-dlq]` physical names. */
   key: string;
   /** How long a received message is hidden from other consumers (default 60s). */
   visibilityTimeoutSeconds?: number;
@@ -51,26 +50,24 @@ export interface BuiltQueue {
  * dead-letter queue and a redrive policy. Returns a map keyed by `QueueSpec.key`.
  */
 export function buildQueues(opts: {
-  stack: string;
   tags: Record<string, string>;
+  queueName: (name: string, options?: { dlq?: boolean }) => string;
   specs?: readonly QueueSpec[];
 }): Record<string, BuiltQueue> {
-  const { stack, tags } = opts;
+  const { tags, queueName } = opts;
   const specs = opts.specs ?? QUEUES;
   const out: Record<string, BuiltQueue> = {};
 
   for (const spec of specs) {
     const dlq = new aws.sqs.Queue(`${spec.key}-dlq`, {
-      name: `starter-${spec.key}-dlq-${stack}`,
-      messageRetentionSeconds:
-        spec.dlqMessageRetentionSeconds ?? DEFAULT_DLQ_RETENTION,
+      name: queueName(spec.key, { dlq: true }),
+      messageRetentionSeconds: spec.dlqMessageRetentionSeconds ?? DEFAULT_DLQ_RETENTION,
       tags,
     });
 
     const queue = new aws.sqs.Queue(spec.key, {
-      name: `starter-${spec.key}-${stack}`,
-      visibilityTimeoutSeconds:
-        spec.visibilityTimeoutSeconds ?? DEFAULT_VISIBILITY,
+      name: queueName(spec.key),
+      visibilityTimeoutSeconds: spec.visibilityTimeoutSeconds ?? DEFAULT_VISIBILITY,
       messageRetentionSeconds: spec.messageRetentionSeconds ?? DEFAULT_RETENTION,
       redrivePolicy: pulumi.jsonStringify({
         deadLetterTargetArn: dlq.arn,

@@ -7,6 +7,8 @@ import type { AwsPoolerConfig } from "../../shared/aws-pooler-config";
 
 export interface PoolerStackArgs {
   namePrefix: string;
+  secretPathPrefix: string;
+  logGroupPrefix: string;
   region: string;
   accountId: pulumi.Input<string>;
   poolerConfig: AwsPoolerConfig;
@@ -49,6 +51,8 @@ export interface PoolerStackResult {
 export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
   const {
     namePrefix,
+    secretPathPrefix,
+    logGroupPrefix,
     region,
     accountId,
     poolerConfig,
@@ -76,6 +80,7 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
   // --- 1. TLS Foundation (certificate, validation, export, initial invocation) -----
   const tlsFoundation = buildPoolerTls({
     namePrefix,
+    secretPathPrefix,
     region,
     accountId,
     hostname: poolerConfig.hostname,
@@ -90,6 +95,7 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
   // --- 2. PgBouncer ECS service (depends on initial TLS export) --------------------
   const pgbouncer = buildPgBouncer({
     namePrefix,
+    logGroupPrefix,
     region,
     vpcId,
     publicSubnetIds,
@@ -151,7 +157,7 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
     });
 
   const vercelDbUrlSecret = new aws.secretsmanager.Secret("vercel-database-url", {
-    name: `/starter/${pulumi.getStack()}/vercel-database-url`,
+    name: `${secretPathPrefix}/vercel-database-url`,
     recoveryWindowInDays: isProduction ? 7 : 0,
     kmsKeyId: cmekKeyArn,
     tags,

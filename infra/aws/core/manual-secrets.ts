@@ -6,11 +6,11 @@ import * as aws from "@pulumi/aws";
  *
  * Some secrets can't be derived by Pulumi (third-party API keys, webhook signing
  * secrets, etc.). List them here and Pulumi will create an **empty placeholder**
- * Secrets Manager entry named `/starter/<stack>/<name>`. You then set the real
+ * Secrets Manager entry named `/<environment>/<name>`. You then set the real
  * value once in the AWS console/CLI after `pulumi up`:
  *
  *   aws secretsmanager put-secret-value \
- *     --secret-id /starter/sandbox/stripe-secret-key --secret-string 'sk_live_…'
+ *     --secret-id /sandbox/stripe-secret-key --secret-string 'sk_live_…'
  *
  * `ignoreChanges: ["secretString"]` on the placeholder version means Pulumi never
  * overwrites the value you set — so **real secret values never live in git**, and
@@ -20,7 +20,7 @@ import * as aws from "@pulumi/aws";
  * which Pulumi derives and populates automatically in `core/index.ts`.
  */
 export interface ManualSecretSpec {
-  /** Suffix of the secret name: `/starter/<stack>/<name>`. */
+  /** Suffix of the secret name: `/<environment>/<name>`. */
   name: string;
   /** Human-readable description shown in the console. */
   description: string;
@@ -42,18 +42,18 @@ export interface BuiltManualSecret {
  * {@link MANUAL_SECRETS}). Returns the created secret names + ARNs.
  */
 export function buildManualSecrets(opts: {
-  stack: string;
+  secretPathPrefix: string;
   isProduction: boolean;
   cmekKeyId?: pulumi.Output<string>;
   tags: Record<string, string>;
   specs?: readonly ManualSecretSpec[];
 }): BuiltManualSecret[] {
-  const { stack, isProduction, cmekKeyId, tags } = opts;
+  const { secretPathPrefix, isProduction, cmekKeyId, tags } = opts;
   const specs = opts.specs ?? MANUAL_SECRETS;
 
   return specs.map((spec) => {
     const secret = new aws.secretsmanager.Secret(`manual-${spec.name}`, {
-      name: `/starter/${stack}/${spec.name}`,
+      name: `${secretPathPrefix}/${spec.name}`,
       description: spec.description,
       // Non-prod: 0 = delete immediately so the name can be re-created on the
       // next deploy. Prod: 7-day recovery window.

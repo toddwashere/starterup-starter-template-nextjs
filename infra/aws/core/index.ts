@@ -6,6 +6,11 @@ import { config as sandboxConfig } from "../config.sandbox";
 import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
 import { resolveCompliance } from "../../shared/compliance";
+import {
+  deploymentNames,
+  resolveDeploymentIdentity,
+  type AwsEnvironment,
+} from "../naming";
 import { buildComplianceResources } from "./compliance-resources";
 import { buildVercelAccess } from "./vercel-access";
 import { buildPoolerStack } from "./pooler-stack";
@@ -31,8 +36,10 @@ const cfg = CONFIGS[env] ?? sandboxConfig;
 // env config's region so both stay in sync.
 const region = new pulumi.Config("aws").get("region") ?? cfg.aws.region;
 
-const namePrefix = `starter-${stack}`;
-const baseTags = { Project: "starter", Stack: stack, ManagedBy: "pulumi" };
+const identity = resolveDeploymentIdentity(process.env);
+const names = deploymentNames(identity, stack as AwsEnvironment);
+const namePrefix = names.globalPrefix;
+const baseTags = { ...names.tags, Layer: "core" };
 
 // Production must never lose persisted data: keep RDS deletion protection, a
 // final snapshot, Pulumi resource protection, and Secrets Manager recovery
@@ -244,7 +251,7 @@ const db = new aws.rds.Instance(
 // --- RDS Proxy (pooled endpoint) --------------------------------------------
 // Auth secret in the {username,password} shape RDS Proxy expects.
 const proxyAuthSecret = new aws.secretsmanager.Secret("rds-proxy-auth", {
-  name: `/starter/${stack}/rds-proxy-auth`,
+  name: `${names.secretPathPrefix}/rds-proxy-auth`,
   // Non-prod: 0 = force delete without a recovery window so the same secret
   // name can be re-created immediately on the next deploy. Prod: 7-day recovery.
   recoveryWindowInDays: isProduction ? 7 : 0,
@@ -325,7 +332,7 @@ new aws.rds.ProxyTarget("db-proxy-target", {
 // --- SQS (registry: each queue gets an automatic DLQ) -----------------------
 // Add queues in `core/queues.ts`; every entry gets a matching DLQ + redrive.
 // `jobs` is load-bearing (consumed by the workers Lambda / scheduler in apps).
-const queues = buildQueues({ stack, tags: baseTags });
+const queues = buildQueues({ tags: baseTags, queueName: names.queueName });
 const jobsQueue = queues.jobs.queue;
 const dlq = queues.jobs.dlq;
 
@@ -373,7 +380,7 @@ const pooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@$
 const directUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${db.endpoint}/starter?sslmode=require`;
 
 const dbUrlSecret = new aws.secretsmanager.Secret("database-url", {
-  name: `/starter/${stack}/database-url`,
+  name: `${names.secretPathPrefix}/database-url`,
   recoveryWindowInDays: isProduction ? 7 : 0,
   kmsKeyId: cmekKeyId,
 });
@@ -383,7 +390,7 @@ new aws.secretsmanager.SecretVersion("database-url-v1", {
 });
 
 const directUrlSecret = new aws.secretsmanager.Secret("direct-url", {
-  name: `/starter/${stack}/direct-url`,
+  name: `${names.secretPathPrefix}/direct-url`,
   recoveryWindowInDays: isProduction ? 7 : 0,
   kmsKeyId: cmekKeyId,
 });
@@ -394,10 +401,10 @@ new aws.secretsmanager.SecretVersion("direct-url-v1", {
 
 // --- Manually-managed secrets (empty placeholders) --------------------------
 // Third-party API keys etc. that Pulumi can't derive. Each entry in
-// `core/manual-secrets.ts` becomes an empty `/starter/<stack>/<name>` secret you
+// `core/manual-secrets.ts` becomes an empty `/<env>/<name>` secret you
 // populate once in the console/CLI; Pulumi never stores or overwrites the value.
 const manualSecrets = buildManualSecrets({
-  stack,
+  secretPathPrefix: names.secretPathPrefix,
   isProduction,
   cmekKeyId,
   tags: baseTags,
@@ -437,6 +444,8 @@ if (cfg.database.pooler.enabled) {
 
   const poolerStack = buildPoolerStack({
     namePrefix,
+    secretPathPrefix: names.secretPathPrefix,
+    logGroupPrefix: names.logGroupPrefix,
     region,
     accountId,
     poolerConfig,
