@@ -17,7 +17,7 @@ import {
 
 const ENV = {
   AWS_STATE_ACCOUNT_ID: "444455556666",
-  AWS_STATE_PROFILE: "starter-state",
+  AWS_STATE_PROFILE: "platform-state",
   AWS_RESOURCE_PREFIX: "myapp-cross-account-state",
   AWS_SANDBOX_ACCOUNT_ID: "111122223333",
 };
@@ -33,9 +33,9 @@ describe("resolveStateBootstrapConfig", () => {
       environment: "sandbox",
       region: "us-east-2",
       stateAccountId: "444455556666",
-      stateProfile: "starter-state",
+      stateProfile: "platform-state",
       workloadAccountId: "111122223333",
-      workloadProfile: "starter-sandbox",
+      workloadProfile: "myapp-cross-account-state-sandbox",
       resourcePrefix: "myapp-cross-account-state",
     });
   });
@@ -71,11 +71,11 @@ describe("resolveStateBootstrapConfig", () => {
     },
   );
 
-  it("defaults the deployment identity to starter when unset", () => {
+  it("defaults the deployment identity to platform when unset", () => {
     const { AWS_RESOURCE_PREFIX: _prefix, ...withoutPrefix } = ENV;
-    expect(resolveStateBootstrapConfig(["init", "sandbox"], withoutPrefix).resourcePrefix).toBe(
-      "starter",
-    );
+    const resolved = resolveStateBootstrapConfig(["init", "sandbox"], withoutPrefix);
+    expect(resolved.resourcePrefix).toBe("platform");
+    expect(resolved.workloadProfile).toBe("platform-sandbox");
   });
 
   it("supports the legacy alias with a deprecation warning", () => {
@@ -104,7 +104,7 @@ describe("resolveStateBootstrapConfig", () => {
     expect(() =>
       resolveStateBootstrapConfig(["init", "sandbox"], {
         ...ENV,
-        AWS_RESOURCE_PREFIX: "int-health",
+        AWS_RESOURCE_PREFIX: "platform",
         AWS_STATE_RESOURCE_PREFIX: "other",
       }),
     ).toThrow(/must match/);
@@ -191,11 +191,11 @@ describe("cross-account principals and Pulumi URLs", () => {
   });
 
   it("derives the deterministic GitHub deploy role from the shared identity", () => {
-    expect(githubDeployRoleArn("111122223333", "sandbox", "starter")).toBe(
-      "arn:aws:iam::111122223333:role/starter-sandbox-github-deploy",
+    expect(githubDeployRoleArn("111122223333", "sandbox", "platform")).toBe(
+      "arn:aws:iam::111122223333:role/platform-sandbox-github-deploy",
     );
-    expect(githubDeployRoleArn("111122223333", "staging", "int-health")).toBe(
-      "arn:aws:iam::111122223333:role/int-health-staging-github-deploy",
+    expect(githubDeployRoleArn("111122223333", "staging", "platform")).toBe(
+      "arn:aws:iam::111122223333:role/platform-staging-github-deploy",
     );
   });
 
@@ -213,13 +213,13 @@ describe("cross-account principals and Pulumi URLs", () => {
   it("prints explicit layer commands without executing stack initialization", () => {
     const commands = nextCommands({
       environment: "sandbox",
-      workloadProfile: "starter-sandbox",
+      workloadProfile: "platform-sandbox",
       secretsProvider:
         "awskms:///arn:aws:kms:us-east-2:444455556666:key/1234?region=us-east-2&awssdk=v2",
     });
 
     expect(commands).toContain(
-      "AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox",
+      "AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap stack init sandbox",
     );
     expect(commands).toContain("pnpm infra:aws bootstrap preview -s sandbox");
     expect(commands).toContain("pnpm infra:aws core preview -s sandbox");

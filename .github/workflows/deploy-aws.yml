@@ -51,7 +51,7 @@ jobs:
     environment: sandbox-aws
     env:
       # Prefer canonical identity; keep legacy alias for migrating environments.
-      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'starter' }}
+      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'platform' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -204,7 +204,7 @@ jobs:
     timeout-minutes: 45
     environment: ${{ github.event_name == 'workflow_dispatch' && format('{0}-aws', inputs.stack) || 'production-aws' }}
     env:
-      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'starter' }}
+      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'platform' }}
     permissions:
       contents: read
       id-token: write

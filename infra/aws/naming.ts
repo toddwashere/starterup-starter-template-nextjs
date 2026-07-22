@@ -17,7 +17,7 @@ export interface DeploymentNames {
 
 const PREFIX_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const MAX_PREFIX_LENGTH = 29;
-const DEFAULT_IDENTITY = "starter";
+const DEFAULT_IDENTITY = "platform";
 
 function trimEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

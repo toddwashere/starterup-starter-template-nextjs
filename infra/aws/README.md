@@ -133,8 +133,8 @@ Both are driven by small registries in `core/` so you add capacity without
 hand-wiring resources (details + examples in [`GETTING_STARTED.md`](./GETTING_STARTED.md)):
 
 - **SQS queues** — append a `QueueSpec` to `core/queues.ts`; each entry gets a
-  dead-letter queue + redrive policy automatically. Names: `starter-<key>-<env>`
-  and `starter-<key>-dlq-<env>`. New queues need a consumer wired in the apps
+  dead-letter queue + redrive policy automatically. Names: `platform-<key>-<env>`
+  and `platform-<key>-dlq-<env>`. New queues need a consumer wired in the apps
   stack. The `jobs` queue is load-bearing — keep its key stable.
 - **Catalog app secrets** — add an entry to `SECRET_CATALOG` in
   `infra/shared/secret-catalog.ts` for third-party keys Pulumi can't derive.
@@ -215,7 +215,7 @@ listed individually in `/32` notation. A changed residential IP requires editing
 `AWS_POOLER_DEVELOPER_CIDRS` in `infra/.env.local` and rerunning:
 
 ```bash
-AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws core up -s sandbox
 ```
 
 Each CIDR must be a canonical `/32` (a single IP address). The deployment
@@ -274,24 +274,24 @@ Run these commands to verify certificate and pooler health:
 
 ```bash
 # ACM certificate status
-aws acm list-certificates --profile starter-<env> --region us-east-2
+aws acm list-certificates --profile platform-<env> --region us-east-2
 aws acm describe-certificate --certificate-arn <cert-arn> \
-  --profile starter-<env> --region us-east-2
+  --profile platform-<env> --region us-east-2
 
 # Lambda function errors (TLS exporter)
-aws logs tail /aws/lambda/starter-<env>-pooler-tls-exporter --follow \
-  --profile starter-<env> --region us-east-2
+aws logs tail /aws/lambda/platform-<env>-pooler-tls-exporter --follow \
+  --profile platform-<env> --region us-east-2
 
 # PgBouncer and TLS materializer container logs
 aws logs tail /<env>/pgbouncer --follow \
-  --profile starter-<env> --region us-east-2
+  --profile platform-<env> --region us-east-2
 
 # CloudWatch alarms (certificate expiration, Lambda errors)
-aws cloudwatch describe-alarms --profile starter-<env> --region us-east-2
+aws cloudwatch describe-alarms --profile platform-<env> --region us-east-2
 
 # Current ECS deployment (PgBouncer Fargate service)
 aws ecs describe-services --cluster <cluster-name> \
-  --services <service-name> --profile starter-<env> --region us-east-2
+  --services <service-name> --profile platform-<env> --region us-east-2
 
 # Certificate expiration date
 openssl s_client -starttls postgres \
@@ -411,21 +411,21 @@ pnpm infra:aws:state init sandbox
 pnpm --dir infra/aws install
 
 # 1. Bootstrap (once per account, admin creds) — ECR repo, OIDC deploy role, budget
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap stack init sandbox \
   --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set \
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set \
   starter-aws-bootstrap:githubRepo <owner>/<repo>
 
 # 2. Core
-AWS_PROFILE=starter-sandbox pnpm infra:aws core stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws core stack init sandbox \
   --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pnpm infra:aws core config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws core config set aws:region us-east-2
 
 # 3. Apps
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps stack init sandbox \
   --secrets-provider="<printed awskms URL>"
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps config set aws:region us-east-2
 # coreStackRef is derived from PULUMI_ORG and imageRegistry from the deploy
 # account + region (infra/.env.local) — no per-stack config needed for those.
 ```
@@ -447,13 +447,13 @@ decides the account** (see [`GETTING_STARTED.md`](./GETTING_STARTED.md)).
 pnpm --dir infra/aws install
 
 # 0. Bootstrap (once per account): ECR repo, OIDC deploy role, budget
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap up -s sandbox
 
 # 1. Core infrastructure (VPC, RDS, Proxy, SQS, S3, Secrets Manager)
-AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws core up -s sandbox
 
 # 2. App services (App Runner, Lambda — reads outputs from core)
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps up -s sandbox
 ```
 
 ---
@@ -489,8 +489,8 @@ Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate ste
 | ---------------------- | ------------------------------------------------------ |
 | `AWS_ACCOUNT_ID`       | Selected workload environment's 12-digit ID            |
 | `AWS_REGION`           | `us-east-2`                                            |
-| `AWS_ECR_REGISTRY`     | `123456789012.dkr.ecr.us-east-2.amazonaws.com/starter` |
-| `AWS_RESOURCE_PREFIX`  | Deployment identity (defaults to `starter` if unset)   |
+| `AWS_ECR_REGISTRY`     | `123456789012.dkr.ecr.us-east-2.amazonaws.com/platform` |
+| `AWS_RESOURCE_PREFIX`  | Deployment identity (defaults to `platform` if unset)   |
 | `AWS_STATE_ACCOUNT_ID` | Dedicated state account's 12-digit ID                  |
 | `AWS_STATE_REGION`     | `us-east-2`                                            |
 

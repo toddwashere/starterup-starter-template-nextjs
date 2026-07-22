@@ -151,7 +151,7 @@ describe("buildCatalogPlaceholderSecrets configured identity", () => {
     installMocks();
     const mod = await import("./manual-secrets.js");
     const names = deploymentNames(
-      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" }),
+      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "platform" }),
       "staging",
     );
     mod.buildCatalogPlaceholderSecrets({
@@ -167,6 +167,6 @@ describe("buildCatalogPlaceholderSecrets configured identity", () => {
       (r) => r.type === SECRET_TYPE && r.inputs.name === "/staging/stripe-secret-key",
     );
     expect(secret?.inputs.name).toBe("/staging/stripe-secret-key");
-    expect(secret?.inputs.tags).toMatchObject({ Project: "int-health" });
+    expect(secret?.inputs.tags).toMatchObject({ Project: "platform" });
   });
 });

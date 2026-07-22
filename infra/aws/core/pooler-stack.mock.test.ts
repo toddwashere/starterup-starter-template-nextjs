@@ -53,7 +53,7 @@ function installMocks() {
             id: `${args.name}-id`,
             state: {
               ...baseState,
-              dnsName: "starter-sandbox-pgbouncer-nlb.us-east-2.elb.amazonaws.com",
+              dnsName: "platform-sandbox-pgbouncer-nlb.us-east-2.elb.amazonaws.com",
               zoneId: "Z26RNL4JYFTOTI",
             },
           };
@@ -64,7 +64,7 @@ function installMocks() {
             id: `${args.name}-id`,
             state: {
               ...baseState,
-              name: "starter-sandbox-pgbouncer",
+              name: "platform-sandbox-pgbouncer",
             },
           };
         }
@@ -74,7 +74,7 @@ function installMocks() {
             id: `${args.name}-id`,
             state: {
               ...baseState,
-              name: "starter-sandbox-pgbouncer",
+              name: "platform-sandbox-pgbouncer",
             },
           };
         }
@@ -95,7 +95,7 @@ function installMocks() {
         // Mock aws.sns.getTopic
         if (args.token === "aws:sns/getTopic:getTopic") {
           return {
-            arn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+            arn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts",
           };
         }
         return args.inputs;
@@ -136,7 +136,7 @@ describe("buildPoolerStack integration", () => {
     });
 
     mod.buildPoolerStack({
-      namePrefix: "starter-sandbox",
+      namePrefix: "platform-sandbox",
       secretPathPrefix: "/sandbox",
       logGroupPrefix: "/sandbox",
       region: "us-east-2",
@@ -166,9 +166,9 @@ describe("buildPoolerStack integration", () => {
         primaryNameServer: "ns-1.awsdns-00.com",
       },
       alertTopic: {
-        arn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
-        name: "starter-sandbox-infra-alerts",
-        id: "starter-sandbox-infra-alerts",
+        arn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts",
+        name: "platform-sandbox-infra-alerts",
+        id: "platform-sandbox-infra-alerts",
         region: "us-east-2",
         tags: {},
       },
@@ -176,7 +176,7 @@ describe("buildPoolerStack integration", () => {
       publicSubnetIds: ["subnet-pub-1", "subnet-pub-2"],
       privateSubnetIds: ["subnet-priv-1", "subnet-priv-2"],
       dbSecurityGroupId: "sg-db",
-      dbHost: "starter-sandbox-db.region.rds.amazonaws.com",
+      dbHost: "platform-sandbox-db.region.rds.amazonaws.com",
       dbName: "app_db",
       dbUsername: "app_db_user",
       dbPassword: dbPassword.result,
@@ -201,7 +201,7 @@ describe("buildPoolerStack integration", () => {
 
     const aliases = aliasRecord?.inputs.aliases as Array<Record<string, unknown>>;
     expect(aliases).toHaveLength(1);
-    expect(aliases[0].name).toBe("starter-sandbox-pgbouncer-nlb.us-east-2.elb.amazonaws.com");
+    expect(aliases[0].name).toBe("platform-sandbox-pgbouncer-nlb.us-east-2.elb.amazonaws.com");
     expect(aliases[0].zoneId).toBe("Z26RNL4JYFTOTI");
     expect(aliases[0].evaluateTargetHealth).toBe(true);
   });
@@ -220,7 +220,7 @@ describe("buildPoolerStack integration", () => {
     expect(alarms.some((alarm) => alarm.inputs.namespace === "AWS/Lambda")).toBe(true);
 
     const service = services[0];
-    expect(service.inputs.name).toBe("starter-sandbox-pgbouncer");
+    expect(service.inputs.name).toBe("platform-sandbox-pgbouncer");
 
     const initialInvocation = invocations.find((inv) =>
       (inv.inputs.input as string)?.includes("initial"),
@@ -229,8 +229,8 @@ describe("buildPoolerStack integration", () => {
 
     const input = JSON.parse(initialInvocation!.inputs.input as string);
     expect(input.mode).toBe("initial");
-    expect(input.clusterName).toBe("starter-sandbox-pgbouncer");
-    expect(input.serviceName).toBe("starter-sandbox-pgbouncer");
+    expect(input.clusterName).toBe("platform-sandbox-pgbouncer");
+    expect(input.serviceName).toBe("platform-sandbox-pgbouncer");
   });
 
   it("composes TLS renewal wiring with the real ECS service", () => {
@@ -245,7 +245,7 @@ describe("buildPoolerStack integration", () => {
     expect(renewalRules.length, "EventBridge renewal rule must be created").toBeGreaterThan(0);
 
     const service = services[0];
-    expect(service.inputs.name).toBe("starter-sandbox-pgbouncer");
+    expect(service.inputs.name).toBe("platform-sandbox-pgbouncer");
 
     const renewalRule = renewalRules[0];
     const pattern = JSON.parse(renewalRule.inputs.eventPattern as string);

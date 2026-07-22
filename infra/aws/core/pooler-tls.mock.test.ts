@@ -68,15 +68,15 @@ async function build() {
   installMocks();
   const mod = await import("./pooler-tls.js");
   const result = mod.buildPoolerTls({
-    namePrefix: "starter-sandbox",
+    namePrefix: "platform-sandbox",
     secretPathPrefix: "/sandbox",
     region: "us-east-2",
     accountId: "123456789012",
     hostname: "db.sandbox.aws.example.com",
     hostedZoneId: "ZDELEGATED",
-    alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-    clusterName: "starter-sandbox-pgbouncer",
-    serviceName: "starter-sandbox-pgbouncer",
+    alertTopicArn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
+    clusterName: "platform-sandbox-pgbouncer",
+    serviceName: "platform-sandbox-pgbouncer",
     isProduction: false,
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 200));
@@ -228,7 +228,7 @@ describe("buildPoolerTls", () => {
     const ecsResources = Array.isArray(ecsStatement!.Resource)
       ? ecsStatement!.Resource
       : [ecsStatement!.Resource];
-    expect(ecsResources.some((r: string) => r.includes("starter-sandbox-pgbouncer"))).toBe(true);
+    expect(ecsResources.some((r: string) => r.includes("platform-sandbox-pgbouncer"))).toBe(true);
     expect(ecsResources).not.toContain("*");
 
     const functions = recorded.filter((r) => r.type === TYPES.lambdaFunction);
@@ -251,8 +251,8 @@ describe("buildPoolerTls", () => {
     expect(input.mode).toBe("initial");
     expect(input.certificateArn).toBeDefined();
     expect(input.secretId).toBeDefined();
-    expect(input.clusterName).toBe("starter-sandbox-pgbouncer");
-    expect(input.serviceName).toBe("starter-sandbox-pgbouncer");
+    expect(input.clusterName).toBe("platform-sandbox-pgbouncer");
+    expect(input.serviceName).toBe("platform-sandbox-pgbouncer");
   });
 
   it("creates a CloudWatch alarm for Lambda errors", () => {
@@ -264,10 +264,10 @@ describe("buildPoolerTls", () => {
     );
     expect(lambdaAlarm).toBeDefined();
     expect(lambdaAlarm?.inputs.alarmActions).toEqual([
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
+      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
     ]);
     expect(lambdaAlarm?.inputs.okActions).toEqual([
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
+      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
     ]);
   });
 
@@ -289,15 +289,15 @@ describe("buildPoolerTlsRenewal", () => {
 
     // Build the TLS resources first
     const tlsResult = mod.buildPoolerTls({
-      namePrefix: "starter-sandbox",
+      namePrefix: "platform-sandbox",
       secretPathPrefix: "/sandbox",
       region: "us-east-2",
       accountId: "123456789012",
       hostname: "db.sandbox.aws.example.com",
       hostedZoneId: "ZDELEGATED",
-      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-      clusterName: "starter-sandbox-pgbouncer",
-      serviceName: "starter-sandbox-pgbouncer",
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
+      clusterName: "platform-sandbox-pgbouncer",
+      serviceName: "platform-sandbox-pgbouncer",
       isProduction: false,
     });
 
@@ -314,9 +314,9 @@ describe("buildPoolerTlsRenewal", () => {
       certificateArn: tlsResult.certificateArn,
       tlsSecretId: tlsResult.tlsSecretId,
       exporterFunction: tlsResult.exporterFunction,
-      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-      clusterName: "starter-sandbox-pgbouncer",
-      serviceName: "starter-sandbox-pgbouncer",
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
+      clusterName: "platform-sandbox-pgbouncer",
+      serviceName: "platform-sandbox-pgbouncer",
       service: mockService,
     });
 
@@ -341,7 +341,7 @@ describe("buildPoolerTlsRenewal", () => {
     const permissions = recorded.filter((r) => r.type === TYPES.lambdaPermission);
     expect(permissions).toHaveLength(1);
     expect(permissions[0].inputs.sourceArn).toBe(
-      "arn:aws:events:us-east-2:123456789012:rule/starter-sandbox-pooler-tls-exporter-renewal",
+      "arn:aws:events:us-east-2:123456789012:rule/platform-sandbox-pooler-tls-exporter-renewal",
     );
   }, 10000); // Increase timeout
 
@@ -364,15 +364,15 @@ describe("buildPoolerTlsRenewal", () => {
 
     // Build TLS foundation
     const tlsResult = mod.buildPoolerTls({
-      namePrefix: "starter-sandbox",
+      namePrefix: "platform-sandbox",
       secretPathPrefix: "/sandbox",
       region: "us-east-2",
       accountId: "123456789012",
       hostname: "db.sandbox.aws.example.com",
       hostedZoneId: "ZDELEGATED",
-      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-      clusterName: "starter-sandbox-pgbouncer",
-      serviceName: "starter-sandbox-pgbouncer",
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
+      clusterName: "platform-sandbox-pgbouncer",
+      serviceName: "platform-sandbox-pgbouncer",
       isProduction: false,
     });
 
@@ -389,9 +389,9 @@ describe("buildPoolerTlsRenewal", () => {
       certificateArn: tlsResult.certificateArn,
       tlsSecretId: tlsResult.tlsSecretId,
       exporterFunction: tlsResult.exporterFunction,
-      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:starter-sandbox-alerts",
-      clusterName: "starter-sandbox-pgbouncer",
-      serviceName: "starter-sandbox-pgbouncer",
+      alertTopicArn: "arn:aws:sns:us-east-2:123456789012:platform-sandbox-alerts",
+      clusterName: "platform-sandbox-pgbouncer",
+      serviceName: "platform-sandbox-pgbouncer",
       service: sentinelService,
     });
 

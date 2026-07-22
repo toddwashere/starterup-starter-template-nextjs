@@ -70,7 +70,7 @@ apps stack (starter-aws-apps)
 
 Derived secrets that stay as they are (not from the app-secret builder): `database-url`, `direct-url`, `rds-proxy-auth`, and when the pooler is enabled `pooler-tls` / `vercel-database-url`.
 
-Identity / naming (unchanged): secret paths are `/<environment>/<id>` via `deploymentNames(...).secretPathPrefix` (not prefixed with project name). Resource tags use `AWS_RESOURCE_PREFIX` / default `starter`.
+Identity / naming (unchanged): secret paths are `/<environment>/<id>` via `deploymentNames(...).secretPathPrefix` (not prefixed with project name). Resource tags use `AWS_RESOURCE_PREFIX` / default `platform`.
 
 ---
 

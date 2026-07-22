@@ -17,7 +17,7 @@ import { resolveEnvApexDomain } from "../../shared/public-urls";
 // (sandbox/staging/production) while authenticated to that environment's
 // account:
 //
-//   AWS_PROFILE=starter-sandbox pulumi up -s sandbox
+//   AWS_PROFILE=platform-sandbox pulumi up -s sandbox
 //
 // It codifies the three things core/apps assume already exist:
 //   1. Per-app ECR repositories under the deployment-identity namespace.

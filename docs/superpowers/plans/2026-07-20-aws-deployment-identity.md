@@ -43,12 +43,12 @@
 
 ## Critical Tests
 
-- `infra/aws/naming.test.ts`: default behavior is `starter`; configured `int-health` produces canonical global names and `{prefix}-{queue}-{env}[-dlq]` queue names; invalid or conflicting settings throw; legacy-only settings return a warning.
+- `infra/aws/naming.test.ts`: default behavior is `starter`; configured `platform` produces canonical global names and `{prefix}-{queue}-{env}[-dlq]` queue names; invalid or conflicting settings throw; legacy-only settings return a warning.
 - `infra/aws/scripts/state-orchestration.test.ts`: state bucket, audit bucket, stack name, and GitHub deployment-role ARN derive the same identity.
-- `infra/aws/bootstrap/bootstrap.mock.test.ts`: configured identity produces `int-health/dashboard` ECR repositories, identity-bearing public/cross-account resources, and matching IAM ARNs; default identity still resolves to `starter` names.
-- `infra/aws/core/queues.mock.test.ts`: configured identity yields `int-health-jobs-staging` and `int-health-jobs-staging-dlq` with `Project=int-health` tags.
+- `infra/aws/bootstrap/bootstrap.mock.test.ts`: configured identity produces `platform/dashboard` ECR repositories, identity-bearing public/cross-account resources, and matching IAM ARNs; default identity still resolves to `starter` names.
+- `infra/aws/core/queues.mock.test.ts`: configured identity yields `platform-jobs-staging` and `platform-jobs-staging-dlq` with `Project=platform` tags.
 - `infra/aws/core/manual-secrets.mock.test.ts`: secret path remains `/staging/stripe-secret-key` while Project tags use the configured identity.
-- `infra/aws/apps/apps.mock.test.ts`: configured identity produces `123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health` and tags every app resource with `Project=int-health`.
+- `infra/aws/apps/apps.mock.test.ts`: configured identity produces `123456789012.dkr.ecr.us-east-2.amazonaws.com/platform` and tags every app resource with `Project=platform`.
 
 ## Task 1: Add the canonical naming API
 
@@ -72,22 +72,22 @@ describe("resolveDeploymentIdentity", () => {
   });
 
   it("uses AWS_RESOURCE_PREFIX for global identity and prefixed queue names", () => {
-    const identity = resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" });
+    const identity = resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "platform" });
     const names = deploymentNames(identity, "staging");
-    expect(names.ecrNamespace).toBe("int-health");
-    expect(names.globalPrefix).toBe("int-health-staging");
+    expect(names.ecrNamespace).toBe("platform");
+    expect(names.globalPrefix).toBe("platform-staging");
     expect(names.secretPathPrefix).toBe("/staging");
-    expect(names.queueName("jobs")).toBe("int-health-jobs-staging");
-    expect(names.queueName("jobs", { dlq: true })).toBe("int-health-jobs-staging-dlq");
+    expect(names.queueName("jobs")).toBe("platform-jobs-staging");
+    expect(names.queueName("jobs", { dlq: true })).toBe("platform-jobs-staging-dlq");
   });
 
   it("warns for the legacy alias and rejects a conflict", () => {
     const warn = vi.fn();
-    expect(resolveDeploymentIdentity({ AWS_STATE_RESOURCE_PREFIX: "int-health" }, warn).value)
-      .toBe("int-health");
+    expect(resolveDeploymentIdentity({ AWS_STATE_RESOURCE_PREFIX: "platform" }, warn).value)
+      .toBe("platform");
     expect(warn).toHaveBeenCalledOnce();
     expect(() => resolveDeploymentIdentity({
-      AWS_RESOURCE_PREFIX: "int-health",
+      AWS_RESOURCE_PREFIX: "platform",
       AWS_STATE_RESOURCE_PREFIX: "other",
     })).toThrow("must match");
   });
@@ -159,23 +159,23 @@ git commit -m "feat(infra): add AWS deployment identity"
 
 **Interfaces:**
 - Consumes: `resolveDeploymentIdentity(process.env)` and `deploymentNames(identity, stack)`.
-- Produces: ECR paths such as `int-health/dashboard`, matching cross-account `deployRoleName`, and state names using the same identity.
+- Produces: ECR paths such as `platform/dashboard`, matching cross-account `deployRoleName`, and state names using the same identity.
 
 - [ ] **Step 1: Add failing configured-identity tests**
 
-Add a bootstrap mock case with `AWS_RESOURCE_PREFIX: "int-health"` and assert:
+Add a bootstrap mock case with `AWS_RESOURCE_PREFIX: "platform"` and assert:
 
 ```ts
-expect(repositoryNames).toContain("int-health/dashboard");
+expect(repositoryNames).toContain("platform/dashboard");
 expect(policy).toContain("arn:aws:secretsmanager:us-east-2:*:secret:/staging/*");
-expect(deployRole.inputs.name).toBe("int-health-sandbox-github-deploy");
+expect(deployRole.inputs.name).toBe("platform-sandbox-github-deploy");
 ```
 
 Add a state orchestration assertion:
 
 ```ts
-expect(githubDeployRoleArn("111122223333", "staging", "int-health"))
-  .toBe("arn:aws:iam::111122223333:role/int-health-staging-github-deploy");
+expect(githubDeployRoleArn("111122223333", "staging", "platform"))
+  .toBe("arn:aws:iam::111122223333:role/platform-staging-github-deploy");
 ```
 
 - [ ] **Step 2: Run the focused tests to verify they fail**
@@ -235,15 +235,15 @@ git commit -m "feat(infra): apply deployment identity to AWS bootstrap"
 
 - [ ] **Step 1: Write failing core/app identity tests**
 
-Add `int-health` fixture assertions:
+Add `platform` fixture assertions:
 
 ```ts
-expect(queue.inputs.name).toBe("int-health-jobs-staging");
-expect(dlq.inputs.name).toBe("int-health-jobs-staging-dlq");
-expect(queue.inputs.tags).toMatchObject({ Project: "int-health", Environment: "staging" });
+expect(queue.inputs.name).toBe("platform-jobs-staging");
+expect(dlq.inputs.name).toBe("platform-jobs-staging-dlq");
+expect(queue.inputs.tags).toMatchObject({ Project: "platform", Environment: "staging" });
 expect(secret.inputs.name).toBe("/staging/stripe-secret-key");
-expect(secret.inputs.tags).toMatchObject({ Project: "int-health" });
-expect(imageRegistry).toBe("123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health");
+expect(secret.inputs.tags).toMatchObject({ Project: "platform" });
+expect(imageRegistry).toBe("123456789012.dkr.ecr.us-east-2.amazonaws.com/platform");
 ```
 
 Use Pulumi mocks in `apps.mock.test.ts` to import `apps/index.ts`, record

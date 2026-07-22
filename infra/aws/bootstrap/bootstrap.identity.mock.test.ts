@@ -12,7 +12,7 @@ const recorded: RecordedResource[] = [];
 describe("aws bootstrap configured identity (mocked)", () => {
   beforeAll(async () => {
     vi.resetModules();
-    vi.stubEnv("AWS_RESOURCE_PREFIX", "int-health");
+    vi.stubEnv("AWS_RESOURCE_PREFIX", "platform");
     vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
     vi.stubEnv("AWS_DNS_ROOT_DOMAIN", "example.com");
     vi.stubEnv("AWS_POOLER_APP_EGRESS_CIDRS", "");
@@ -78,15 +78,15 @@ describe("aws bootstrap configured identity (mocked)", () => {
     const repositoryNames = recorded
       .filter((r) => r.type === "aws:ecr/repository:Repository")
       .map((r) => r.inputs.name as string);
-    expect(repositoryNames).toContain("int-health/dashboard");
-    expect(repositoryNames).toContain("int-health/www");
+    expect(repositoryNames).toContain("platform/dashboard");
+    expect(repositoryNames).toContain("platform/www");
   });
 
   it("names the deploy role and scopes secrets to the environment path", async () => {
     const deployRole = recorded.find(
       (r) => r.type === "aws:iam/role:Role" && r.name === "github-deploy",
     );
-    expect(deployRole?.inputs.name).toBe("int-health-sandbox-github-deploy");
+    expect(deployRole?.inputs.name).toBe("platform-sandbox-github-deploy");
 
     const policies = recorded.filter((r) => r.type === "aws:iam/rolePolicy:RolePolicy");
     const deployPolicy = policies.find((p) => p.name === "github-deploy-access");
@@ -95,13 +95,13 @@ describe("aws bootstrap configured identity (mocked)", () => {
     );
     expect(policy).toContain("arn:aws:secretsmanager:us-east-2:*:secret:/sandbox/*");
     expect(policy).toContain("arn:aws:logs:us-east-2:*:log-group:/sandbox/*");
-    expect(policy).toContain("int-health-sandbox-pooler-*");
+    expect(policy).toContain("platform-sandbox-pooler-*");
   });
 
   it("tags bootstrap resources with the configured Project identity", () => {
     const repos = recorded.filter((r) => r.type === "aws:ecr/repository:Repository");
     expect(repos[0]?.inputs.tags).toMatchObject({
-      Project: "int-health",
+      Project: "platform",
       Environment: "sandbox",
       ManagedBy: "pulumi",
       Layer: "bootstrap",

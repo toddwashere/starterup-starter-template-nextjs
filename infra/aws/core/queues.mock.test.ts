@@ -63,14 +63,14 @@ describe("buildQueues", () => {
     // 2 specs => 2 main queues + 2 DLQs.
     expect(queues).toHaveLength(4);
     const names = queues.map((q) => q.inputs.name);
-    expect(names).toContain("starter-jobs-sandbox");
-    expect(names).toContain("starter-jobs-sandbox-dlq");
-    expect(names).toContain("starter-emails-sandbox");
-    expect(names).toContain("starter-emails-sandbox-dlq");
+    expect(names).toContain("platform-jobs-sandbox");
+    expect(names).toContain("platform-jobs-sandbox-dlq");
+    expect(names).toContain("platform-emails-sandbox");
+    expect(names).toContain("platform-emails-sandbox-dlq");
   });
 
   it("wires a redrive policy from the main queue to its DLQ", () => {
-    const jobs = recorded.find((r) => r.inputs.name === "starter-jobs-sandbox");
+    const jobs = recorded.find((r) => r.inputs.name === "platform-jobs-sandbox");
     expect(jobs).toBeDefined();
     const redrive = JSON.parse(jobs!.inputs.redrivePolicy as string) as {
       deadLetterTargetArn: string;
@@ -81,7 +81,7 @@ describe("buildQueues", () => {
   });
 
   it("applies sensible defaults when a spec omits them", () => {
-    const emails = recorded.find((r) => r.inputs.name === "starter-emails-sandbox");
+    const emails = recorded.find((r) => r.inputs.name === "platform-emails-sandbox");
     expect(emails!.inputs.visibilityTimeoutSeconds).toBe(60);
     const redrive = JSON.parse(emails!.inputs.redrivePolicy as string) as {
       maxReceiveCount: number;
@@ -101,7 +101,7 @@ describe("buildQueues configured identity", () => {
     installMocks();
     const mod = await import("./queues.js");
     const names = deploymentNames(
-      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" }),
+      resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "platform" }),
       "staging",
     );
     mod.buildQueues({
@@ -113,12 +113,12 @@ describe("buildQueues configured identity", () => {
   }, 10000);
 
   it("uses {prefix}-{queue}-{env}[-dlq] and project tags", () => {
-    const queue = recorded.find((r) => r.inputs.name === "int-health-jobs-staging");
-    const dlq = recorded.find((r) => r.inputs.name === "int-health-jobs-staging-dlq");
+    const queue = recorded.find((r) => r.inputs.name === "platform-jobs-staging");
+    const dlq = recorded.find((r) => r.inputs.name === "platform-jobs-staging-dlq");
     expect(queue).toBeDefined();
     expect(dlq).toBeDefined();
     expect(queue!.inputs.tags).toMatchObject({
-      Project: "int-health",
+      Project: "platform",
       Environment: "staging",
     });
   });

@@ -19,9 +19,9 @@ describe("executeStateBootstrap", () => {
         const command = args.join(" ");
         if (command.startsWith("sts get-caller-identity")) {
           return JSON.stringify({
-            Account: profile === "starter-state" ? "444455556666" : "111122223333",
+            Account: profile === "platform-state" ? "444455556666" : "111122223333",
             Arn:
-              profile === "starter-state"
+              profile === "platform-state"
                 ? "arn:aws:sts::444455556666:assumed-role/AdministratorAccess/state-operator"
                 : "arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_AdministratorAccess_example/operator",
             UserId: "example",
@@ -48,7 +48,7 @@ describe("executeStateBootstrap", () => {
     };
     const config = resolveStateBootstrapConfig(["init", "sandbox"], {
       AWS_STATE_ACCOUNT_ID: "444455556666",
-      AWS_STATE_PROFILE: "starter-state",
+      AWS_STATE_PROFILE: "platform-state",
       AWS_RESOURCE_PREFIX: "myapp-cross-account-state",
       AWS_SANDBOX_ACCOUNT_ID: "111122223333",
     });
@@ -67,7 +67,7 @@ describe("executeStateBootstrap", () => {
     expect(commands[0]).toContain("sts get-caller-identity");
     expect(commands[1]).toContain("sts get-caller-identity");
     expect(deployIndex).toBeGreaterThan(1);
-    expect(calls[deployIndex].profile).toBe("starter-state");
+    expect(calls[deployIndex].profile).toBe("platform-state");
     expect(commands).toEqual(
       expect.arrayContaining([
         expect.stringContaining("s3api put-object"),
@@ -79,7 +79,7 @@ describe("executeStateBootstrap", () => {
       ]),
     );
     expect(commands.join("\n")).not.toMatch(/pulumi (stack init|up)/);
-    expect(calls.at(-1)?.profile).toBe("starter-sandbox");
+    expect(calls.at(-1)?.profile).toBe("myapp-cross-account-state-sandbox");
   });
 
   it("refuses to mutate when either profile resolves to the wrong account", () => {
@@ -91,7 +91,7 @@ describe("executeStateBootstrap", () => {
       capture(_program, args, profile) {
         if (args[0] !== "sts") throw new Error("Mutation was reached");
         return JSON.stringify({
-          Account: profile === "starter-state" ? "444455556666" : "999999999999",
+          Account: profile === "platform-state" ? "444455556666" : "999999999999",
           Arn: `arn:aws:sts::999999999999:assumed-role/AdministratorAccess/operator`,
           UserId: "example",
         });
@@ -99,7 +99,7 @@ describe("executeStateBootstrap", () => {
     };
     const config = resolveStateBootstrapConfig(["init", "sandbox"], {
       AWS_STATE_ACCOUNT_ID: "444455556666",
-      AWS_STATE_PROFILE: "starter-state",
+      AWS_STATE_PROFILE: "platform-state",
       AWS_RESOURCE_PREFIX: "myapp-cross-account-state",
       AWS_SANDBOX_ACCOUNT_ID: "111122223333",
     });

@@ -37,18 +37,18 @@ Create these profiles with `aws configure sso`:
 
 | Account       | Local profile        |
 | ------------- | -------------------- |
-| Central state | `starter-state`      |
-| Sandbox       | `starter-sandbox`    |
-| Staging       | `starter-staging`    |
-| Production    | `starter-production` |
+| Central state | `platform-state`      |
+| Sandbox       | `platform-sandbox`    |
+| Staging       | `platform-staging`    |
+| Production    | `platform-production` |
 
 Authenticate and verify the two accounts involved in a sandbox state deployment:
 
 ```bash
-aws sso login --profile starter-state
-aws sso login --profile starter-sandbox
-aws sts get-caller-identity --profile starter-state
-aws sts get-caller-identity --profile starter-sandbox
+aws sso login --profile platform-state
+aws sso login --profile platform-sandbox
+aws sts get-caller-identity --profile platform-state
+aws sts get-caller-identity --profile platform-sandbox
 ```
 
 The first identity query must report the state account ID; the second must
@@ -61,11 +61,11 @@ Copy `infra/.env.example` to the gitignored `infra/.env.local`, then define:
 ```dotenv
 PULUMI_ORG=organization
 
-# Deployment identity — set once before first deploy (defaults to "starter").
+# Deployment identity — set once before first deploy (defaults to "platform").
 AWS_RESOURCE_PREFIX=<1-29-lowercase-letters-numbers-hyphens>
 
 AWS_STATE_ACCOUNT_ID=<state-account-id>
-AWS_STATE_PROFILE=starter-state
+AWS_STATE_PROFILE=platform-state
 AWS_STATE_REGION=us-east-2
 AWS_SSO_REGION=<identity-center-home-region>
 
@@ -81,13 +81,13 @@ AWS_POOLER_DEVELOPER_CIDRS=<comma-delimited-developer-cidrs>
 `AWS_RESOURCE_PREFIX` is the first AWS identity choice for a downstream repo.
 It names state buckets, the ECR namespace, queues (`{prefix}-{queue}-{env}[-dlq]`),
 resource tags, and the cross-account GitHub deploy role. Leaving it unset keeps
-the template default `starter`. Changing it after an environment is deployed is
+the template default `platform`. Changing it after an environment is deployed is
 unsupported without a new environment or an explicit migration plan.
 
 Legacy `AWS_STATE_RESOURCE_PREFIX` still works as a temporary alias (with a
 deprecation warning). If both are set, they must match.
 
-Workload profiles default to `starter-<environment>`. Override them with
+Workload profiles default to `platform-<environment>`. Override them with
 `AWS_SANDBOX_PROFILE`, `AWS_STAGING_PROFILE`, or `AWS_PRODUCTION_PROFILE` only
 when your local profile names differ.
 
@@ -113,7 +113,7 @@ Success means all of the following appear:
 - CloudFormation reports `Successfully created/updated stack`.
 - The script reports `State foundation is ready`.
 - The reported state account and workload account IDs are correct.
-- `AWS_PROFILE=starter-sandbox pulumi whoami -v` reports the new S3 backend.
+- `AWS_PROFILE=platform-sandbox pulumi whoami -v` reports the new S3 backend.
 
 To spot-check in the browser:
 
@@ -141,7 +141,7 @@ Use the exact KMS secrets-provider URL printed by the state command:
 Before deploying `bootstrap`, set its required repository scope:
 
 ```bash
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set \
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set \
   starter-aws-bootstrap:githubRepo <owner>/<repo>
 ```
 
@@ -159,7 +159,7 @@ ACM certificate validation will fail.
 1. **Read the name servers:**
 
    ```bash
-   AWS_PROFILE=starter-sandbox pulumi stack output hostedZoneNameServers -s sandbox
+   AWS_PROFILE=platform-sandbox pulumi stack output hostedZoneNameServers -s sandbox
    ```
 
    This prints an array of four name servers, e.g.:
@@ -210,7 +210,7 @@ ACM certificate validation will fail.
    validation records for `app.`, `api.`, `mcp.`, and the apex (`www`).
 
    ```bash
-   AWS_PROFILE=starter-sandbox pulumi stack output publicAppsZoneNameServers -s sandbox
+   AWS_PROFILE=platform-sandbox pulumi stack output publicAppsZoneNameServers -s sandbox
    dig NS sandbox.example.com
    ```
 
@@ -224,8 +224,8 @@ ACM certificate validation will fail.
 6. **Deploy core:**
 
    ```bash
-   AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
-   AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+   AWS_PROFILE=platform-sandbox pnpm infra:aws core preview -s sandbox
+   AWS_PROFILE=platform-sandbox pnpm infra:aws core up -s sandbox
    ```
 
    The `core` stack creates an ACM certificate for `db.sandbox.aws.example.com`
@@ -238,7 +238,7 @@ ACM certificate validation will fail.
 
    ```bash
    dig A db.sandbox.aws.example.com
-   aws acm list-certificates --profile starter-sandbox --region us-east-2
+   aws acm list-certificates --profile platform-sandbox --region us-east-2
    openssl s_client -starttls postgres \
      -connect db.sandbox.aws.example.com:6432 \
      -servername db.sandbox.aws.example.com
@@ -252,14 +252,14 @@ ACM certificate validation will fail.
    one ECR repository per image under `<identity>/<name>`
    (`dashboard`, `www`, `public-api`, `public-mcp`, `workers`, `workers-lambda`).
    App Runner and Lambda pull `…/<identity>/<name>:<tag>` (default identity
-   `starter`). Images must be **`linux/amd64`** (App Runner / Lambda), and buildx
+   `platform`). Images must be **`linux/amd64`** (App Runner / Lambda), and buildx
    attestations must be disabled or pulls can fail:
 
    ```bash
-   export AWS_PROFILE=starter-sandbox
+   export AWS_PROFILE=platform-sandbox
    export AWS_REGION=us-east-2
    export REGISTRY=<account>.dkr.ecr.us-east-2.amazonaws.com
-   export IDENTITY="${AWS_RESOURCE_PREFIX:-starter}"
+   export IDENTITY="${AWS_RESOURCE_PREFIX:-platform}"
    export TAG=sandbox-verify   # or a git SHA; pass the same tag to apps via imageTag
 
    aws ecr get-login-password --region "$AWS_REGION" \
@@ -282,9 +282,9 @@ ACM certificate validation will fail.
    build_push workers apps/workers/Dockerfile
    build_push workers-lambda apps/workers/Dockerfile.lambda
 
-   AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set imageTag "$TAG"
-   AWS_PROFILE=starter-sandbox pnpm infra:aws apps preview -s sandbox
-   AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
+   AWS_PROFILE=platform-sandbox pnpm infra:aws apps config set imageTag "$TAG"
+   AWS_PROFILE=platform-sandbox pnpm infra:aws apps preview -s sandbox
+   AWS_PROFILE=platform-sandbox pnpm infra:aws apps up -s sandbox
    ```
 
    `NEXT_PUBLIC_*` values are baked into Next.js images at **build** time. Rebuild
@@ -331,11 +331,11 @@ accounts:
 
 ```
 mgmt (root, no workloads)
-├── starter-state        → retained S3/KMS Pulumi state for every environment
-├── starter-sandbox      → deploy stack: sandbox
-├── starter-staging      → deploy stack: staging
-├── starter-production   → deploy stack: production
-└── (optional) starter-log-archive   → immutable HIPAA/SOC2 logs
+├── platform-state        → retained S3/KMS Pulumi state for every environment
+├── platform-sandbox      → deploy stack: sandbox
+├── platform-staging      → deploy stack: staging
+├── platform-production   → deploy stack: production
+└── (optional) platform-log-archive   → immutable HIPAA/SOC2 logs
 ```
 
 Why an Organization (vs standalone accounts): consolidated billing, one-click
@@ -388,14 +388,14 @@ then **always pair the profile with the matching stack**:
 
 ```bash
 # ~/.aws/config — one profile per account
-[profile starter-sandbox]     # account 1111-1111-1111
-[profile starter-staging]     # account 2222-2222-2222
-[profile starter-production]  # account 3333-3333-3333
+[profile platform-sandbox]     # account 1111-1111-1111
+[profile platform-staging]     # account 2222-2222-2222
+[profile platform-production]  # account 3333-3333-3333
 
 # Deploy: profile MUST match the stack name
-AWS_PROFILE=starter-sandbox    pulumi up -s sandbox
-AWS_PROFILE=starter-staging    pulumi up -s staging
-AWS_PROFILE=starter-production pulumi up -s production
+AWS_PROFILE=platform-sandbox    pulumi up -s sandbox
+AWS_PROFILE=platform-staging    pulumi up -s staging
+AWS_PROFILE=platform-production pulumi up -s production
 ```
 
 Record each environment's 12-digit account id in the **gitignored**
@@ -414,7 +414,7 @@ PULUMI_ORG=organization
 # Deployment identity + dedicated state account.
 AWS_RESOURCE_PREFIX=my-company
 AWS_STATE_ACCOUNT_ID=4444...
-AWS_STATE_PROFILE=starter-state
+AWS_STATE_PROFILE=platform-state
 
 # Vercel OIDC identifiers for the hybrid access role (core reads these).
 VERCEL_TEAM_SLUG=my-team
@@ -477,7 +477,7 @@ into `Pulumi.<env>.yaml` (the account-bearing `imageRegistry`, the org-bearing
 
 Before workload deployment, create a no-workload Organization member account
 for state, assign the Identity Center administrator group, and configure a
-`starter-state` SSO profile. Record only its account ID and profile name in
+`platform-state` SSO profile. Record only its account ID and profile name in
 `infra/.env.local`; do not create IAM users or access keys. The state account is
 created manually, while its retained S3/KMS/CloudTrail resources are created by
 `pnpm infra:aws:state`.
@@ -534,14 +534,14 @@ The CLI is the most reliable way to confirm both ownership and access:
 aws cloudformation describe-stacks \
   --stack-name <resource-prefix>-sandbox \
   --region us-east-2 \
-  --profile starter-state
+  --profile platform-state
 
 # State-account view of both buckets
-aws s3 ls --profile starter-state
+aws s3 ls --profile platform-state
 
 # Workload-account cross-account access and current Pulumi backend
-aws s3 ls s3://<state-bucket-name>/.pulumi/ --profile starter-sandbox
-AWS_PROFILE=starter-sandbox pulumi whoami -v
+aws s3 ls s3://<state-bucket-name>/.pulumi/ --profile platform-sandbox
+AWS_PROFILE=platform-sandbox pulumi whoami -v
 ```
 
 Immediately after state initialization, `.pulumi/meta.yaml` may be the only
@@ -564,13 +564,13 @@ Route 53 hosted zone, and the SNS alert topic.
 ```bash
 pnpm --dir infra/aws install
 PULUMI_SECRETS_PROVIDER='<printed awskms:///... URL>'
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap preview -s sandbox
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:githubRepo <owner>/<repo>
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap config set starter-aws-bootstrap:budgetNotificationEmail you@example.com
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap preview -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap up -s sandbox
 ```
 
 `budgetNotificationEmail` is currently a shared notification setting: bootstrap
@@ -592,24 +592,24 @@ email.
 
 ```bash
 # AWS deps already installed via `pnpm --dir infra/aws install` above.
-AWS_PROFILE=starter-sandbox pnpm infra:aws core stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws core stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
-AWS_PROFILE=starter-sandbox pnpm infra:aws core config set aws:region us-east-2
-AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
-AWS_PROFILE=starter-sandbox pnpm infra:aws core up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws core config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws core preview -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws core up -s sandbox
 ```
 
 #### 3. Apps
 
 ```bash
 # AWS deps already installed via `pnpm --dir infra/aws install` above.
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps stack init sandbox \
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps stack init sandbox \
   --secrets-provider="$PULUMI_SECRETS_PROVIDER"
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps config set aws:region us-east-2
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps config set aws:region us-east-2
 # coreStackRef comes from PULUMI_ORG; imageRegistry from the deploy account —
 # no per-stack config to set here.
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps preview -s sandbox
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps up -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps preview -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps up -s sandbox
 ```
 
 Repeat 0–3 for `staging` and `production`, each with the matching profile and
@@ -654,10 +654,10 @@ another region.
 Re-authenticate both profiles and verify their account IDs:
 
 ```bash
-aws sso login --profile starter-state
-aws sso login --profile starter-sandbox
-aws sts get-caller-identity --profile starter-state
-aws sts get-caller-identity --profile starter-sandbox
+aws sso login --profile platform-state
+aws sso login --profile platform-sandbox
+aws sts get-caller-identity --profile platform-state
+aws sts get-caller-identity --profile platform-sandbox
 ```
 
 Also verify that `AWS_SSO_REGION` matches the Identity Center home region. The
@@ -669,7 +669,7 @@ match.
 Check it with:
 
 ```bash
-AWS_PROFILE=starter-sandbox pulumi whoami -v
+AWS_PROFILE=platform-sandbox pulumi whoami -v
 ```
 
 Re-run `pnpm infra:aws:state init sandbox` to verify access and log into the
@@ -857,9 +857,9 @@ S3, 0-day secret recovery), so:
 
 ```bash
 # apps, then core, then bootstrap
-AWS_PROFILE=starter-sandbox pnpm infra:aws apps destroy -s sandbox
-AWS_PROFILE=starter-sandbox pnpm infra:aws core destroy -s sandbox
-AWS_PROFILE=starter-sandbox pnpm infra:aws bootstrap destroy -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws apps destroy -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws core destroy -s sandbox
+AWS_PROFILE=platform-sandbox pnpm infra:aws bootstrap destroy -s sandbox
 ```
 
 If anything is left behind, the account-per-environment layout is your safety

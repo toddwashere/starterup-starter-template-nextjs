@@ -54,14 +54,14 @@ async function build() {
   installMocks();
   const mod = await import("./pgbouncer.js");
   const result = mod.buildPgBouncer({
-    namePrefix: "starter-sandbox",
+    namePrefix: "platform-sandbox",
     logGroupPrefix: "/sandbox",
     region: "us-east-2",
     vpcId: "vpc-123",
     publicSubnetIds: ["subnet-pub-a", "subnet-pub-b"],
     privateSubnetIds: ["subnet-priv-a", "subnet-priv-b"],
     dbSecurityGroupId: "sg-db",
-    dbHost: "starter-sandbox-db.rds.amazonaws.com",
+    dbHost: "platform-sandbox-db.rds.amazonaws.com",
     dbName: "app_db",
     dbSecretArn:
       "arn:aws:secretsmanager:us-east-2:123456789012:secret:/sandbox/rds-proxy-auth",
@@ -343,7 +343,7 @@ describe("buildPgBouncer", () => {
 
     expect(dnsName).toMatch(/elb\.amazonaws\.com$/);
     expect(zoneId).toBe("Z1234567890ABC");
-    expect(clusterName).toBe("starter-sandbox-pgbouncer");
-    expect(serviceName).toBe("starter-sandbox-pgbouncer");
+    expect(clusterName).toBe("platform-sandbox-pgbouncer");
+    expect(serviceName).toBe("platform-sandbox-pgbouncer");
   });
 });

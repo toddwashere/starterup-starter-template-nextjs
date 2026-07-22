@@ -20,7 +20,7 @@ describe("aws bootstrap layer (mocked)", () => {
   });
 
   beforeAll(async () => {
-    // Default identity is `starter` when AWS_RESOURCE_PREFIX is unset.
+    // Default identity is `platform` when AWS_RESOURCE_PREFIX is unset.
     vi.stubEnv("AWS_RESOURCE_PREFIX", "");
     vi.stubEnv("AWS_STATE_RESOURCE_PREFIX", "");
     vi.stubEnv("AWS_STATE_ACCOUNT_ID", "444455556666");
@@ -107,12 +107,12 @@ describe("aws bootstrap layer (mocked)", () => {
     const repos = recorded.filter((r) => r.type === "aws:ecr/repository:Repository");
     const names = repos.map((r) => r.inputs.name as string).sort();
     expect(names).toEqual([
-      "starter/dashboard",
-      "starter/public-api",
-      "starter/public-mcp",
-      "starter/workers",
-      "starter/workers-lambda",
-      "starter/www",
+      "platform/dashboard",
+      "platform/public-api",
+      "platform/public-mcp",
+      "platform/workers",
+      "platform/workers-lambda",
+      "platform/www",
     ]);
     for (const repo of repos) {
       expect(repo.inputs.imageScanningConfiguration).toEqual({
@@ -140,15 +140,15 @@ describe("aws bootstrap layer (mocked)", () => {
     const policy = await new Promise<string>((resolve) =>
       pulumi.output(statePolicy!.inputs.policy as string).apply(resolve),
     );
-    expect(policy).toContain("arn:aws:s3:::starter-sandbox-444455556666-us-east-2");
+    expect(policy).toContain("arn:aws:s3:::platform-sandbox-444455556666-us-east-2");
     expect(policy).toContain("arn:aws:kms:us-east-2:444455556666:key/*");
-    expect(policy).toContain("alias/starter-sandbox");
+    expect(policy).toContain("alias/platform-sandbox");
     expect(policy).not.toContain('"Resource":"*"');
   });
 
-  it("names the GitHub deploy role with the default starter identity", () => {
+  it("names the GitHub deploy role with the default platform identity", () => {
     const roles = recorded.filter((r) => r.type === "aws:iam/role:Role");
-    expect(roles[0]?.inputs.name).toBe("starter-sandbox-github-deploy");
+    expect(roles[0]?.inputs.name).toBe("platform-sandbox-github-deploy");
   });
 
   it("creates a monthly budget when a notification email is set", () => {
@@ -183,7 +183,7 @@ describe("aws bootstrap layer (mocked)", () => {
 
     const aliases = recorded.filter((r) => r.type === "aws:kms/alias:Alias");
     expect(
-      aliases.some((alias) => alias.inputs.name === "alias/starter-sandbox-infra-alerts"),
+      aliases.some((alias) => alias.inputs.name === "alias/platform-sandbox-infra-alerts"),
     ).toBe(true);
 
     const keyPolicy = await new Promise<string>((resolve) =>
@@ -197,7 +197,7 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(snsGrant.Action).toEqual(["kms:GenerateDataKey*", "kms:Decrypt"]);
     expect(snsGrant.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
     expect(snsGrant.Condition.StringEquals["aws:SourceArn"]).toBe(
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts",
     );
     const eventBridgeGrant = parsedKeyPolicy.Statement.find(
       (statement: { Principal?: { Service?: string } }) =>
@@ -210,7 +210,7 @@ describe("aws bootstrap layer (mocked)", () => {
 
     const topics = recorded.filter((r) => r.type === "aws:sns/topic:Topic");
     expect(topics).toHaveLength(1);
-    expect(topics[0].inputs.name).toBe("starter-sandbox-infra-alerts");
+    expect(topics[0].inputs.name).toBe("platform-sandbox-infra-alerts");
     expect(topics[0].inputs.kmsMasterKeyId).toBeDefined();
     expect(topics[0].inputs.kmsMasterKeyId).not.toBe("alias/aws/sns");
     const subscriptions = recorded.filter(
@@ -276,11 +276,11 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(policy).toContain("ecs:CreateService");
     expect(policy).toContain("ecs:CreateCluster");
     expect(policy).toContain("iam:PassRole");
-    expect(policy).toContain("starter-sandbox-pooler-*");
+    expect(policy).toContain("platform-sandbox-pooler-*");
     // PassRole must also cover the PgBouncer ECS execution/task roles the core
     // stack creates, otherwise ECS service deploys fail once IAMFullAccess is
     // tightened away from the managed base policies.
-    expect(policy).toContain("starter-sandbox-pgbouncer-*");
+    expect(policy).toContain("platform-sandbox-pgbouncer-*");
     const parsed = JSON.parse(policy);
     const logStatement = parsed.Statement.find(
       (statement: { Sid?: string }) => statement.Sid === "CloudWatchLogs",
@@ -296,7 +296,7 @@ describe("aws bootstrap layer (mocked)", () => {
       (statement: { Sid?: string }) => statement.Sid === "EcsClusterAndServiceDeployment",
     );
     expect(ecsDeployment.Action).toContain("ecs:DescribeClusters");
-    expect(ecsDeployment.Resource).toContain("arn:aws:ecs:us-east-2:*:cluster/starter-sandbox-*");
+    expect(ecsDeployment.Resource).toContain("arn:aws:ecs:us-east-2:*:cluster/platform-sandbox-*");
     // Secrets scope must match the actual secret names the core stack creates
     // (environment-scoped /<stack>/ prefix).
     expect(policy).toContain("secret:/sandbox/*");
@@ -329,7 +329,7 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(await output(infra.hostedZoneName)).toBe("sandbox.aws.example.com");
     expect(await output(infra.hostedZoneNameServers)).toHaveLength(4);
     expect(await output(infra.infraAlertTopicArn)).toBe(
-      "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
+      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts",
     );
   });
 

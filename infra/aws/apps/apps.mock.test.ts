@@ -25,9 +25,9 @@ const CORE_OUTPUTS: Record<string, unknown> = {
   databaseUrlSecretArn:
     "arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/database-url",
   directUrlSecretArn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:/staging/direct-url",
-  sqsQueueUrl: "https://sqs.us-east-2.amazonaws.com/123456789012/int-health-jobs-staging",
-  sqsQueueArn: "arn:aws:sqs:us-east-2:123456789012:int-health-jobs-staging",
-  uploadsBucket: "int-health-staging-uploads-abc",
+  sqsQueueUrl: "https://sqs.us-east-2.amazonaws.com/123456789012/platform-jobs-staging",
+  sqsQueueArn: "arn:aws:sqs:us-east-2:123456789012:platform-jobs-staging",
+  uploadsBucket: "platform-staging-uploads-abc",
   wafWebAclArn: "",
   // Catalog placeholder ARNs the core stack now exports (everything in
   // SECRET_CATALOG except `database-url`).
@@ -145,7 +145,7 @@ describe("aws apps configured identity (mocked)", () => {
   beforeAll(async () => {
     vi.resetModules();
     recorded.length = 0;
-    vi.stubEnv("AWS_RESOURCE_PREFIX", "int-health");
+    vi.stubEnv("AWS_RESOURCE_PREFIX", "platform");
     vi.stubEnv("PULUMI_ORG", "organization");
     // Apex for derived public URLs (stack mock below is "staging").
     vi.stubEnv("AWS_DNS_ROOT_DOMAIN", "example.com");
@@ -232,17 +232,17 @@ describe("aws apps configured identity (mocked)", () => {
     const imageRegistry = await new Promise<string>((resolve) =>
       pulumi.output(infra.imageRegistry).apply(resolve),
     );
-    expect(imageRegistry).toBe("123456789012.dkr.ecr.us-east-2.amazonaws.com/int-health");
+    expect(imageRegistry).toBe("123456789012.dkr.ecr.us-east-2.amazonaws.com/platform");
   });
 
   it("tags app resources with the configured Project identity", () => {
     const tagged = recorded.find((r) => {
       const tags = r.inputs.tags as Record<string, string> | undefined;
-      return tags?.Project === "int-health" && tags?.Environment === "staging";
+      return tags?.Project === "platform" && tags?.Environment === "staging";
     });
     expect(tagged).toBeDefined();
     expect(tagged!.inputs.tags).toMatchObject({
-      Project: "int-health",
+      Project: "platform",
       Environment: "staging",
       ManagedBy: "pulumi",
     });

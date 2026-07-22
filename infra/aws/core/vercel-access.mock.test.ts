@@ -36,10 +36,10 @@ async function build() {
   installMocks();
   const mod = await import("./vercel-access.js");
   const result = mod.buildVercelAccess({
-    namePrefix: "starter-sandbox",
+    namePrefix: "platform-sandbox",
     vercelOidc: { teamSlug: "acme", projectName: "starter" },
-    uploadsBucketArn: "arn:aws:s3:::starter-sandbox-uploads",
-    jobsQueueArn: "arn:aws:sqs:us-east-2:123456789012:starter-jobs-sandbox",
+    uploadsBucketArn: "arn:aws:s3:::platform-sandbox-uploads",
+    jobsQueueArn: "arn:aws:sqs:us-east-2:123456789012:platform-jobs-sandbox",
     secretArns: [
       "arn:aws:secretsmanager:us-east-2:123456789012:secret:/sandbox/database-url",
     ],

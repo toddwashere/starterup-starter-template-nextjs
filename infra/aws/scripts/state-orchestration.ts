@@ -87,12 +87,6 @@ export function resolveStateBootstrapConfig(
     optionValue(argv, "--workload-account-id") || env[`AWS_${environmentKey}_ACCOUNT_ID`],
     `AWS_${environmentKey}_ACCOUNT_ID`,
   );
-  const workloadProfile = required(
-    optionValue(argv, "--workload-profile") ||
-      env[`AWS_${environmentKey}_PROFILE`] ||
-      `starter-${environment}`,
-    `AWS_${environmentKey}_PROFILE`,
-  );
   const cliResourcePrefix = optionValue(argv, "--resource-prefix")?.trim();
   const identityEnv: EnvironmentValues = { ...env };
   if (cliResourcePrefix) {
@@ -101,6 +95,12 @@ export function resolveStateBootstrapConfig(
     delete identityEnv.AWS_STATE_RESOURCE_PREFIX;
   }
   const resourcePrefix = resolveDeploymentIdentity(identityEnv).value;
+  const workloadProfile = required(
+    optionValue(argv, "--workload-profile") ||
+      env[`AWS_${environmentKey}_PROFILE`] ||
+      `${resourcePrefix}-${environment}`,
+    `AWS_${environmentKey}_PROFILE`,
+  );
 
   validateAccountId(stateAccountId, "AWS_STATE_ACCOUNT_ID");
   validateAccountId(workloadAccountId, `AWS_${environmentKey}_ACCOUNT_ID`);

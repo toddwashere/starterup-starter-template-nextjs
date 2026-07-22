@@ -12,7 +12,7 @@ conflict-prone.
 
 This design introduces a single non-secret deployment identity,
 `AWS_RESOURCE_PREFIX`. A downstream repository supplies a stable value before
-its first deployment (for example, `int-health`). The template uses that value
+its first deployment (for example, `platform`). The template uses that value
 only where an application identity materially improves uniqueness or operations;
 account-local resources retain concise purpose-focused names. Leaving the
 setting unset preserves the exact current `starter` behavior.
@@ -45,13 +45,13 @@ new environment or an explicit migration plan for such a change.
 Use the deployment identity in names that cross account, service, or public
 boundaries:
 
-| Surface | Example with `int-health` / staging | Rationale |
+| Surface | Example with `platform` / staging | Rationale |
 | --- | --- | --- |
-| State and audit buckets, state KMS alias and CloudFormation stack | `int-health-staging-<account>-us-east-2` | S3 namespace and central-state operations require clear ownership. |
-| Cross-account deployment role and policy ARNs | `int-health-staging-github-deploy` | State-account grants must precisely match workload identity. |
-| ECR namespace | `int-health/dashboard` | Registry paths appear in image references and CI artifacts. |
-| Public or exported resource names | `int-health-staging-…` | Makes ownership clear beyond a single environment account. |
-| Resource tags | `Project=int-health`, `Environment=staging` | Mandatory searchable operational context on every managed resource. |
+| State and audit buckets, state KMS alias and CloudFormation stack | `platform-staging-<account>-us-east-2` | S3 namespace and central-state operations require clear ownership. |
+| Cross-account deployment role and policy ARNs | `platform-staging-github-deploy` | State-account grants must precisely match workload identity. |
+| ECR namespace | `platform/dashboard` | Registry paths appear in image references and CI artifacts. |
+| Public or exported resource names | `platform-staging-…` | Makes ownership clear beyond a single environment account. |
+| Resource tags | `Project=platform`, `Environment=staging` | Mandatory searchable operational context on every managed resource. |
 
 Keep names concise where the dedicated AWS account already supplies the
 application boundary:
@@ -60,7 +60,7 @@ application boundary:
 | --- | --- | --- |
 | IAM roles used only inside the workload account | `github-deploy` | Account identity and tags provide sufficient context. |
 | ECR repository leaf | `dashboard` | The ECR namespace carries application identity. |
-| SQS queues and DLQs | `int-health-jobs-staging`, `int-health-jobs-staging-dlq` | Prefix + purpose + environment; `-dlq` marks dead-letter queues. |
+| SQS queues and DLQs | `platform-jobs-staging`, `platform-jobs-staging-dlq` | Prefix + purpose + environment; `-dlq` marks dead-letter queues. |
 | Secrets Manager paths | `/staging/database-url` | Account and environment partition the secret namespace. |
 | CloudWatch log groups | `/staging/apps/dashboard` | Short operational paths remain unambiguous in a dedicated account. |
 
@@ -77,7 +77,7 @@ paths, and the GitHub deploy-role name. Bootstrap, core, apps, and state
 bootstrap consume those helpers instead of assembling raw string literals.
 
 Every IAM statement must derive its ARN through the same helper used to create
-the resource. This prevents a configuration from creating an `int-health` path
+the resource. This prevents a configuration from creating an `platform` path
 while granting permissions only to the legacy `starter` path.
 
 ## Downstream adoption
@@ -86,7 +86,7 @@ New downstream deployments set one value in their operator configuration and
 GitHub Environment:
 
 ```dotenv
-AWS_RESOURCE_PREFIX=int-health
+AWS_RESOURCE_PREFIX=platform
 ```
 
 The template setup guide must show this as the first AWS identity choice. CI

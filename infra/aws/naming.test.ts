@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { deploymentNames, resolveDeploymentIdentity } from "./naming";
 
 describe("resolveDeploymentIdentity", () => {
-  it("defaults to starter", () => {
-    expect(resolveDeploymentIdentity({}).value).toBe("starter");
+  it("defaults to platform", () => {
+    expect(resolveDeploymentIdentity({}).value).toBe("platform");
     expect(resolveDeploymentIdentity({}).source).toBe("default");
   });
 
