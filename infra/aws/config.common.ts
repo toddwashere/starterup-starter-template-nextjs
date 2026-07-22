@@ -22,4 +22,9 @@ export const envBaseConfig = defineAwsEnvConfig({
   // teamSlug/projectName come from VERCEL_TEAM_SLUG / VERCEL_PROJECT_NAME
   // (infra/.env.local) so no deployment-specific identifiers live in git.
   access: { vercelOidc: vercelOidcFromEnv() },
+  // Non-secret knobs injected into App Runner/workers. Prefer "" over invented
+  // values; env overlays may override individual keys.
+  runtimeEnv: {
+    shared: {},
+  },
 });

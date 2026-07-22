@@ -4,10 +4,12 @@ import * as aws from "@pulumi/aws";
 import { config as sandboxConfig } from "../config.sandbox";
 import { config as stagingConfig } from "../config.staging";
 import { config as productionConfig } from "../config.production";
-import { coreStackRefFromEnv } from "../env";
+import { bootstrapStackRefFromEnv, coreStackRefFromEnv } from "../env";
 import { deploymentNames, resolveDeploymentIdentity, type AwsEnvironment } from "../naming";
 import { resolveCompliance } from "../../shared/compliance";
 import { secretsForApp } from "../../shared/secret-catalog";
+import { resolveEnvApexDomain, resolveLbHosts } from "../../shared/public-urls";
+import { buildAppRuntimeEnvironmentVariables } from "../../shared/aws-runtime-env";
 import {
   appRunnerInstanceSecretArns,
   buildAppRunnerRuntimeSecrets,
@@ -15,6 +17,7 @@ import {
   workersRuntimeSecretIds,
   type CatalogSecretArnBag,
 } from "./app-secrets";
+import { associateAppRunnerCustomDomain } from "./custom-domains";
 
 // --- Config loading ---------------------------------------------------------
 // Mirror the core stack exactly: import all per-stack configs statically and
@@ -29,6 +32,17 @@ const CONFIGS = {
 const stack = pulumi.getStack();
 const env = stack as keyof typeof CONFIGS;
 const cfg = CONFIGS[env] ?? sandboxConfig;
+
+const apexEnv: "sandbox" | "staging" | "production" =
+  env === "production" || env === "staging" || env === "sandbox" ? env : "sandbox";
+const apexDomain = resolveEnvApexDomain(
+  {
+    base: process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "",
+    stagingPrefix: "staging",
+    sandboxPrefix: "sandbox",
+  },
+  apexEnv,
+);
 
 const config = new pulumi.Config();
 
@@ -65,7 +79,7 @@ const baseTags = { ...names.tags, Layer: "apps" };
 // let workloads read CMEK-encrypted secrets.
 const compliance = resolveCompliance(cfg.complianceMode);
 
-// --- Core stack outputs (StackReference) ------------------------------------
+// --- Core / bootstrap stack outputs (StackReference) ------------------------
 const coreStack = new pulumi.StackReference(coreStackRef);
 const privateSubnetIds = coreStack.getOutput("privateSubnetIds");
 const appSecurityGroupId = coreStack.getOutput("appSecurityGroupId");
@@ -83,6 +97,23 @@ const wafWebAclArn = coreStack.getOutput("wafWebAclArn");
 const catalogSecretArns = coreStack.getOutput("catalogSecretArns") as pulumi.Output<
   Record<string, string>
 >;
+
+// Custom domains whenever we have an apex. Staging/sandbox also manage DNS in
+// the bootstrap public-apps zone; production associates only (apex DNS stays
+// at the registrar — operator adds CNAME + ACM validation there).
+const wireCustomDomains = apexDomain.length > 0;
+const managePublicAppsZone = apexEnv !== "production" && wireCustomDomains;
+const bootstrapStack = managePublicAppsZone
+  ? new pulumi.StackReference(bootstrapStackRefFromEnv(env))
+  : undefined;
+const publicAppsZoneId = bootstrapStack
+  ? (bootstrapStack.getOutput("publicAppsZoneId") as pulumi.Output<string>)
+  : undefined;
+const lbHostsByApp = new Map<string, string>(
+  resolveLbHosts(apexDomain).map((entry) => [entry.app, entry.host]),
+);
+const customDomainAssociations: Record<string, aws.apprunner.CustomDomainAssociation> =
+  {};
 
 // The single ARN bag every secret lookup on this stack goes through. Resolution
 // itself (including the `database-url` special case and the throw-on-missing
@@ -233,6 +264,24 @@ for (const app of apprunnerApps) {
     buildAppRunnerRuntimeSecrets(app.name, bag),
   );
 
+  // Non-secret merge: infra → derived public URLs → overrides → shared → byApp.
+  // SQS_QUEUE_URL stays a Pulumi Output and is applied after the sync map.
+  const syncVars = buildAppRuntimeEnvironmentVariables({
+    apexDomain,
+    runtimeEnv: cfg.runtimeEnv,
+    appName: app.name,
+    infraVars: {
+      PORT: String(app.port),
+      // Next.js standalone defaults to localhost; App Runner health checks
+      // need the process listening on all interfaces.
+      HOSTNAME: "0.0.0.0",
+      WORKER_QUEUE_ADAPTER: "sqs",
+      // The AI SDK's Bedrock provider reads AWS_REGION; App Runner does
+      // not set it automatically (Lambda does, as a reserved var).
+      AWS_REGION: cfg.ai.bedrockRegion,
+    },
+  });
+
   const service = new aws.apprunner.Service(app.name, {
     serviceName: `${namePrefix}-${app.name}`,
     sourceConfiguration: {
@@ -243,29 +292,10 @@ for (const app of apprunnerApps) {
         imageRepositoryType: "ECR",
         imageConfiguration: {
           port: String(app.port),
-          runtimeEnvironmentVariables: {
-            PORT: String(app.port),
-            // Next.js standalone defaults to localhost; App Runner health checks
-            // need the process listening on all interfaces.
-            HOSTNAME: "0.0.0.0",
-            WORKER_QUEUE_ADAPTER: "sqs",
-            SQS_QUEUE_URL: sqsQueueUrl,
-            // The AI SDK's Bedrock provider reads AWS_REGION; App Runner does
-            // not set it automatically (Lambda does, as a reserved var).
-            AWS_REGION: cfg.ai.bedrockRegion,
-            // Secret values now come from Secrets Manager via
-            // `runtimeEnvironmentSecrets` below.  What remains here are
-            // non-secret bootstrapping URLs — replace with the real public
-            // URLs after the first deploy.
-            // See infra/aws/GETTING_STARTED.md § Secrets.
-            BETTER_AUTH_URL: "http://127.0.0.1:4000",
-            NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:4000",
-            // public-mcp asserts NEXT_PUBLIC_MCP_URL at process start; PORT is
-            // the listen port. Swap for the real public URL after first deploy.
-            ...(app.name === "public-mcp"
-              ? { NEXT_PUBLIC_MCP_URL: `http://127.0.0.1:${app.port}` }
-              : {}),
-          },
+          runtimeEnvironmentVariables: sqsQueueUrl.apply((url) => ({
+            ...syncVars,
+            SQS_QUEUE_URL: url,
+          })),
           runtimeEnvironmentSecrets,
         },
       },
@@ -294,6 +324,16 @@ for (const app of apprunnerApps) {
   });
 
   serviceUrls[app.name] = service.serviceUrl;
+
+  const customHost = lbHostsByApp.get(app.name);
+  if (wireCustomDomains && customHost) {
+    customDomainAssociations[app.name] = associateAppRunnerCustomDomain({
+      name: `${app.name}-custom-domain`,
+      domainName: customHost,
+      serviceArn: service.arn,
+      zoneId: publicAppsZoneId,
+    });
+  }
 
   // WAF association for public services when cloudArmor is enabled.
   //
@@ -389,6 +429,20 @@ const workersSecretEnv: Record<string, pulumi.Output<string>> = Object.fromEntri
     ]),
 );
 
+// Non-secret merge for workers (same helper as App Runner). Secrets still
+// resolve at deploy time via getSecretVersion below — Lambda has no native
+// runtimeEnvironmentSecrets equivalent.
+const workersSyncVars = buildAppRuntimeEnvironmentVariables({
+  apexDomain,
+  runtimeEnv: cfg.runtimeEnv,
+  appName: "workers",
+  // Do not set AWS_REGION here — Lambda reserves it and CreateFunction fails
+  // if present. App Runner services still set AWS_REGION for Bedrock.
+  infraVars: {
+    WORKER_QUEUE_ADAPTER: "sqs",
+  },
+});
+
 // Container-image packaging: matches the existing Docker pipeline (one image
 // per app in ECR) so there is no separate zip build. NOTE this points at the
 // dedicated `workers-lambda` image (apps/workers/Dockerfile.lambda), which is
@@ -410,8 +464,10 @@ const workersFn = new aws.lambda.Function("workers", {
     securityGroupIds: [appSecurityGroupId],
   },
   environment: {
+    // Sync non-secrets from the merge helper; SQS + secrets stay Outputs
+    // (Lambda has no runtimeEnvironmentSecrets — resolved at deploy time).
     variables: {
-      WORKER_QUEUE_ADAPTER: "sqs",
+      ...workersSyncVars,
       SQS_QUEUE_URL: sqsQueueUrl,
       DATABASE_URL: pulumi.secret(dbSecret.secretString),
       ...workersSecretEnv,
@@ -473,3 +529,15 @@ export const publicApiUrl = serviceUrls["public-api"];
 export const publicMcpUrl = serviceUrls["public-mcp"];
 export const workersFunctionArn = workersFn.arn;
 export const workersFunctionName = workersFn.name;
+
+/** App Runner DNS targets + ACM validation hints for registrar-managed apex (prod). */
+export const customDomainDns = Object.fromEntries(
+  Object.entries(customDomainAssociations).map(([appName, assoc]) => [
+    appName,
+    {
+      domainName: lbHostsByApp.get(appName) ?? "",
+      dnsTarget: assoc.dnsTarget,
+      certificateValidationRecords: assoc.certificateValidationRecords,
+    },
+  ]),
+);

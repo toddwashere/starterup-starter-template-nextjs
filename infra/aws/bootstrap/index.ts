@@ -7,6 +7,7 @@ import {
   resolveDeploymentIdentity,
   type AwsEnvironment,
 } from "../naming";
+import { resolveEnvApexDomain } from "../../shared/public-urls";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -178,6 +179,29 @@ const hostedZone = new aws.route53.Zone(
   { protect: true },
 );
 
+// Env-apex zone for public apps (staging.example.com). Production apex stays at
+// the registrar so mail/other systems can coexist; only non-prod is delegated.
+const publicAppsApex = resolveEnvApexDomain(
+  {
+    base: process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "",
+    stagingPrefix: "staging",
+    sandboxPrefix: "sandbox",
+  },
+  stack as AwsEnvName,
+);
+const publicAppsZone =
+  stack !== "production" && publicAppsApex
+    ? new aws.route53.Zone(
+        "public-apps-zone",
+        {
+          name: publicAppsApex,
+          comment: `Public app hostnames for ${stack} (${publicAppsApex})`,
+          tags: { ...baseTags, Purpose: "public-apps" },
+        },
+        { protect: true },
+      )
+    : undefined;
+
 // The Pulumi backend lives in a dedicated state account. Its resource policies
 // grant this deterministic role cross-account access; this identity policy is
 // the matching workload-account half of that authorization.
@@ -236,8 +260,17 @@ new aws.iam.RolePolicy("github-state-access", {
 // deployment. Scope resource-level permissions where AWS supports them.
 new aws.iam.RolePolicy("github-deploy-access", {
   role: deployRole.name,
-  policy: pulumi.all([hostedZone.arn, hostedZone.zoneId]).apply(([zoneArn, zoneId]) =>
-    JSON.stringify({
+  policy: pulumi
+    .all([
+      hostedZone.arn,
+      hostedZone.zoneId,
+      publicAppsZone?.arn ?? pulumi.output(""),
+      publicAppsZone?.zoneId ?? pulumi.output(""),
+    ])
+    .apply(([zoneArn, _zoneId, publicZoneArn, _publicZoneId]) => {
+      const route53Zones = [zoneArn as string, "arn:aws:route53:::change/*"];
+      if (publicZoneArn) route53Zones.unshift(publicZoneArn as string);
+      return JSON.stringify({
       Version: "2012-10-17",
       Statement: [
         {
@@ -248,7 +281,7 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "route53:GetChange",
             "route53:ListResourceRecordSets",
           ],
-          Resource: [zoneArn, "arn:aws:route53:::change/*"],
+          Resource: route53Zones,
         },
         {
           Sid: "Route53HostedZoneRead",
@@ -471,8 +504,8 @@ new aws.iam.RolePolicy("github-deploy-access", {
           ],
         },
       ],
+      });
     }),
-  ),
 });
 
 // --- 3. Infrastructure alert topic ------------------------------------------
@@ -654,4 +687,7 @@ export const regionOut = region;
 export const hostedZoneId = hostedZone.zoneId;
 export const hostedZoneName = hostedZone.name;
 export const hostedZoneNameServers = hostedZone.nameServers;
+export const publicAppsZoneId = publicAppsZone?.zoneId ?? pulumi.output("");
+export const publicAppsZoneName = publicAppsZone?.name ?? pulumi.output("");
+export const publicAppsZoneNameServers = publicAppsZone?.nameServers ?? pulumi.output([]);
 export const infraAlertTopicArn = alertTopic.arn;

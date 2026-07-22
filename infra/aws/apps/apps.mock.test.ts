@@ -127,6 +127,13 @@ function secretStringForArn(arn: string): string {
 
 const CATALOG_ARNS = CORE_OUTPUTS.catalogSecretArns as Record<string, string>;
 
+const STACK_OUTPUTS: Record<string, unknown> = {
+  ...CORE_OUTPUTS,
+  publicAppsZoneId: "ZPUBLICAPPSTAGING",
+  publicAppsZoneName: "staging.example.com",
+  publicAppsZoneNameServers: ["ns-1.awsdns-01.org", "ns-2.awsdns-02.com"],
+};
+
 /** The ARN a catalog secret id must resolve to, given CORE_OUTPUTS. */
 function expectedSecretArn(id: string): string {
   return id === "database-url" ? (CORE_OUTPUTS.databaseUrlSecretArn as string) : CATALOG_ARNS[id];
@@ -140,6 +147,8 @@ describe("aws apps configured identity (mocked)", () => {
     recorded.length = 0;
     vi.stubEnv("AWS_RESOURCE_PREFIX", "int-health");
     vi.stubEnv("PULUMI_ORG", "organization");
+    // Apex for derived public URLs (stack mock below is "staging").
+    vi.stubEnv("AWS_DNS_ROOT_DOMAIN", "example.com");
     pulumi.runtime.setMocks(
       {
         newResource: (args) => {
@@ -156,8 +165,24 @@ describe("aws apps configured identity (mocked)", () => {
           if (args.type === "pulumi:pulumi:StackReference") {
             return {
               id: `${args.name}-id`,
-              state: { ...state, outputs: CORE_OUTPUTS },
+              state: { ...state, outputs: STACK_OUTPUTS },
             };
+          }
+          if (args.type.includes("CustomDomainAssociation")) {
+            const domain = String(args.inputs.domainName ?? "app.example.com");
+            state.dnsTarget = "xxxxxx.us-east-2.awsapprunner.com";
+            state.certificateValidationRecords = [
+              {
+                name: `_a.${domain}`,
+                type: "CNAME",
+                value: "_v.acm-validations.aws",
+              },
+              {
+                name: `_b.${domain}`,
+                type: "CNAME",
+                value: "_w.acm-validations.aws",
+              },
+            ];
           }
           return {
             id: `${args.name}-id`,
@@ -177,8 +202,8 @@ describe("aws apps configured identity (mocked)", () => {
             args.token.includes("StackReference")
           ) {
             const name = (args.inputs as { name?: string }).name;
-            if (name && name in CORE_OUTPUTS) {
-              return { value: CORE_OUTPUTS[name] };
+            if (name && name in STACK_OUTPUTS) {
+              return { value: STACK_OUTPUTS[name] };
             }
           }
           if (args.token.includes("getSecretVersion")) {
@@ -263,20 +288,26 @@ describe("aws apps configured identity (mocked)", () => {
     expect(Object.keys(vars)).not.toContain("BETTER_AUTH_SECRET");
   });
 
-  it.each(APP_RUNNER_APPS)("keeps %s's non-secret URL bootstrapping", (appName: string) => {
-    const vars = imageConfiguration(appName).runtimeEnvironmentVariables ?? {};
-    expect(vars.BETTER_AUTH_URL).toBe("http://127.0.0.1:4000");
-    expect(vars.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("http://127.0.0.1:4000");
-  });
+  it.each(APP_RUNNER_APPS)(
+    "injects derived public URLs into %s",
+    (appName: string) => {
+      const vars = imageConfiguration(appName).runtimeEnvironmentVariables ?? {};
+      // Mock stack is "staging" + AWS_DNS_ROOT_DOMAIN=example.com → staging.example.com
+      expect(vars.BETTER_AUTH_URL).toBe("https://app.staging.example.com");
+      expect(vars.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("https://app.staging.example.com");
+      expect(vars.NEXT_PUBLIC_DASHBOARD_URL).toBe("https://app.staging.example.com");
+      expect(vars.NEXT_PUBLIC_MCP_URL).toBe("https://mcp.staging.example.com");
+      expect(vars.NEXT_PUBLIC_WWW_URL).toBe("https://staging.example.com");
+    },
+  );
 
-  it("keeps NEXT_PUBLIC_MCP_URL on public-mcp only", () => {
-    expect(imageConfiguration("public-mcp").runtimeEnvironmentVariables?.NEXT_PUBLIC_MCP_URL).toBe(
-      "http://127.0.0.1:4003",
-    );
-    for (const appName of APP_RUNNER_APPS.filter((n) => n !== "public-mcp")) {
-      expect(
-        Object.keys(imageConfiguration(appName).runtimeEnvironmentVariables ?? {}),
-      ).not.toContain("NEXT_PUBLIC_MCP_URL");
+  it("associates App Runner custom domains for each service", () => {
+    for (const appName of APP_RUNNER_APPS) {
+      const assoc = recorded.find(
+        (r) =>
+          r.type.includes("CustomDomainAssociation") && r.name === `${appName}-custom-domain`,
+      );
+      expect(assoc).toBeDefined();
     }
   });
 
@@ -308,7 +339,17 @@ describe("aws apps configured identity (mocked)", () => {
 
     const keys = Object.keys(envVars).sort();
     expect(keys).toEqual(
-      [...workersSecrets.map((s) => s.envVar), "WORKER_QUEUE_ADAPTER", "SQS_QUEUE_URL"].sort(),
+      [
+        ...workersSecrets.map((s) => s.envVar),
+        "WORKER_QUEUE_ADAPTER",
+        "SQS_QUEUE_URL",
+        "BETTER_AUTH_URL",
+        "NEXT_PUBLIC_BETTER_AUTH_URL",
+        "NEXT_PUBLIC_DASHBOARD_URL",
+        "NEXT_PUBLIC_WWW_URL",
+        "NEXT_PUBLIC_API_URL",
+        "NEXT_PUBLIC_MCP_URL",
+      ].sort(),
     );
 
     // The mock's getSecretVersion echoes back the requested secretId (ARN), so

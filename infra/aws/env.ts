@@ -40,20 +40,27 @@ export function vercelOidcFromEnv(): { teamSlug: string; projectName: string } {
 }
 
 /**
- * Fully-qualified core `StackReference`
- * (`organization/starter-aws-core/<env>`) built from `PULUMI_ORG`. DIY
- * backends use the literal `organization` org segment.
+ * DIY backends use the literal `organization` org segment.
  */
-export function coreStackRefFromEnv(env: AwsEnvName | string): string {
+function pulumiOrgOrThrow(purpose: string): string {
   const org = process.env.PULUMI_ORG?.trim();
   if (!org) {
     throw new Error(
-      "PULUMI_ORG is required to resolve the core stack reference " +
-        "(organization/starter-aws-core/<env>). Set PULUMI_ORG=organization " +
-        "in infra/.env.local.",
+      `PULUMI_ORG is required to resolve the ${purpose} stack reference. ` +
+        "Set PULUMI_ORG=organization in infra/.env.local.",
     );
   }
-  return `${org}/starter-aws-core/${env}`;
+  return org;
+}
+
+/** Fully-qualified core `StackReference` (`organization/starter-aws-core/<env>`). */
+export function coreStackRefFromEnv(env: AwsEnvName | string): string {
+  return `${pulumiOrgOrThrow("core")}/starter-aws-core/${env}`;
+}
+
+/** Fully-qualified bootstrap `StackReference` (`organization/starter-aws-bootstrap/<env>`). */
+export function bootstrapStackRefFromEnv(env: AwsEnvName | string): string {
+  return `${pulumiOrgOrThrow("bootstrap")}/starter-aws-bootstrap/${env}`;
 }
 
 export function poolerConfigFromEnv(env: AwsEnvName): AwsPoolerConfig {

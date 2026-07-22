@@ -1,4 +1,5 @@
 import type { ComplianceMode } from "./compliance";
+import type { AwsRuntimeEnvConfig } from "./aws-runtime-env";
 
 export type AwsEnvName = "sandbox" | "staging" | "production";
 export const SUPPORTED_SCHEMA_VERSION = 1;
@@ -32,6 +33,8 @@ export interface AwsEnvConfig {
   apps: AwsAppsConfig;
   ai: AwsAiConfig;
   access: AwsAccessConfig;
+  /** Non-secret runtime env injected into App Runner / workers (see aws-runtime-env). */
+  runtimeEnv: AwsRuntimeEnvConfig;
 }
 
 export type DeepPartialAwsEnvConfig = {

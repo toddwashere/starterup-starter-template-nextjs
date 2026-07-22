@@ -19,6 +19,7 @@ const base: AwsEnvConfig = {
   apps: { imageTag: "latest", minSize: 1, maxSize: 5, maxConcurrency: 100 },
   ai: { bedrockRegion: "us-east-2", bedrockModels: ["anthropic.claude-sonnet-5"] },
   access: { vercelOidc: { teamSlug: "", projectName: "" } },
+  runtimeEnv: { shared: {} },
 };
 
 describe("aws-env-config", () => {

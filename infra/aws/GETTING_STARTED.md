@@ -201,14 +201,27 @@ ACM certificate validation will fail.
    The answer section must list all four AWS name servers. Repeat for `staging`
    and `production` as you configure each environment.
 
-4. **Confirm the SNS subscription** (one-time per environment): The bootstrap
+4. **Non-prod public apps zone (sandbox/staging only):** Bootstrap also exports
+   `publicAppsZoneNameServers` for the env apex (`sandbox.example.com` /
+   `staging.example.com`). Create a second NS record set at the registrar for
+   that apex so App Runner custom domains and ACM validation can be automated.
+   Production keeps the apex at the registrar — no `public-apps-zone`; after
+   apps deploy, use the `customDomainDns` stack output to add CNAME + ACM
+   validation records for `app.`, `api.`, `mcp.`, and the apex (`www`).
+
+   ```bash
+   AWS_PROFILE=starter-sandbox pulumi stack output publicAppsZoneNameServers -s sandbox
+   dig NS sandbox.example.com
+   ```
+
+5. **Confirm the SNS subscription** (one-time per environment): The bootstrap
    stack creates an SNS topic for certificate expiration and renewal alerts. AWS
    sends a confirmation email to the bootstrap
    `starter-aws-bootstrap:budgetNotificationEmail` address. That shared setting
    is intentionally reused for both AWS Budgets notifications and the
    infrastructure alert topic subscription. Click the confirmation link once.
 
-5. **Deploy core:**
+6. **Deploy core:**
 
    ```bash
    AWS_PROFILE=starter-sandbox pnpm infra:aws core preview -s sandbox
@@ -221,7 +234,7 @@ ACM certificate validation will fail.
    KMS-encrypted Secrets Manager secret consumed by PgBouncer), and creates the
    Route 53 alias record pointing to the PgBouncer NLB.
 
-6. **Verify TLS connectivity:**
+7. **Verify TLS connectivity:**
 
    ```bash
    dig A db.sandbox.aws.example.com
@@ -773,17 +786,43 @@ done
 `campaign-unsubscribe-secret` is read by the workers Lambda, so re-run
 `pulumi up` on the apps stack afterwards (per the Lambda note above).
 
-#### App Runner non-secret bootstrapping (boot only)
+#### Non-secret runtime env (`runtimeEnv`)
 
-The apps stack still ships a small set of non-secret **bootstrapping** URL env
-vars so containers can start and pass health checks: `BETTER_AUTH_URL`,
-`NEXT_PUBLIC_BETTER_AUTH_URL`, and (public-mcp only) `NEXT_PUBLIC_MCP_URL`.
-They default to loopback placeholders and are **not** production values — auth
-redirects will misbehave until you point them at your real App Runner or
-custom domain URLs. Stripe and Better Auth secret values are no longer part of
-`runtimeEnvironmentVariables` at all; they come exclusively from Secrets
-Manager via `runtimeEnvironmentSecrets` (see above). Do not commit live keys
-into `apps/index.ts`.
+Edit non-secrets in `runtimeEnv` on `infra/aws/config.<env>.ts` (defaults in
+`config.common.ts`), then `pnpm infra:aws apps up -s <env>`.
+
+`runtimeEnv` shape:
+
+- `shared` — hand-listed non-secrets for every app. Empty string is fine for
+  “not set yet.” Keep staging and production on the **same key set**.
+- `byApp` — optional per-app extras / overrides.
+- `publicUrlOverrides` — optional overrides of derived public URL env vars.
+
+**Public URLs** are derived at deploy time from `AWS_DNS_ROOT_DOMAIN` (in
+gitignored `infra/.env.local`) via `buildPublicUrlEnv` — e.g. staging
+`https://app.staging.example.com` and production `https://app.example.com`
+(same pattern for `api` / `mcp`; www uses the env apex). Keys include
+`BETTER_AUTH_URL` and the `NEXT_PUBLIC_*` URL vars. For staging/sandbox,
+bootstrap creates a Route 53 zone for the env apex so App Runner custom
+domains + ACM validation are automated; delegate that zone with an NS record
+at your registrar (apex/`mail` stay there). Production associates App Runner
+domains only — add the records from `customDomainDns` at the registrar.
+
+Merge order into `runtimeEnvironmentVariables` (later wins): infra-injected
+vars → derived public URLs → `publicUrlOverrides` → `shared` → `byApp[app]`.
+Secret values never appear here; they come exclusively from Secrets Manager via
+`runtimeEnvironmentSecrets`.
+
+**Next.js `NEXT_PUBLIC_*`:** many client-side values are baked into the image at
+**build** time. Changing runtime App Runner env alone will not fix browser
+links — rebuild/push with matching `--build-arg NEXT_PUBLIC_…=https://…` when
+URLs change (CI does this from `AWS_DNS_ROOT_DOMAIN`).
+
+> [!IMPORTANT]
+> **Do not edit App Runner (or Lambda) environment variables in the AWS
+> console.** The next `pulumi up` on the apps stack overwrites them from
+> `runtimeEnv` + derived URLs + catalog secrets. Edit config in git (or fill SM
+> for secrets), then redeploy.
 
 ---
 

@@ -153,6 +153,29 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Public URL build-args for Next.js apps. Staging/sandbox use env apex
+      # (`app.staging.<root>`); production uses bare labels on the root.
+      - name: Resolve NEXT_PUBLIC build-args
+        id: public_urls
+        env:
+          STACK: ${{ github.event_name == 'workflow_dispatch' && inputs.stack || 'production' }}
+          ROOT: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+        run: |
+          set -euo pipefail
+          root="${ROOT:?AWS_DNS_ROOT_DOMAIN var required}"
+          if [[ "$STACK" == "production" ]]; then
+            apex="$root"
+          else
+            apex="${STACK}.${root}"
+          fi
+          {
+            echo "dashboard=https://app.${apex}"
+            echo "www=https://${apex}"
+            echo "api=https://api.${apex}"
+            echo "mcp=https://mcp.${apex}"
+            echo "auth=https://app.${apex}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.app.name }}
         uses: docker/build-push-action@v6
         with:
@@ -162,6 +185,12 @@ jobs:
           tags: ${{ vars.AWS_ECR_REGISTRY }}/${{ matrix.app.name }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.app.name }}
           cache-to: type=gha,scope=${{ matrix.app.name }},mode=max
+          build-args: |
+            NEXT_PUBLIC_DASHBOARD_URL=${{ steps.public_urls.outputs.dashboard }}
+            NEXT_PUBLIC_WWW_URL=${{ steps.public_urls.outputs.www }}
+            NEXT_PUBLIC_API_URL=${{ steps.public_urls.outputs.api }}
+            NEXT_PUBLIC_MCP_URL=${{ steps.public_urls.outputs.mcp }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ steps.public_urls.outputs.auth }}
 
   # ---------------------------------------------------------------------------
   # deploy — migrate → pulumi up (core) → pulumi up (apps) → smoke test
@@ -253,6 +282,7 @@ jobs:
         uses: pulumi/actions@v6
         env:
           AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
         with:
           command: up
           stack-name: ${{ steps.stack.outputs.name }}
@@ -265,7 +295,21 @@ jobs:
         working-directory: infra/aws/apps
         env:
           PULUMI_BACKEND_URL: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ steps.stack.outputs.name }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+          STACK: ${{ steps.stack.outputs.name }}
+          ROOT: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
         run: |
-          pulumi login "$PULUMI_BACKEND_URL"
-          URL=$(pulumi stack output dashboardUrl --stack ${{ steps.stack.outputs.name }})
-          curl --fail --retry 5 --retry-all-errors --retry-delay 15 "https://$URL/api/health"
+          set -euo pipefail
+          # Prefer custom domain when DNS root is configured; fall back to App Runner URL.
+          if [[ -n "${ROOT:-}" ]]; then
+            if [[ "$STACK" == "production" ]]; then
+              SMOKE_URL="https://app.${ROOT}/api/health"
+            else
+              SMOKE_URL="https://app.${STACK}.${ROOT}/api/health"
+            fi
+          else
+            pulumi login "$PULUMI_BACKEND_URL"
+            HOST=$(pulumi stack output dashboardUrl --stack "$STACK")
+            SMOKE_URL="https://${HOST}/api/health"
+          fi
+          echo "Smoke: $SMOKE_URL"
+          curl --fail --retry 5 --retry-all-errors --retry-delay 15 "$SMOKE_URL"

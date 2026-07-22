@@ -165,11 +165,12 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(repoUrl).toContain("dkr.ecr");
   });
 
-  it("creates a public delegated hosted zone for the environment", () => {
+  it("creates public delegated hosted zones for infra and app apex", () => {
     const zones = recorded.filter((r) => r.type === "aws:route53/zone:Zone");
-    expect(zones).toHaveLength(1);
-    expect(zones[0].inputs.name).toBe("sandbox.aws.example.com");
-    expect(zones[0].inputs.comment as string).toContain("delegated");
+    const names = zones.map((z) => z.inputs.name as string).sort();
+    expect(names).toEqual(["sandbox.aws.example.com", "sandbox.example.com"]);
+    const infraZone = zones.find((z) => z.inputs.name === "sandbox.aws.example.com");
+    expect(infraZone?.inputs.comment as string).toContain("delegated");
   });
 
   it("creates an SNS alert topic encrypted with a rotating customer-managed key", async () => {
@@ -330,5 +331,12 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(await output(infra.infraAlertTopicArn)).toBe(
       "arn:aws:sns:us-east-2:123456789012:starter-sandbox-infra-alerts",
     );
+  });
+
+  it("exports a public-apps zone for non-production env apex", async () => {
+    const output = <T>(val: pulumi.Output<T>) => new Promise<T>((res) => val.apply(res));
+    expect(await output(infra.publicAppsZoneName)).toBe("sandbox.example.com");
+    expect(await output(infra.publicAppsZoneId)).toBeTruthy();
+    expect(await output(infra.publicAppsZoneNameServers)).toHaveLength(4);
   });
 });
