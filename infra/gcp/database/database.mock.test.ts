@@ -112,8 +112,8 @@ describe("database layer (mocked)", () => {
     const userName = await new Promise<string>((res) => infra.dbUser.apply(res));
     const instanceName = await new Promise<string>((res) => infra.sqlInstanceName.apply(res));
     expect(conn).toContain("test-project");
-    expect(name).toBe("starter");
-    expect(userName).toBe("starter");
+    expect(name).toBe("app_db");
+    expect(userName).toBe("app_db_user");
     expect(instanceName).toContain("starter-db");
   });
 });

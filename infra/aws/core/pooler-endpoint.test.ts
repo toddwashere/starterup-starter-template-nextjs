@@ -5,22 +5,22 @@ describe("buildPoolerDatabaseUrl", () => {
   it("uses the custom verified TLS hostname", () => {
     expect(
       buildPoolerDatabaseUrl({
-        username: "starter",
+        username: "app_db_user",
         password: "encoded-password",
         hostname: "db.sandbox.aws.example.com",
-        database: "starter",
+        database: "app_db",
       }),
     ).toBe(
-      "postgresql://starter:encoded-password@db.sandbox.aws.example.com:6432/starter?sslmode=verify-full",
+      "postgresql://app_db_user:encoded-password@db.sandbox.aws.example.com:6432/app_db?sslmode=verify-full",
     );
   });
 
   it("never uses the generated NLB hostname in the URL", () => {
     const url = buildPoolerDatabaseUrl({
-      username: "starter",
+      username: "app_db_user",
       password: "test-pass",
       hostname: "db.sandbox.aws.example.com",
-      database: "starter",
+      database: "app_db",
     });
 
     // Assert the URL uses the custom hostname, not an NLB DNS name

@@ -27,7 +27,7 @@ const dbServer = new azure.dbforpostgresql.Server(
     serverName: pulumi.interpolate`starter-db-${pulumi.getStack()}`,
     location,
     sku: { name: dbSku, tier: "Burstable" },
-    administratorLogin: "starter",
+    administratorLogin: "app_db_user",
     administratorLoginPassword: dbPassword.result,
     version: dbVersion,
     storage: { storageSizeGB: 32 },
@@ -41,7 +41,7 @@ const dbServer = new azure.dbforpostgresql.Server(
 const _dbName = new azure.dbforpostgresql.Database("app-db", {
   resourceGroupName: rg.name,
   serverName: dbServer.name,
-  databaseName: "starter",
+  databaseName: "app_db",
 });
 
 // Allow Azure services (Container Apps) to reach Postgres.
@@ -82,7 +82,7 @@ const kv = new azure.keyvault.Vault("starter-kv", {
   },
 });
 
-const databaseUrlInternal = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${dbServer.fullyQualifiedDomainName}/starter?sslmode=require`;
+const databaseUrlInternal = pulumi.interpolate`postgresql://app_db_user:${dbPassword.result}@${dbServer.fullyQualifiedDomainName}/app_db?sslmode=require`;
 
 const dbUrlSecret = new azure.keyvault.Secret("database-url", {
   resourceGroupName: rg.name,

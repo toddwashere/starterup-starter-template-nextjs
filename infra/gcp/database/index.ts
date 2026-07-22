@@ -88,12 +88,12 @@ const dbInstance = new gcp.sql.DatabaseInstance(
 
 const database = new gcp.sql.Database("app-db", {
   instance: dbInstance.name,
-  name: "starter",
+  name: "app_db",
 });
 
 const user = new gcp.sql.User("app-user", {
   instance: dbInstance.name,
-  name: "starter",
+  name: "app_db_user",
   password: dbPassword.result,
 });
 

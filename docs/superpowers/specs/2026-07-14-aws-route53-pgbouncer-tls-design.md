@@ -137,7 +137,7 @@ continues to require TLS for its connection to RDS.
 Clients use:
 
 ```text
-postgresql://...@db.sandbox.aws.example.com:6432/starter?sslmode=verify-full
+postgresql://...@db.sandbox.aws.example.com:6432/app_db?sslmode=verify-full
 ```
 
 The Vercel-facing database URL secret uses the custom hostname. Certificate

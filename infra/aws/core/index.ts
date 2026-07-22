@@ -47,6 +47,10 @@ const baseTags = { ...names.tags, Layer: "core" };
 // cleanly and leaves no orphaned RDS instances, snapshots, secrets, or buckets.
 const isProduction = env === "production";
 
+// Postgres role + database created on the RDS instance (must be valid identifiers).
+const dbUsername = "app_db_user";
+const dbName = "app_db";
+
 // --- Compliance -------------------------------------------------------------
 // resolveCompliance derives the per-feature flags (cmek, auditLogs, …) from the
 // coarse complianceMode; buildComplianceResources materialises the always-safe
@@ -224,9 +228,9 @@ const db = new aws.rds.Instance(
     engineVersion: cfg.database.engineVersion,
     instanceClass: cfg.database.instanceClass,
     allocatedStorage: cfg.database.allocatedStorage,
-    username: "starter",
+    username: dbUsername,
     password: dbPassword.result,
-    dbName: "starter",
+    dbName,
     dbSubnetGroupName: dbSubnetGroup.name,
     vpcSecurityGroupIds: [dbSg.id],
     multiAz: cfg.database.multiAz,
@@ -260,7 +264,7 @@ const proxyAuthSecret = new aws.secretsmanager.Secret("rds-proxy-auth", {
 new aws.secretsmanager.SecretVersion("rds-proxy-auth-v1", {
   secretId: proxyAuthSecret.id,
   secretString: pulumi.jsonStringify({
-    username: "starter",
+    username: dbUsername,
     password: dbPassword.result,
   }),
 });
@@ -374,10 +378,10 @@ new aws.s3.BucketPublicAccessBlock("uploads-public-access-block", {
 // `sslmode=require` is mandatory: the proxy sets requireTls:true, and the
 // runtime @prisma/adapter-pg (pg) defaults to no TLS otherwise → connection
 // rejected.
-const pooledUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${dbProxy.endpoint}:5432/starter?sslmode=require`;
+const pooledUrl = pulumi.interpolate`postgresql://${dbUsername}:${dbPassword.result}@${dbProxy.endpoint}:5432/${dbName}?sslmode=require`;
 // DIRECT: hits the instance endpoint directly (migrations / long transactions).
 // PG16's default parameter group ships rds.force_ssl=1, so require TLS here too.
-const directUrl = pulumi.interpolate`postgresql://starter:${dbPassword.result}@${db.endpoint}/starter?sslmode=require`;
+const directUrl = pulumi.interpolate`postgresql://${dbUsername}:${dbPassword.result}@${db.endpoint}/${dbName}?sslmode=require`;
 
 const dbUrlSecret = new aws.secretsmanager.Secret("database-url", {
   name: `${names.secretPathPrefix}/database-url`,
@@ -456,8 +460,8 @@ if (cfg.database.pooler.enabled) {
     privateSubnetIds,
     dbSecurityGroupId: dbSg.id,
     dbHost: db.address,
-    dbName: "starter",
-    dbUsername: "starter",
+    dbName,
+    dbUsername,
     dbPassword: dbPassword.result,
     dbSecretArn: proxyAuthSecret.arn,
     pooler: cfg.database.pooler,

@@ -11,8 +11,8 @@ previewsEnabled: false
 
 databases:
   - name: starter-postgres
-    databaseName: starter
-    user: starter
+    databaseName: app_db
+    user: app_db_user
     plan: starter # free is 30-day; "starter" is paid (~$7/mo) — adjust to taste
     postgresMajorVersion: "16"
     ipAllowList: []  # private to Render services in same region

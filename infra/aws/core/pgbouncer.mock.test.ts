@@ -62,7 +62,7 @@ async function build() {
     privateSubnetIds: ["subnet-priv-a", "subnet-priv-b"],
     dbSecurityGroupId: "sg-db",
     dbHost: "starter-sandbox-db.rds.amazonaws.com",
-    dbName: "starter",
+    dbName: "app_db",
     dbSecretArn:
       "arn:aws:secretsmanager:us-east-2:123456789012:secret:/sandbox/rds-proxy-auth",
     pooler: { poolSize: 25, publicListener: true },

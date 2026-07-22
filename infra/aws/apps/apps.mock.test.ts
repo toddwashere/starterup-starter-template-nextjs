@@ -122,7 +122,7 @@ function workersLambdaEnvVars(): Record<string, string> {
  * value can be tied back to the specific secret it was supposed to read.
  */
 function secretStringForArn(arn: string): string {
-  return `postgresql://starter:pass@db/starter?ref=${arn}`;
+  return `postgresql://app_db_user:pass@db/app_db?ref=${arn}`;
 }
 
 const CATALOG_ARNS = CORE_OUTPUTS.catalogSecretArns as Record<string, string>;
@@ -186,7 +186,7 @@ describe("aws apps configured identity (mocked)", () => {
             return {
               secretString: secretId
                 ? secretStringForArn(secretId)
-                : "postgresql://starter:pass@db/starter",
+                : "postgresql://app_db_user:pass@db/app_db",
               versionId: "1",
             };
           }
