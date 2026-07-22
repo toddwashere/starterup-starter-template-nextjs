@@ -38,11 +38,11 @@ For the full cost matrix across all providers, see [`infra/README.md`](../README
 
 ## Variables to fill in after first deploy
 
-These are marked `sync: false` in the blueprint; set them in the Render dashboard under the `starter-app-env` env group or per-service:
+These are marked `sync: false` in the blueprint; set them in the Render dashboard under the `platform-app-env` env group or per-service:
 
 | Key | Description |
 |---|---|
-| `BETTER_AUTH_URL` | External URL of `starter-dashboard` (e.g. `https://starter-dashboard.onrender.com`) |
+| `BETTER_AUTH_URL` | External URL of `platform-dashboard` (e.g. `https://platform-dashboard.onrender.com`) |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | Same as above (browser-visible) |
 | `NEXT_PUBLIC_DASHBOARD_URL` | Dashboard external URL |
 | `NEXT_PUBLIC_WWW_URL` | www external URL |
@@ -56,18 +56,18 @@ These are marked `sync: false` in the blueprint; set them in the Render dashboar
 
 ## Cron jobs
 
-`starter-cleanup-expired-sessions` runs daily at **03:00 UTC** and enqueues a `cleanup.expired-sessions` job into BullMQ. The `starter-workers` service picks it up.
+`platform-cleanup-expired-sessions` runs daily at **03:00 UTC** and enqueues a `cleanup.expired-sessions` job into BullMQ. The `platform-workers` service picks it up.
 
 To add more cron jobs: append another `type: cron` block to `render.yaml` and redeploy the blueprint.
 
 ## Workers
 
-`starter-workers` receives `REDIS_URL` and `DATABASE_URL` from the shared env group — no extra wiring needed.
+`platform-workers` receives `REDIS_URL` and `DATABASE_URL` from the shared env group — no extra wiring needed.
 
 Tail logs via the dashboard or:
 
 ```bash
-render logs --service starter-workers --tail
+render logs --service platform-workers --tail
 ```
 
 ## Troubleshooting

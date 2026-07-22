@@ -64,7 +64,7 @@ export function buildEnv(
     DATABASE_URL:
       options.databaseUrl ??
       (profile === "local"
-        ? "postgresql://postgres:postgres@localhost:5432/starter_dev"
+        ? "postgresql://postgres:postgres@localhost:5432/app_db"
         : ""),
   };
 }

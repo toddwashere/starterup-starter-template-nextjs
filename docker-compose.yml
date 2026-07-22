@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: starter_dev
+      POSTGRES_DB: app_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -41,7 +41,7 @@ services:
         condition: service_healthy
     environment:
       # Inside the compose network postgres is reachable by service name.
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/starter_dev
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/app_db
       WORKER_QUEUE_ADAPTER: bullmq
       BULLMQ_QUEUE_NAME: jobs
       REDIS_URL: redis://redis:6379/0

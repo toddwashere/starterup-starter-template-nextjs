@@ -16,7 +16,7 @@ Add GitHub Actions CI that runs on every pull request and push to `main`. v1 run
 | **Workflow count** | Single workflow: `.github/workflows/ci.yml` |
 | **Triggers** | `pull_request`, `push` to `main` |
 | **Postgres image** | Build `docker/postgres` in CI (not stock `postgres:16`) |
-| **Database name** | `starter_dev` — must match `cron.database_name` in custom image |
+| **Database name** | `app_db` — must match `cron.database_name` in custom image |
 | **Migrations** | `prisma migrate deploy` before tests |
 | **Seed** | No — tests use mocks; seed adds time and flakiness |
 | **Playwright E2E** | Out of scope v1 |
@@ -76,9 +76,9 @@ Stock `postgres:16` images do not include them. Local dev uses `docker/postgres`
 
 - Installs `pg_cron` from PGDG apt
 - Builds `pgmq` from pinned source tag `v1.11.1`
-- Sets `shared_preload_libraries = 'pg_cron'` and `cron.database_name = 'starter_dev'`
+- Sets `shared_preload_libraries = 'pg_cron'` and `cron.database_name = 'app_db'`
 
-**pg_cron constraint:** `CREATE EXTENSION pg_cron` only succeeds in the database named by `cron.database_name` (`starter_dev`). CI must **not** use `starter_ci` without changing the Docker image config.
+**pg_cron constraint:** `CREATE EXTENSION pg_cron` only succeeds in the database named by `cron.database_name` (`app_db`). CI must **not** use `starter_ci` without changing the Docker image config.
 
 See [`docker/postgres/README.md`](../../../docker/postgres/README.md) for details.
 
@@ -95,7 +95,7 @@ See [`docker/postgres/README.md`](../../../docker/postgres/README.md) for detail
 
 ```yaml
 env:
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/starter_dev
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app_db
   # Other vars: validate:env loads .env.example defaults; no secrets needed for v1
 ```
 
@@ -123,7 +123,7 @@ GitHub Actions `services:` blocks cannot `docker build`. Postgres is started in 
     docker run -d --name postgres \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=postgres \
-      -e POSTGRES_DB=starter_dev \
+      -e POSTGRES_DB=app_db \
       -p 5432:5432 \
       starter-postgres:16
     until pg_isready -h localhost -U postgres; do sleep 1; done
@@ -205,7 +205,7 @@ GitHub PR / push to main
         ├── pnpm validate:env  ──► .env.example + keys.ts (typed-env spec)
         ├── pnpm lint / type-check / test / build  ──► Turbo monorepo
         │
-        └── docker/postgres (starter_dev)
+        └── docker/postgres (app_db)
                  │
                  ▼
             prisma migrate deploy
@@ -237,7 +237,7 @@ pnpm validate:env && pnpm lint && pnpm type-check && pnpm test && pnpm build
 
 # With Postgres (matches CI)
 docker compose up -d postgres
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev \
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app_db \
   pnpm --filter @workspace/database exec prisma migrate deploy
 ```
 

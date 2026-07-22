@@ -99,7 +99,7 @@ export function buildComplianceResources(
       "compliance-keyring",
       {
         project,
-        name: pulumi.interpolate`starter-compliance-${pulumi.getStack()}`,
+        name: pulumi.interpolate`platform-compliance-${pulumi.getStack()}`,
         location: region,
       },
       { protect: true, dependsOn },
@@ -108,7 +108,7 @@ export function buildComplianceResources(
     const cryptoKey = new gcp.kms.CryptoKey(
       "compliance-key",
       {
-        name: "starter-cmek",
+        name: "platform-cmek",
         keyRing: keyRing.id,
         // 90-day rotation.
         rotationPeriod: "7776000s",

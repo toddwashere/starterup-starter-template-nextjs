@@ -52,11 +52,11 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.app.name }},mode=max
 
   # ---------------------------------------------------------------------------
-  # 2. Migration GATE: point starter-migrate at this SHA and run it to completion.
+  # 2. Migration GATE: point platform-migrate at this SHA and run it to completion.
   #    Failure here aborts the release — no new revision receives traffic.
   # ---------------------------------------------------------------------------
   migrate-gate:
-    name: Migrate gate (starter-migrate)
+    name: Migrate gate (platform-migrate)
     needs: [build-images]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -74,13 +74,13 @@ jobs:
       # `prisma migrate deploy`; here we only pin its image + execute it.
       - name: Pin migrate job image to this SHA
         run: |
-          gcloud run jobs update starter-migrate \
+          gcloud run jobs update platform-migrate \
             --region "${{ vars.GCP_REGION }}" \
             --image "${{ vars.GCP_ARTIFACT_REGISTRY }}/dashboard:${{ github.sha }}" \
             --quiet
 
       - name: Execute migrations (gate)
-        run: gcloud run jobs execute starter-migrate --region "${{ vars.GCP_REGION }}" --wait
+        run: gcloud run jobs execute platform-migrate --region "${{ vars.GCP_REGION }}" --wait
 
   # ---------------------------------------------------------------------------
   # 3. Zero-downtime rollout per service: deploy --no-traffic, smoke the
@@ -97,11 +97,11 @@ jobs:
       max-parallel: 5
       matrix:
         svc:
-          - { name: starter-dashboard, image: dashboard, public: true, health: /api/health }
-          - { name: starter-www, image: www, public: true, health: /api/health }
-          - { name: starter-public-api, image: public-api, public: true, health: /health }
-          - { name: starter-public-mcp, image: public-mcp, public: true, health: /health }
-          - { name: starter-workers, image: workers, public: false, health: "" }
+          - { name: platform-dashboard, image: dashboard, public: true, health: /api/health }
+          - { name: platform-www, image: www, public: true, health: /api/health }
+          - { name: platform-public-api, image: public-api, public: true, health: /health }
+          - { name: platform-public-mcp, image: public-mcp, public: true, health: /health }
+          - { name: platform-workers, image: workers, public: false, health: "" }
     steps:
       - id: gcp-auth
         uses: google-github-actions/auth@v2

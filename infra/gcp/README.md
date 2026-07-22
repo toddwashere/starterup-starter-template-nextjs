@@ -269,7 +269,7 @@ Two GitHub Actions workflows, both authenticating via Workload Identity Federati
   `pnpm infra:deploy`. `production` routes through the `production-gcp` GitHub Environment
   (required reviewers).
 - **`app-release.yml`** — on push to `main` / tags. Builds + pushes all 5 images → runs the
-  `starter-migrate` Cloud Run Job as a gate → deploys each Cloud Run revision `--no-traffic` →
+  `platform-migrate` Cloud Run Job as a gate → deploys each Cloud Run revision `--no-traffic` →
   smoke-tests the candidate → shifts traffic to 100%. Rollback is a traffic shift to the prior
   revision.
 - **`deploy-gcp.yml`** — PR-only `pulumi preview` (L3) of all layers with the CrossGuard policy pack.

@@ -29,7 +29,7 @@ describe("buildEnv - local profile", () => {
   it("sets DATABASE_URL to local postgres", () => {
     const env = buildEnv("local");
     expect(env.DATABASE_URL).toBe(
-      "postgresql://postgres:postgres@localhost:5432/starter_dev",
+      "postgresql://postgres:postgres@localhost:5432/app_db",
     );
   });
 

@@ -50,7 +50,7 @@ jobs:
       # -----------------------------------------------------------------------
       # CI test values — NOT real secrets; safe to commit.
       # -----------------------------------------------------------------------
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/starter_dev
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app_db
       REDIS_URL: redis://localhost:6379
       TURBO_TELEMETRY_DISABLED: 1
       E2E_CI: 1
@@ -102,7 +102,7 @@ jobs:
           docker run -d --name postgres \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_DB=starter_dev \
+            -e POSTGRES_DB=app_db \
             -p 5432:5432 \
             postgres:16
           docker run -d --name redis \

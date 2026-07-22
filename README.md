@@ -64,7 +64,7 @@ GitHub Actions runs on every pull request and push to `main`:
 ```bash
 pnpm validate:env && pnpm lint && pnpm type-check && pnpm test && pnpm build
 docker compose up -d postgres
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev \
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app_db \
   pnpm --filter @workspace/database exec prisma migrate deploy
 ```
 

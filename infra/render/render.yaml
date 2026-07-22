@@ -10,7 +10,7 @@
 previewsEnabled: false
 
 databases:
-  - name: starter-postgres
+  - name: platform-postgres
     databaseName: app_db
     user: app_db_user
     plan: starter # free is 30-day; "starter" is paid (~$7/mo) — adjust to taste
@@ -20,7 +20,7 @@ databases:
 services:
   # ----- Redis (BullMQ transport) -----
   - type: keyvalue
-    name: starter-redis
+    name: platform-redis
     plan: starter
     ipAllowList: []
     maxmemoryPolicy: noeviction  # BullMQ requires this
@@ -29,7 +29,7 @@ services:
   # All reference the shared env group to avoid per-service duplication.
 
   - type: web
-    name: starter-dashboard
+    name: platform-dashboard
     runtime: docker
     dockerfilePath: infra/shared/docker/Dockerfile.dashboard
     dockerContext: .
@@ -37,14 +37,14 @@ services:
     region: oregon
     healthCheckPath: /api/health
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
       - key: PORT
         value: "4000"
       - key: NEXT_PUBLIC_DASHBOARD_URL
         sync: false  # set in dashboard after first deploy (Render external URL)
 
   - type: web
-    name: starter-www
+    name: platform-www
     runtime: docker
     dockerfilePath: infra/shared/docker/Dockerfile.www
     dockerContext: .
@@ -52,12 +52,12 @@ services:
     region: oregon
     healthCheckPath: /api/health
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
       - key: PORT
         value: "4001"
 
   - type: web
-    name: starter-public-api
+    name: platform-public-api
     runtime: docker
     dockerfilePath: infra/shared/docker/Dockerfile.public-api
     dockerContext: .
@@ -65,12 +65,12 @@ services:
     region: oregon
     healthCheckPath: /health
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
       - key: PORT
         value: "4002"
 
   - type: web
-    name: starter-public-mcp
+    name: platform-public-mcp
     runtime: docker
     dockerfilePath: infra/shared/docker/Dockerfile.public-mcp
     dockerContext: .
@@ -78,27 +78,27 @@ services:
     region: oregon
     healthCheckPath: /health
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
       - key: PORT
         value: "4003"
 
   # ----- Background worker (BullMQ poll mode) -----
   - type: worker
-    name: starter-workers
+    name: platform-workers
     runtime: docker
     dockerfilePath: apps/workers/Dockerfile
     dockerContext: .
     plan: starter
     region: oregon
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
       - key: PORT
         value: "4300"
 
   # ----- Cron job: nightly session cleanup -----
   # Enqueues a cleanup job via the worker-queue package.
   - type: cron
-    name: starter-cleanup-expired-sessions
+    name: platform-cleanup-expired-sessions
     runtime: docker
     dockerfilePath: infra/shared/docker/Dockerfile.public-api
     dockerContext: .
@@ -107,20 +107,20 @@ services:
       pnpm --filter @workspace/worker-queue exec node -e
       "import('@workspace/worker-queue').then(m => m.enqueue('cleanup.expired-sessions', {}))"
     envVars:
-      - fromGroup: starter-app-env
+      - fromGroup: platform-app-env
 
 envVarGroups:
-  - name: starter-app-env
+  - name: platform-app-env
     envVars:
       # --- Wired automatically by Render from the linked services ---
       - key: DATABASE_URL
         fromDatabase:
-          name: starter-postgres
+          name: platform-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: starter-redis
+          name: platform-redis
           property: connectionString
 
       # --- Queue config (BullMQ) ---

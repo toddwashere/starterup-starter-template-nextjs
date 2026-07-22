@@ -109,8 +109,8 @@ describe("noAllUsersOnNonPublicService", () => {
     const report = vi.fn();
     noAllUsersOnNonPublicService(
       "gcp:cloudrunv2/serviceIamMember:ServiceIamMember",
-      { name: "starter-workers", member: "allUsers" },
-      ["starter-workers"],
+      { name: "platform-workers", member: "allUsers" },
+      ["platform-workers"],
       report,
     );
     expect(report).toHaveBeenCalledTimes(1);
@@ -120,8 +120,8 @@ describe("noAllUsersOnNonPublicService", () => {
     const report = vi.fn();
     noAllUsersOnNonPublicService(
       "gcp:cloudrunv2/serviceIamMember:ServiceIamMember",
-      { name: "starter-www", member: "allUsers" },
-      ["starter-workers"],
+      { name: "platform-www", member: "allUsers" },
+      ["platform-workers"],
       report,
     );
     expect(report).not.toHaveBeenCalled();

@@ -8,7 +8,7 @@ import {
 } from "./gcp-sandbox-validators";
 import { APPS } from "../apps.manifest";
 
-const NON_PUBLIC_SERVICE_NAMES = APPS.filter((a) => !a.public).map((a) => `starter-${a.name}`);
+const NON_PUBLIC_SERVICE_NAMES = APPS.filter((a) => !a.public).map((a) => `platform-${a.name}`);
 
 /**
  * Guardrails for the GCP sandbox stacks.

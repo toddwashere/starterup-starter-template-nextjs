@@ -60,7 +60,7 @@ if (compliance.cmek) {
 const dbInstance = new gcp.sql.DatabaseInstance(
   "starter-db",
   {
-    name: pulumi.interpolate`starter-db-${pulumi.getStack()}`,
+    name: pulumi.interpolate`platform-db-${pulumi.getStack()}`,
     databaseVersion: dbVersion,
     region,
     deletionProtection: true,

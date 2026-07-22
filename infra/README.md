@@ -88,7 +88,7 @@ pnpm infra:test:ephemeral
   with `{env, layer}` inputs. Uses Workload Identity Federation; `production` routes
   through the `production-gcp` GitHub Environment (required reviewers). Runs `pnpm infra:deploy`.
 - **App release pipeline** — `.github/workflows/app-release.yml`, on push to `main`/tags.
-  Builds+pushes all 5 images → runs the `starter-migrate` Cloud Run Job as a gate →
+  Builds+pushes all 5 images → runs the `platform-migrate` Cloud Run Job as a gate →
   deploys each Cloud Run revision `--no-traffic` → smoke-tests the candidate → shifts
   traffic to 100%. Rollback: `gcloud run services update-traffic <svc> --to-revisions <prev>=100`.
 
@@ -119,7 +119,7 @@ docker compose up -d postgres redis
 
 Includes:
 
-- **Postgres 16** (no extensions) — `postgresql://postgres:postgres@localhost:5432/starter_dev`
+- **Postgres 16** (no extensions) — `postgresql://postgres:postgres@localhost:5432/app_db`
 - **Redis 7** for BullMQ — `redis://localhost:6379`
 - **Workers** — `pnpm --filter @apps/workers dev` polls for jobs
 

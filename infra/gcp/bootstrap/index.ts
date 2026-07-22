@@ -73,9 +73,9 @@ const repo = new gcp.artifactregistry.Repository(
   "starter-images",
   {
     location: region,
-    repositoryId: "starter",
+    repositoryId: "platform",
     format: "DOCKER",
-    description: "Container images for the SaaS starter apps",
+    description: "Container images for the SaaS platform apps",
   },
   { dependsOn: apis },
 );
@@ -138,7 +138,7 @@ if (billingAccountId && budgetAmount) {
     "starter-budget",
     {
       billingAccount: billingAccountId,
-      displayName: pulumi.interpolate`starter-budget-${pulumi.getStack()}`,
+      displayName: pulumi.interpolate`platform-budget-${pulumi.getStack()}`,
       budgetFilter: { projects: [pulumi.interpolate`projects/${project}`] },
       amount: { specifiedAmount: { currencyCode: "USD", units: budgetAmount } },
       thresholdRules: [

@@ -25,8 +25,8 @@ describe("database keys", () => {
   });
 
   it("parses a valid postgres URL", () => {
-    process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/starter_dev";
-    expect(keys().DATABASE_URL).toContain("starter_dev");
+    process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/app_db";
+    expect(keys().DATABASE_URL).toContain("app_db");
   });
 
   it("rejects a malformed DATABASE_URL", () => {

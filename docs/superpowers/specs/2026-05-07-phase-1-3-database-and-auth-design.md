@@ -39,7 +39,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: starter_dev
+      POSTGRES_DB: app_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -56,7 +56,7 @@ volumes:
 
 ```env
 # Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/starter_dev
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app_db
 
 # Better Auth
 BETTER_AUTH_SECRET=change-me-to-a-random-secret

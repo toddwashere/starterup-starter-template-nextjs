@@ -24,7 +24,7 @@ const dbServer = new azure.dbforpostgresql.Server(
   "starter-db",
   {
     resourceGroupName: rg.name,
-    serverName: pulumi.interpolate`starter-db-${pulumi.getStack()}`,
+    serverName: pulumi.interpolate`platform-db-${pulumi.getStack()}`,
     location,
     sku: { name: dbSku, tier: "Burstable" },
     administratorLogin: "app_db_user",
@@ -56,7 +56,7 @@ new azure.dbforpostgresql.FirewallRule("allow-azure", {
 // --- Service Bus Namespace + Queue + DLQ ----------------------------------
 const sbNamespace = new azure.servicebus.Namespace("starter-sb", {
   resourceGroupName: rg.name,
-  namespaceName: pulumi.interpolate`starter-sb-${pulumi.getStack()}`,
+  namespaceName: pulumi.interpolate`platform-sb-${pulumi.getStack()}`,
   location,
   sku: { name: "Basic", tier: "Basic" },
 });
@@ -72,7 +72,7 @@ const jobsQueue = new azure.servicebus.Queue("jobs", {
 // Key Vault for DATABASE_URL secret
 const kv = new azure.keyvault.Vault("starter-kv", {
   resourceGroupName: rg.name,
-  vaultName: pulumi.interpolate`starter-kv-${pulumi.getStack()}`,
+  vaultName: pulumi.interpolate`platform-kv-${pulumi.getStack()}`,
   location,
   properties: {
     sku: { family: "A", name: "standard" },

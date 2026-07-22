@@ -147,7 +147,7 @@ for (const app of APPS) {
     : undefined;
 
   services[app.name] = new gcp.cloudrunv2.Service(app.name, {
-    name: `starter-${app.name}`,
+    name: `platform-${app.name}`,
     location: region,
     ingress: app.worker ? "INGRESS_TRAFFIC_INTERNAL_ONLY" : "INGRESS_TRAFFIC_ALL",
     // Binary Authorization: requires the bootstrap binauthz project policy (same
@@ -181,10 +181,10 @@ for (const app of APPS) {
 }
 
 // --- Migration runner: executed by the app release pipeline (P7), not Pulumi. -
-// `gcloud run jobs execute starter-migrate --wait` runs prisma migrate deploy
+// `gcloud run jobs execute platform-migrate --wait` runs prisma migrate deploy
 // as a gate before traffic shifts to new revisions.
 const migrateJob = new gcp.cloudrunv2.Job("migrate", {
-  name: "starter-migrate",
+  name: "platform-migrate",
   location: region,
   template: {
     template: {
@@ -407,7 +407,7 @@ if (compliance.vpcServiceControls && accessPolicyId) {
   new gcp.accesscontextmanager.ServicePerimeter("starter-vpc-sc", {
     parent: `accessPolicies/${accessPolicyId}`,
     name: `accessPolicies/${accessPolicyId}/servicePerimeters/starter_${pulumi.getStack()}`,
-    title: `starter-${pulumi.getStack()}`,
+    title: `platform-${pulumi.getStack()}`,
     status: {
       restrictedServices: [
         "run.googleapis.com",

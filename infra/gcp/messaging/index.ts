@@ -83,7 +83,7 @@ const jobsSubscription = new gcp.pubsub.Subscription("jobs-sub", {
 // visible in the resource graph.
 const redis = enableRedis
   ? new gcp.redis.Instance("starter-redis", {
-      name: pulumi.interpolate`starter-cache-${pulumi.getStack()}`,
+      name: pulumi.interpolate`platform-cache-${pulumi.getStack()}`,
       tier: redisTier,
       memorySizeGb: redisMemorySizeGb,
       region,

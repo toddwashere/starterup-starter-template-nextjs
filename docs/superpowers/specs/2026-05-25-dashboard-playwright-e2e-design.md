@@ -20,7 +20,7 @@ Vitest already covers server actions, proxy redirects, and layout guards with mo
 | **Runner entrypoint** | `apps/dashboard/e2e/run-e2e.mts` (not repo-root `scripts/`) |
 | **Config** | `apps/dashboard/e2e/playwright.config.ts` |
 | **App under test** | `next start` on port **4000** (production server, not `next dev`) |
-| **Database** | Same as CI/dev: custom `docker/postgres`, DB `starter_dev`, `migrate deploy` + **seed** before E2E |
+| **Database** | Same as CI/dev: custom `docker/postgres`, DB `app_db`, `migrate deploy` + **seed** before E2E |
 | **Seed users** | `user@example.com` / `password123`, org `acme-inc` (existing `packages/database/prisma/seed.ts`) |
 | **Browsers (v1)** | Chromium only |
 | **Workers** | `1` in CI; local default `1` (avoid shared-DB races) |
@@ -93,7 +93,7 @@ Vitest already covers server actions, proxy redirects, and layout guards with mo
          http://localhost:4000  (next start)
                    │
                    ▼
-         Postgres starter_dev (seeded)
+         Postgres app_db (seeded)
 ```
 
 **CI (`e2e.yml`):** Runs only when `vars.E2E_CI_ENABLED == 'true'`. Same Postgres docker build as `ci.yml`, then migrate + seed, build dashboard, install Chromium, start app, `E2E_CI=1 pnpm test:e2e`. Upload Playwright report on failure.

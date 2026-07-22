@@ -29,7 +29,7 @@ cd infra/azure/core
 pnpm install          # or: npm install
 pulumi stack init sandbox
 pulumi config set azure-native:location eastus
-pulumi config set starter-azure-core:resourceGroupName starter-sandbox-rg
+pulumi config set starter-azure-core:resourceGroupName platform-sandbox-rg
 pulumi config set starter-azure-core:dbSkuName Standard_B1ms
 pulumi config set starter-azure-core:dbVersion 16
 
@@ -38,7 +38,7 @@ pnpm install
 pulumi stack init sandbox
 pulumi config set azure-native:location eastus
 pulumi config set starter-azure-apps:coreStackRef <org>/starter-azure-core/sandbox
-pulumi config set starter-azure-apps:imageRegistry starter.azurecr.io
+pulumi config set starter-azure-apps:imageRegistry platform.azurecr.io
 ```
 
 `Pulumi.sandbox.yaml` in each directory contains these keys as placeholders — edit them or set via `pulumi config set`.
@@ -80,7 +80,7 @@ See the [deploy-profiles spec](../../docs/superpowers/specs/2026-05-28-deploy-pr
 
 | Variable | Example |
 |----------|---------|
-| `AZURE_CONTAINER_REGISTRY` | `starter.azurecr.io` |
+| `AZURE_CONTAINER_REGISTRY` | `platform.azurecr.io` |
 | `AZURE_LOCATION` | `eastus` |
 
 ### GitHub Environment: `production-azure`
@@ -125,7 +125,7 @@ az consumption budget create \
   --time-grain Monthly \
   --start-date $(date +%Y-%m-01) \
   --end-date 2030-01-01 \
-  --resource-group starter-sandbox-rg \
+  --resource-group platform-sandbox-rg \
   --notifications \
     "{'actual_GreaterThan_80_Percent':{'enabled':true,'operator':'GreaterThan','threshold':80,'contactEmails':['your@email.com'],'thresholdType':'Actual'}}" \
     "{'actual_GreaterThan_100_Percent':{'enabled':true,'operator':'GreaterThan','threshold':100,'contactEmails':['your@email.com'],'thresholdType':'Actual'}}"

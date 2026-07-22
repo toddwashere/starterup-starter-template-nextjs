@@ -3,7 +3,7 @@ import * as azure from "@pulumi/azure-native";
 
 const config = new pulumi.Config();
 const coreStackRef = config.require("coreStackRef");
-const imageRegistry = config.require("imageRegistry"); // e.g., starter.azurecr.io
+const imageRegistry = config.require("imageRegistry"); // e.g., platform.azurecr.io
 const imageTag = config.get("imageTag") ?? "latest";
 
 const coreStack = new pulumi.StackReference(coreStackRef);
@@ -16,7 +16,7 @@ const serviceBusQueueName = coreStack.getOutput("serviceBusQueueName");
 // --- Container Apps Environment -------------------------------------------
 const env = new azure.app.ManagedEnvironment("starter-env", {
   resourceGroupName,
-  environmentName: pulumi.interpolate`starter-env-${pulumi.getStack()}`,
+  environmentName: pulumi.interpolate`platform-env-${pulumi.getStack()}`,
   location: locationOutput,
   // sandbox: no Log Analytics workspace required for Consumption tier
 });
@@ -40,7 +40,7 @@ const apps: AppDeploy[] = [
 for (const app of apps) {
   new azure.app.ContainerApp(app.name, {
     resourceGroupName,
-    containerAppName: `starter-${app.name}`,
+    containerAppName: `platform-${app.name}`,
     location: locationOutput,
     managedEnvironmentId: env.id,
     configuration: app.external

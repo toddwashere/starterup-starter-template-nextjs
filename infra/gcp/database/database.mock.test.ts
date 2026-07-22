@@ -31,7 +31,7 @@ describe("database layer (mocked)", () => {
                   vpcConnectorId: "projects/test-project/locations/us-central1/connectors/starter-connector",
                   privateServicesConnection: "",
                   artifactRegistryRepo:
-                    "us-central1-docker.pkg.dev/test-project/starter",
+                    "us-central1-docker.pkg.dev/test-project/platform",
                   deployServiceAccountEmail:
                     "github-deploy@test-project.iam.gserviceaccount.com",
                   complianceModeOut: "none",
@@ -45,7 +45,7 @@ describe("database layer (mocked)", () => {
               state: {
                 ...args.inputs,
                 name: args.inputs.name ?? args.name,
-                connectionName: "test-project:us-central1:starter-db-sandbox",
+                connectionName: "test-project:us-central1:platform-db-sandbox",
                 privateIpAddress: "10.10.0.3",
               },
             };
@@ -114,6 +114,6 @@ describe("database layer (mocked)", () => {
     expect(conn).toContain("test-project");
     expect(name).toBe("app_db");
     expect(userName).toBe("app_db_user");
-    expect(instanceName).toContain("starter-db");
+    expect(instanceName).toContain("platform-db");
   });
 });

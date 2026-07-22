@@ -3,9 +3,9 @@ import { cloudRunImageRefs, missingImageRefs } from "./image-preflight";
 
 describe("cloudRunImageRefs", () => {
   it("builds registry paths for every app", () => {
-    const refs = cloudRunImageRefs("us-central1-docker.pkg.dev/acme/starter", "latest");
+    const refs = cloudRunImageRefs("us-central1-docker.pkg.dev/acme/platform", "latest");
     expect(refs.find((r) => r.app === "dashboard")?.image).toBe(
-      "us-central1-docker.pkg.dev/acme/starter/dashboard:latest",
+      "us-central1-docker.pkg.dev/acme/platform/dashboard:latest",
     );
     expect(refs.length).toBe(5);
   });
