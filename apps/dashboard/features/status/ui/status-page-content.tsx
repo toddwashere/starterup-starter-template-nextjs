@@ -96,10 +96,20 @@ export function StatusPageContent() {
                     {check.message}
                   </p>
                 </div>
-                <span
-                  className={stateDotClass(check.state)}
-                  aria-label={`${check.label}: ${check.state}`}
-                />
+                <div className="flex shrink-0 items-center gap-3">
+                  {check.latencyMs != null && (
+                    <p
+                      className="text-sm tabular-nums text-muted-foreground"
+                      aria-label={`${check.label} latency ${check.latencyMs} milliseconds`}
+                    >
+                      {check.latencyMs} ms
+                    </p>
+                  )}
+                  <span
+                    className={stateDotClass(check.state)}
+                    aria-label={`${check.label}: ${check.state}`}
+                  />
+                </div>
               </div>
             </div>
           ))}

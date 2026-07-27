@@ -26,7 +26,11 @@ describe("isPlaceholderSecret", () => {
 });
 
 describe("buildSystemStatus", () => {
-  const probesOk: ProbeResults = { databaseOk: true, authOk: true };
+  const probesOk: ProbeResults = {
+    databaseOk: true,
+    databaseLatencyMs: 12,
+    authOk: true,
+  };
 
   it("always includes database and auth checks", () => {
     const result = buildSystemStatus(probesOk, {});
@@ -34,20 +38,40 @@ describe("buildSystemStatus", () => {
     expect(result.status).toBe("ready");
   });
 
+  it("includes database latency on the ready check", () => {
+    const result = buildSystemStatus(probesOk, {});
+    expect(result.checks.find((c) => c.id === "database")).toMatchObject({
+      state: "ready",
+      latencyMs: 12,
+      message: "Database connection is healthy (12 ms).",
+    });
+  });
+
+  it("omits latency when the probe did not measure it", () => {
+    const result = buildSystemStatus(
+      { databaseOk: true, databaseLatencyMs: null, authOk: true },
+      {},
+    );
+    const database = result.checks.find((c) => c.id === "database");
+    expect(database?.latencyMs).toBeUndefined();
+    expect(database?.message).toBe("Database connection is healthy.");
+  });
+
   it("marks overall not-ready when database is down", () => {
     const result = buildSystemStatus(
-      { databaseOk: false, authOk: true },
+      { databaseOk: false, databaseLatencyMs: 40, authOk: true },
       {},
     );
     expect(result.status).toBe("not-ready");
-    expect(result.checks.find((c) => c.id === "database")?.state).toBe(
-      "not-ready",
-    );
+    expect(result.checks.find((c) => c.id === "database")).toMatchObject({
+      state: "not-ready",
+      latencyMs: 40,
+    });
   });
 
   it("marks overall not-ready when auth is unreachable", () => {
     const result = buildSystemStatus(
-      { databaseOk: true, authOk: false },
+      { databaseOk: true, databaseLatencyMs: 8, authOk: false },
       {},
     );
     expect(result.status).toBe("not-ready");

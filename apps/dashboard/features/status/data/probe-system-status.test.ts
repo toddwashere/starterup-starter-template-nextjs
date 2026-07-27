@@ -11,11 +11,12 @@ vi.mock("@workspace/auth/keys", () => ({
 }));
 
 import { prisma } from "@workspace/database";
-import { getSystemStatus } from "./probe-system-status";
+import { getSystemStatus, resetDbProbeCache } from "./probe-system-status";
 
 describe("getSystemStatus", () => {
   beforeEach(() => {
     vi.mocked(prisma.$queryRaw).mockReset();
+    resetDbProbeCache();
   });
 
   it("probes database and auth then returns aggregated checks", async () => {
@@ -36,6 +37,9 @@ describe("getSystemStatus", () => {
       "auth",
       "email",
     ]);
+    expect(result.checks.find((c) => c.id === "database")?.latencyMs).toEqual(
+      expect.any(Number),
+    );
   });
 
   it("treats auth 5xx as unreachable", async () => {
@@ -45,5 +49,15 @@ describe("getSystemStatus", () => {
     const result = await getSystemStatus(fetchImpl, {});
     expect(result.status).toBe("not-ready");
     expect(result.checks.find((c) => c.id === "auth")?.state).toBe("not-ready");
+  });
+
+  it("caches the database probe across calls within the TTL", async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([{ "?column?": 1 }]);
+    const fetchImpl = vi.fn().mockResolvedValue({ status: 200 });
+
+    await getSystemStatus(fetchImpl, {});
+    await getSystemStatus(fetchImpl, {});
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 });

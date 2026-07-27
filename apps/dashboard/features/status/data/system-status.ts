@@ -9,10 +9,14 @@ export type StatusCheck = {
   label: string;
   state: CheckState;
   message: string;
+  /** Round-trip latency in milliseconds when measured (e.g. database ping). */
+  latencyMs?: number;
 };
 
 export type ProbeResults = {
   databaseOk: boolean;
+  /** Null when the probe did not produce a usable timing. */
+  databaseLatencyMs: number | null;
   authOk: boolean;
 };
 
@@ -89,14 +93,18 @@ export function buildSystemStatus(
   probes: ProbeResults,
   env: EnvMap,
 ): SystemStatus {
+  const databaseLatencyMs = probes.databaseLatencyMs;
   const checks: StatusCheck[] = [
     {
       id: "database",
       label: "Database connection",
       state: probes.databaseOk ? "ready" : "not-ready",
       message: probes.databaseOk
-        ? "Database connection is healthy."
+        ? databaseLatencyMs != null
+          ? `Database connection is healthy (${databaseLatencyMs} ms).`
+          : "Database connection is healthy."
         : "Database connection is unavailable.",
+      ...(databaseLatencyMs != null ? { latencyMs: databaseLatencyMs } : {}),
     },
     {
       id: "auth",
