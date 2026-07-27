@@ -18,6 +18,8 @@ export type ProbeResults = {
   /** Null when the probe did not produce a usable timing. */
   databaseLatencyMs: number | null;
   authOk: boolean;
+  /** Null when the probe did not produce a usable timing. */
+  authLatencyMs: number | null;
 };
 
 export type SystemStatus = {
@@ -111,8 +113,13 @@ export function buildSystemStatus(
       label: "Auth service",
       state: probes.authOk ? "ready" : "not-ready",
       message: probes.authOk
-        ? "Auth URL is reachable."
+        ? probes.authLatencyMs != null
+          ? `Auth URL is reachable (${probes.authLatencyMs} ms).`
+          : "Auth URL is reachable."
         : "Auth URL could not be reached.",
+      ...(probes.authLatencyMs != null
+        ? { latencyMs: probes.authLatencyMs }
+        : {}),
     },
   ];
 

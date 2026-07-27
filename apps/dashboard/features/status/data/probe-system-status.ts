@@ -8,24 +8,28 @@ import {
 } from "./system-status";
 
 const AUTH_PROBE_TIMEOUT_MS = 2_000;
-/** Cache public DB probes so scrapers cannot hammer Postgres. */
-const DB_PROBE_CACHE_TTL_MS = 15_000;
+/** Cache public probes so scrapers cannot hammer dependencies. */
+const PROBE_CACHE_TTL_MS = 15_000;
 
-type DbProbeResult = {
+type TimedProbeResult = {
   ok: boolean;
   latencyMs: number | null;
 };
 
-let dbProbeCache: { at: number; result: DbProbeResult } | null = null;
-let dbProbeInFlight: Promise<DbProbeResult> | null = null;
+let dbProbeCache: { at: number; result: TimedProbeResult } | null = null;
+let dbProbeInFlight: Promise<TimedProbeResult> | null = null;
+let authProbeCache: { at: number; result: TimedProbeResult } | null = null;
+let authProbeInFlight: Promise<TimedProbeResult> | null = null;
 
-/** Clears the in-process DB probe cache (for tests). */
+/** Clears in-process probe caches (for tests). */
 export function resetDbProbeCache(): void {
   dbProbeCache = null;
   dbProbeInFlight = null;
+  authProbeCache = null;
+  authProbeInFlight = null;
 }
 
-async function runDatabaseProbe(): Promise<DbProbeResult> {
+async function runDatabaseProbe(): Promise<TimedProbeResult> {
   const started = performance.now();
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -41,9 +45,9 @@ async function runDatabaseProbe(): Promise<DbProbeResult> {
   }
 }
 
-async function probeDatabase(): Promise<DbProbeResult> {
+async function probeDatabase(): Promise<TimedProbeResult> {
   const now = Date.now();
-  if (dbProbeCache && now - dbProbeCache.at < DB_PROBE_CACHE_TTL_MS) {
+  if (dbProbeCache && now - dbProbeCache.at < PROBE_CACHE_TTL_MS) {
     return dbProbeCache.result;
   }
   if (dbProbeInFlight) {
@@ -62,9 +66,10 @@ async function probeDatabase(): Promise<DbProbeResult> {
   return dbProbeInFlight;
 }
 
-async function probeAuth(
-  fetchImpl: typeof fetch = fetch,
-): Promise<boolean> {
+async function runAuthProbe(
+  fetchImpl: typeof fetch,
+): Promise<TimedProbeResult> {
+  const started = performance.now();
   try {
     const baseUrl = authKeys().BETTER_AUTH_URL.replace(/\/$/, "");
     const controller = new AbortController();
@@ -77,20 +82,50 @@ async function probeAuth(
         headers: { accept: "application/json" },
       });
       // Any HTTP response means the auth handler is reachable (401/null session is fine).
-      return response.status > 0 && response.status < 500;
+      const ok = response.status > 0 && response.status < 500;
+      return {
+        ok,
+        latencyMs: Math.round(performance.now() - started),
+      };
     } finally {
       clearTimeout(timeout);
     }
   } catch {
-    return false;
+    return {
+      ok: false,
+      latencyMs: Math.round(performance.now() - started),
+    };
   }
+}
+
+async function probeAuth(
+  fetchImpl: typeof fetch = fetch,
+): Promise<TimedProbeResult> {
+  const now = Date.now();
+  if (authProbeCache && now - authProbeCache.at < PROBE_CACHE_TTL_MS) {
+    return authProbeCache.result;
+  }
+  if (authProbeInFlight) {
+    return authProbeInFlight;
+  }
+
+  authProbeInFlight = runAuthProbe(fetchImpl)
+    .then((result) => {
+      authProbeCache = { at: Date.now(), result };
+      return result;
+    })
+    .finally(() => {
+      authProbeInFlight = null;
+    });
+
+  return authProbeInFlight;
 }
 
 export async function getSystemStatus(
   fetchImpl: typeof fetch = fetch,
   env: EnvMap = process.env,
 ): Promise<SystemStatus> {
-  const [database, authOk] = await Promise.all([
+  const [database, auth] = await Promise.all([
     probeDatabase(),
     probeAuth(fetchImpl),
   ]);
@@ -98,7 +133,8 @@ export async function getSystemStatus(
   const probes: ProbeResults = {
     databaseOk: database.ok,
     databaseLatencyMs: database.latencyMs,
-    authOk,
+    authOk: auth.ok,
+    authLatencyMs: auth.latencyMs,
   };
   return buildSystemStatus(probes, env);
 }

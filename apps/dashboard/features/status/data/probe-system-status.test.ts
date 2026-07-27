@@ -40,6 +40,9 @@ describe("getSystemStatus", () => {
     expect(result.checks.find((c) => c.id === "database")?.latencyMs).toEqual(
       expect.any(Number),
     );
+    expect(result.checks.find((c) => c.id === "auth")?.latencyMs).toEqual(
+      expect.any(Number),
+    );
   });
 
   it("treats auth 5xx as unreachable", async () => {
@@ -51,7 +54,7 @@ describe("getSystemStatus", () => {
     expect(result.checks.find((c) => c.id === "auth")?.state).toBe("not-ready");
   });
 
-  it("caches the database probe across calls within the TTL", async () => {
+  it("caches database and auth probes across calls within the TTL", async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValue([{ "?column?": 1 }]);
     const fetchImpl = vi.fn().mockResolvedValue({ status: 200 });
 
@@ -59,5 +62,6 @@ describe("getSystemStatus", () => {
     await getSystemStatus(fetchImpl, {});
 
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

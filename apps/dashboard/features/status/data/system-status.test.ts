@@ -30,6 +30,7 @@ describe("buildSystemStatus", () => {
     databaseOk: true,
     databaseLatencyMs: 12,
     authOk: true,
+    authLatencyMs: 18,
   };
 
   it("always includes database and auth checks", () => {
@@ -49,17 +50,39 @@ describe("buildSystemStatus", () => {
 
   it("omits latency when the probe did not measure it", () => {
     const result = buildSystemStatus(
-      { databaseOk: true, databaseLatencyMs: null, authOk: true },
+      {
+        databaseOk: true,
+        databaseLatencyMs: null,
+        authOk: true,
+        authLatencyMs: null,
+      },
       {},
     );
     const database = result.checks.find((c) => c.id === "database");
     expect(database?.latencyMs).toBeUndefined();
     expect(database?.message).toBe("Database connection is healthy.");
+    const auth = result.checks.find((c) => c.id === "auth");
+    expect(auth?.latencyMs).toBeUndefined();
+    expect(auth?.message).toBe("Auth URL is reachable.");
+  });
+
+  it("includes auth latency on the ready check", () => {
+    const result = buildSystemStatus(probesOk, {});
+    expect(result.checks.find((c) => c.id === "auth")).toMatchObject({
+      state: "ready",
+      latencyMs: 18,
+      message: "Auth URL is reachable (18 ms).",
+    });
   });
 
   it("marks overall not-ready when database is down", () => {
     const result = buildSystemStatus(
-      { databaseOk: false, databaseLatencyMs: 40, authOk: true },
+      {
+        databaseOk: false,
+        databaseLatencyMs: 40,
+        authOk: true,
+        authLatencyMs: 10,
+      },
       {},
     );
     expect(result.status).toBe("not-ready");
@@ -71,13 +94,19 @@ describe("buildSystemStatus", () => {
 
   it("marks overall not-ready when auth is unreachable", () => {
     const result = buildSystemStatus(
-      { databaseOk: true, databaseLatencyMs: 8, authOk: false },
+      {
+        databaseOk: true,
+        databaseLatencyMs: 8,
+        authOk: false,
+        authLatencyMs: 25,
+      },
       {},
     );
     expect(result.status).toBe("not-ready");
-    expect(result.checks.find((c) => c.id === "auth")?.state).toBe(
-      "not-ready",
-    );
+    expect(result.checks.find((c) => c.id === "auth")).toMatchObject({
+      state: "not-ready",
+      latencyMs: 25,
+    });
   });
 
   it("omits email when no email env vars are set", () => {
