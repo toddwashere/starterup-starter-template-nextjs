@@ -61,13 +61,9 @@ export function StatusPageContent() {
       <AppLogo size="lg" />
       <Card className="w-full max-w-xl">
         <CardHeader>
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <CardTitle className="text-3xl">System Status</CardTitle>
-              <CardDescription>
-                Live readiness checks for core dependencies. Optional
-                integrations appear only when configured.
-              </CardDescription>
             </div>
             <Badge variant={overallReady ? "default" : "destructive"}>
               {status ? status.status : "checking"}
