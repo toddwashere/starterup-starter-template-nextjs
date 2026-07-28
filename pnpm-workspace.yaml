@@ -13,6 +13,8 @@ overrides:
   "@better-auth/oauth-provider": "1.6.25"
   next: "16.2.12"
   hono: ">=4.12.25"
+  # 2.0.5+ required for Windows serve-static path traversal advisory.
+  "@hono/node-server": ">=2.0.5"
   axios: ">=1.18.0"
   # @types/request asks for form-data ^2 but resolves a 4.x copy in this tree;
   # pin the patched 4.x release (types-only consumer).

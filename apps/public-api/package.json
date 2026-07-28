@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@better-auth/oauth-provider": "^1.6.25",
-    "@hono/node-server": "~1.19.11",
+    "@hono/node-server": "^2.0.5",
     "@hono/zod-openapi": "0.18.4",
     "@scalar/hono-api-reference": "~0.5.184",
     "@workspace/auth": "workspace:*",
