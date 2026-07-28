@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.193",
-    "@better-auth-ui/react": "^1.6.8",
+    "@better-auth-ui/react": "^1.6.37",
     "@ebay/nice-modal-react": "^1",
     "@hookform/resolvers": "^5",
     "@react-email/editor": "^1.5.3",
@@ -38,10 +38,10 @@
     "@workspace/ui": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
     "ai": "^6.0.191",
-    "better-auth": "^1.6.14",
+    "better-auth": "^1.6.25",
     "bullmq": "^5",
     "lucide-react": "^0.469",
-    "next": "^16.2",
+    "next": "^16.2.12",
     "next-themes": "^0.4",
     "react": "^19.1",
     "react-dom": "^19.1",
@@ -61,6 +61,6 @@
     "happy-dom": "^20.10.6",
     "tsx": "^4",
     "typescript": "^5.7",
-    "vitest": "^3"
+    "vitest": "^3.2.7"
   }
 }

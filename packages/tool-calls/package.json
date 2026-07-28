@@ -17,6 +17,6 @@
   "devDependencies": {
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",
-    "vitest": "^3"
+    "vitest": "^3.2.7"
   }
 }

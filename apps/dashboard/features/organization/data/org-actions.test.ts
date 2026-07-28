@@ -22,12 +22,20 @@ vi.mock("@workspace/auth/guards", () => ({
   }),
 }));
 
-vi.mock("@workspace/auth/member-role-management", () => {
-  // The real module imports `@workspace/database` (Prisma) at module scope,
-  // which requires env vars this test process doesn't set. Define a
-  // structurally-equivalent error class here instead of `vi.importActual`
-  // so `instanceof` checks still hold — `org-actions.ts` resolves the same
-  // mocked module for its `MemberRoleManagementError` import.
+// Defined via vi.hoisted so the class/fns exist when the (hoisted) vi.mock factory runs.
+// The real module imports `@workspace/database` (Prisma) at module scope,
+// which requires env vars this test process doesn't set. Define a
+// structurally-equivalent error class here instead of `vi.importActual`
+// so `instanceof` checks still hold — `org-actions.ts` resolves the same
+// mocked module for its `MemberRoleManagementError` import.
+const {
+  MemberRoleManagementError,
+  replaceMemberRoles,
+  mutateMemberRoles,
+  inviteMemberWithRoles,
+  transferOrganizationOwnership,
+  getMemberManagementContext,
+} = vi.hoisted(() => {
   class MemberRoleManagementError extends Error {
     code: string;
     constructor(code: string, message: string) {
@@ -45,6 +53,15 @@ vi.mock("@workspace/auth/member-role-management", () => {
   };
 });
 
+vi.mock("@workspace/auth/member-role-management", () => ({
+  MemberRoleManagementError,
+  replaceMemberRoles,
+  mutateMemberRoles,
+  inviteMemberWithRoles,
+  transferOrganizationOwnership,
+  getMemberManagementContext,
+}));
+
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers({ "x-test": "1" })),
 }));
@@ -57,13 +74,6 @@ import { auth } from "@workspace/auth";
 import { requireOrgPermission } from "@workspace/auth/guards";
 import { headers } from "next/headers";
 import { captureException } from "@workspace/observability/capture";
-import {
-  replaceMemberRoles,
-  mutateMemberRoles,
-  inviteMemberWithRoles,
-  transferOrganizationOwnership,
-  MemberRoleManagementError,
-} from "@workspace/auth/member-role-management";
 import { InvalidOrgRoleSetError } from "@workspace/auth/org-roles";
 import {
   replaceMemberRolesAction,

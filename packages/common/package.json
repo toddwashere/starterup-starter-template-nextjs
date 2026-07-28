@@ -20,7 +20,7 @@
     "@types/node": "^24",
     "@workspace/tooling": "workspace:*",
     "typescript": "^5.7",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^3.3.0",

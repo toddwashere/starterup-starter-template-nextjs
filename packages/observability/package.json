@@ -36,9 +36,9 @@
     "@types/react": "^19",
     "@workspace/tooling": "workspace:*",
     "eslint": "^9.18",
-    "next": "^16",
+    "next": "^16.2.12",
     "react": "^19",
     "typescript": "^5.7",
-    "vitest": "^3"
+    "vitest": "^3.2.7"
   }
 }

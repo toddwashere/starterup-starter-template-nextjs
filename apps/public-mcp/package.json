@@ -13,7 +13,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "^1.6.14",
+    "@better-auth/oauth-provider": "^1.6.25",
     "@modelcontextprotocol/sdk": "^1",
     "@workspace/auth": "workspace:*",
     "@workspace/common": "workspace:*",
@@ -26,6 +26,6 @@
     "@workspace/tooling": "workspace:*",
     "tsx": "^4",
     "typescript": "^5.7",
-    "vitest": "^3"
+    "vitest": "^3.2.7"
   }
 }
