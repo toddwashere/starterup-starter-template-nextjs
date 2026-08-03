@@ -65,6 +65,7 @@ describe("AcceptInvitationPageContent", () => {
     expect(await screen.findByText(/sign in required/i)).toBeInTheDocument();
 
     const createAccount = screen.getByRole("link", { name: /create account/i });
+    expect(createAccount.getAttribute("href") ?? "").toMatch(/^\/sign-up/);
     expectRedirectToAcceptInvitation(createAccount, "authinv_abc");
   });
 
@@ -88,6 +89,7 @@ describe("AcceptInvitationPageContent", () => {
         query: { id: "authinv_abc" },
       }),
     );
+    expect(mockGetInvitation).toHaveBeenCalledTimes(1);
     expect(
       await screen.findByText(/organization invitation/i),
     ).toBeInTheDocument();
