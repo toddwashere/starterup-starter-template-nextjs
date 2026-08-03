@@ -112,6 +112,10 @@ export const auth = betterAuth({
     organization({
       ac,
       roles: orgRoles,
+      // Invitation IDs are opaque (`authinv_…` via createBetterAuthId). Better Auth
+      // otherwise defaults requireEmailVerificationOnInvitation=true when a custom
+      // generateId is set, which blocks brand-new invitees after sign-up.
+      requireEmailVerificationOnInvitation: false,
       sendInvitationEmail: createOrganizationInvitationEmailHandler(
         BETTER_AUTH_URL,
       ),
