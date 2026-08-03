@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@workspace/auth/client";
 import { Button } from "@workspace/ui/components/button";
@@ -13,7 +14,12 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { getPathForOrg, getPathForSignIn } from "@workspace/routes";
+import {
+  getPathForAcceptInvitation,
+  getPathForOrg,
+  getPathForSignIn,
+  getPathForSignUp,
+} from "@workspace/routes";
 import { useQuery } from "@tanstack/react-query";
 
 interface AcceptInvitationPageContentProps {
@@ -26,22 +32,29 @@ export function AcceptInvitationPageContent({
   const router = useRouter();
   const { data: session, isPending: sessionLoading } =
     authClient.useSession();
+  const hasUser = !!session?.user;
   const [isAccepting, setIsAccepting] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: invitation, isLoading: invitationLoading } = useQuery({
+  const redirectTo = getPathForAcceptInvitation(invitationId);
+  const redirectQuery = `redirectTo=${encodeURIComponent(redirectTo)}`;
+
+  const {
+    data: invitation,
+    isLoading: invitationLoading,
+    isError: invitationError,
+  } = useQuery({
     queryKey: ["invitation", invitationId],
-    queryFn: async () => {
-      return authClient.organization.getInvitation({
+    queryFn: async () =>
+      authClient.organization.getInvitation({
         query: { id: invitationId },
-      });
-    },
+      }),
+    enabled: hasUser,
+    retry: false,
   });
 
-  const isLoading = sessionLoading || invitationLoading;
-
-  if (isLoading) {
+  if (sessionLoading || (hasUser && invitationLoading)) {
     return (
       <div className="mx-auto max-w-md pt-20">
         <Card>
@@ -57,7 +70,40 @@ export function AcceptInvitationPageContent({
     );
   }
 
-  if (!invitation) {
+  if (!hasUser) {
+    return (
+      <div className="mx-auto max-w-md pt-20">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign In Required</CardTitle>
+            <CardDescription>
+              You need to sign in to accept this invitation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              You&apos;ve been invited to join an organization. Sign in or
+              create an account to continue.
+            </p>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild className="flex-1">
+              <Link href={`${getPathForSignIn()}?${redirectQuery}`}>
+                Sign in
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="flex-1">
+              <Link href={`${getPathForSignUp()}?${redirectQuery}`}>
+                Create account
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  if (invitationError || !invitation) {
     return (
       <div className="mx-auto max-w-md pt-20">
         <Card>
@@ -70,41 +116,6 @@ export function AcceptInvitationPageContent({
           <CardFooter>
             <Button variant="outline" onClick={() => router.push("/")}>
               Go to Dashboard
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!session?.user) {
-    return (
-      <div className="mx-auto max-w-md pt-20">
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign In Required</CardTitle>
-            <CardDescription>
-              You need to sign in to accept this invitation.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              You&apos;ve been invited to join{" "}
-              <span className="font-medium">
-                {invitation.organizationName}
-              </span>{" "}
-              as a <span className="font-medium">{invitation.role}</span>.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button
-              onClick={() =>
-                router.push(
-                  `${getPathForSignIn()}?callbackUrl=/accept-invitation/${invitationId}`,
-                )
-              }
-            >
-              Sign In to Continue
             </Button>
           </CardFooter>
         </Card>
