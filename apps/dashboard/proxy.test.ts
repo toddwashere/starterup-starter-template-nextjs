@@ -91,4 +91,26 @@ describe("proxy", () => {
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/");
   });
+
+  it("honors redirectTo when authenticated user hits /sign-in", () => {
+    const res = proxy(
+      buildRequest(
+        "/sign-in?redirectTo=%2Faccept-invitation%2Fauthinv_abc",
+        true,
+      ),
+    );
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location")!);
+    expect(location.pathname).toBe("/accept-invitation/authinv_abc");
+  });
+
+  it("ignores unsafe redirectTo when authenticated user hits /sign-up", () => {
+    const res = proxy(
+      buildRequest("/sign-up?redirectTo=https%3A%2F%2Fevil.example", true),
+    );
+    expect(res.status).toBe(307);
+    const location = new URL(res.headers.get("location")!);
+    expect(location.pathname).toBe("/");
+  });
 });
+

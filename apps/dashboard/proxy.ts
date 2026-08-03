@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { getSafePostAuthRedirectPath } from "@/features/auth/lib/get-safe-post-auth-redirect-path";
 
 const SESSION_COOKIE = "better-auth.session_token";
 const SESSION_COOKIE_SECURE = "__Secure-better-auth.session_token";
@@ -39,7 +40,10 @@ export function proxy(request: NextRequest) {
   const isAuthPath = authPaths.some((p) => pathname.startsWith(p));
 
   if (isAuthenticated && isAuthPath) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const redirectTo = getSafePostAuthRedirectPath(
+      request.nextUrl.searchParams.get("redirectTo"),
+    );
+    return NextResponse.redirect(new URL(redirectTo, request.url));
   }
 
   if (!isAuthenticated && !isPublicPath) {

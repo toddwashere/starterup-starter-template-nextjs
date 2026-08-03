@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { authClient, invalidateOrganizationList } from "../data/auth-client";
 import { Button } from "@workspace/ui/components/button";
@@ -17,9 +17,15 @@ import {
 } from "@workspace/ui/components/card";
 import { getPathForSignIn } from "@workspace/routes";
 import { passwordManagerSafeFormProps } from "./password-manager-safe-form-props";
+import {
+  getSafePostAuthRedirectPath,
+  withRedirectToQuery,
+} from "../lib/get-safe-post-auth-redirect-path";
 
 export function SignUpPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,7 +47,7 @@ export function SignUpPageContent() {
     try {
       await authClient.signUp.email({ email, password, name });
       invalidateOrganizationList();
-      router.push("/");
+      router.push(getSafePostAuthRedirectPath(redirectTo));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
     } finally {
@@ -117,7 +123,10 @@ export function SignUpPageContent() {
           </Button>
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href={getPathForSignIn()} className="text-primary hover:underline">
+            <Link
+              href={withRedirectToQuery(getPathForSignIn(), redirectTo)}
+              className="text-primary hover:underline"
+            >
               Sign in
             </Link>
           </p>
