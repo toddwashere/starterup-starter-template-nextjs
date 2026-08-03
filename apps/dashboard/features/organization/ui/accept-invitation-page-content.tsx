@@ -19,8 +19,11 @@ import {
   getPathForOrg,
   getPathForSignIn,
   getPathForSignUp,
+  getPathForVerifyEmail,
 } from "@workspace/routes";
 import { useQuery } from "@tanstack/react-query";
+import { classifyInvitationError } from "./classify-invitation-error";
+import { withRedirectToQuery } from "@/features/auth/lib/get-safe-post-auth-redirect-path";
 
 interface AcceptInvitationPageContentProps {
   invitationId: string;
@@ -35,6 +38,7 @@ export function AcceptInvitationPageContent({
   const hasUser = !!session?.user;
   const [isAccepting, setIsAccepting] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
+  const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const redirectTo = getPathForAcceptInvitation(invitationId);
@@ -44,6 +48,7 @@ export function AcceptInvitationPageContent({
     data: invitation,
     isLoading: invitationLoading,
     isError: invitationError,
+    error: invitationQueryError,
   } = useQuery({
     queryKey: ["invitation", invitationId],
     queryFn: async () =>
@@ -104,14 +109,104 @@ export function AcceptInvitationPageContent({
   }
 
   if (invitationError || !invitation) {
+    const kind = classifyInvitationError(invitationQueryError);
+    const signedInEmail = session?.user?.email;
+
+    if (kind === "wrong_recipient") {
+      return (
+        <div className="mx-auto max-w-md pt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Wrong account</CardTitle>
+              <CardDescription>
+                This invitation was sent to a different email than the account
+                you&apos;re signed in with
+                {signedInEmail ? (
+                  <>
+                    {" "}
+                    (<span className="font-medium">{signedInEmail}</span>)
+                  </>
+                ) : null}
+                .
+              </CardDescription>
+            </CardHeader>
+            <CardFooter className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                className="flex-1"
+                disabled={isSwitchingAccount}
+                onClick={async () => {
+                  setIsSwitchingAccount(true);
+                  try {
+                    await authClient.signOut();
+                    router.push(
+                      withRedirectToQuery(getPathForSignIn(), redirectTo),
+                    );
+                  } finally {
+                    setIsSwitchingAccount(false);
+                  }
+                }}
+              >
+                {isSwitchingAccount ? "Switching..." : "Switch account"}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => router.push("/")}
+              >
+                Go to Dashboard
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      );
+    }
+
+    if (kind === "email_verification") {
+      return (
+        <div className="mx-auto max-w-md pt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Verify your email</CardTitle>
+              <CardDescription>
+                Verify your email address, then return to this invitation to
+                continue.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter className="flex flex-col gap-3 sm:flex-row">
+              <Button asChild className="flex-1">
+                <Link
+                  href={withRedirectToQuery(
+                    getPathForVerifyEmail(),
+                    redirectTo,
+                  )}
+                >
+                  Check verification instructions
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => router.push("/")}
+              >
+                Go to Dashboard
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      );
+    }
+
+    const description =
+      kind === "inviter_left"
+        ? "The person who invited you is no longer a member of this organization. Ask an admin to send a new invitation."
+        : "This invitation is invalid or has expired. Ask an admin to send a new invitation if you still need access.";
+
     return (
       <div className="mx-auto max-w-md pt-20">
         <Card>
           <CardHeader>
             <CardTitle>Invalid Invitation</CardTitle>
-            <CardDescription>
-              This invitation is invalid or has expired.
-            </CardDescription>
+            <CardDescription>{description}</CardDescription>
           </CardHeader>
           <CardFooter>
             <Button variant="outline" onClick={() => router.push("/")}>
@@ -136,7 +231,20 @@ export function AcceptInvitationPageContent({
         router.push("/");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to accept invitation");
+      const kind = classifyInvitationError(err);
+      if (kind === "email_verification") {
+        setError(
+          "Verify your email address before accepting this invitation.",
+        );
+      } else if (kind === "wrong_recipient") {
+        setError(
+          "This invitation was sent to a different email than your signed-in account.",
+        );
+      } else {
+        setError(
+          err instanceof Error ? err.message : "Failed to accept invitation",
+        );
+      }
     } finally {
       setIsAccepting(false);
     }

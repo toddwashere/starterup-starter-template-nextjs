@@ -8,6 +8,7 @@ import { AcceptInvitationPageContent } from "./accept-invitation-page-content";
 const mockGetInvitation = vi.fn();
 const mockUseSession = vi.fn();
 const mockPush = vi.fn();
+const mockSignOut = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
@@ -16,6 +17,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@workspace/auth/client", () => ({
   authClient: {
     useSession: () => mockUseSession(),
+    signOut: (...args: unknown[]) => mockSignOut(...args),
     organization: {
       getInvitation: (...args: unknown[]) => mockGetInvitation(...args),
       acceptInvitation: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("@workspace/auth/client", () => ({
     },
   },
 }));
+
 
 function renderPage(invitationId = "authinv_test") {
   const client = createTestQueryClient();
@@ -110,7 +113,56 @@ describe("AcceptInvitationPageContent", () => {
 
     expect(await screen.findByText(/invalid invitation/i)).toBeInTheDocument();
     expect(screen.queryByText(/sign in required/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/ask an admin to send a new invitation/i),
+    ).toBeInTheDocument();
   });
+
+  it("shows wrong-account messaging when signed-in email is not the recipient", async () => {
+    mockUseSession.mockReturnValue({
+      data: { user: { id: "user_1", email: "other@example.com" } },
+      isPending: false,
+    });
+    mockGetInvitation.mockRejectedValue(
+      new Error("You are not the recipient of the invitation"),
+    );
+
+    renderPage("authinv_abc");
+
+    expect(await screen.findByText(/wrong account/i)).toBeInTheDocument();
+    expect(screen.getByText("other@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /switch account/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/invalid invitation/i)).not.toBeInTheDocument();
+  });
+
+  it("shows verify-email messaging when invitation requires verification", async () => {
+    mockUseSession.mockReturnValue({
+      data: {
+        user: { id: "user_1", email: "invitee@example.com", emailVerified: false },
+      },
+      isPending: false,
+    });
+    mockGetInvitation.mockRejectedValue(
+      new Error(
+        "Email verification required to view or list invitations for the session email",
+      ),
+    );
+
+    renderPage("authinv_abc");
+
+    expect(
+      await screen.findByText("Verify your email", { selector: "[data-slot=card-title]" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /check verification instructions/i }),
+    ).toHaveAttribute(
+      "href",
+      "/verify-email?redirectTo=%2Faccept-invitation%2Fauthinv_abc",
+    );
+  });
+
 
   it("shows loading skeleton without calling getInvitation while session is pending", () => {
     mockUseSession.mockReturnValue({ data: null, isPending: true });
