@@ -50,7 +50,7 @@ export function AcceptInvitationPageContent({
       authClient.organization.getInvitation({
         query: { id: invitationId },
       }),
-    enabled: hasUser,
+    enabled: hasUser && !sessionLoading,
     retry: false,
   });
 

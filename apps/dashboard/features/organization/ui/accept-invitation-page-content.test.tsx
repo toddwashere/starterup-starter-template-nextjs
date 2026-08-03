@@ -121,4 +121,17 @@ describe("AcceptInvitationPageContent", () => {
     expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
     expect(mockGetInvitation).not.toHaveBeenCalled();
   });
+
+  it("shows loading skeleton without calling getInvitation when cached user exists but session is still pending", () => {
+    mockUseSession.mockReturnValue({
+      data: { user: { id: "user_1", email: "invitee@example.com" } },
+      isPending: true,
+    });
+    renderPage("authinv_abc");
+
+    expect(screen.queryByText(/sign in required/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/organization invitation/i)).not.toBeInTheDocument();
+    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(mockGetInvitation).not.toHaveBeenCalled();
+  });
 });
