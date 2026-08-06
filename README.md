@@ -213,3 +213,7 @@ Requires a provider API key in `.env`. See [`evals/promptfoo/README.md`](evals/p
 ## AI-Assisted Development
 
 Includes skills, hooks, and instruction files for agentic development with Claude Code, Cursor, and other AI tools via the Superpowers framework.
+
+## License
+
+MIT © [Todd Fisher](https://github.com/toddwashere) — see [`LICENSE`](LICENSE).

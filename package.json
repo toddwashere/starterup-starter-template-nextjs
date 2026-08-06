@@ -1,6 +1,8 @@
 {
   "name": "superpowers-starter-template",
   "private": true,
+  "license": "MIT",
+  "author": "Todd Fisher",
   "engines": {
     "node": ">=24.16.0"
   },
