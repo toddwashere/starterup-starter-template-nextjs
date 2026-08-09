@@ -1,4 +1,9 @@
-import { buildPublicUrlEnv } from "./public-urls";
+import {
+  buildPublicUrlEnv,
+  resolveLbHosts,
+  resolveStaticHosts,
+  type PublicUrlEnvName,
+} from "./public-urls";
 
 export type PublicUrlEnvKey = keyof ReturnType<typeof buildPublicUrlEnv>;
 
@@ -19,33 +24,70 @@ const LOOPBACK_PUBLIC_URL_ENV: Record<PublicUrlEnvKey, string> = {
 };
 
 /**
+ * Flat per-env hostnames make staging and production siblings under one
+ * registrable domain, so a parent-domain cookie would be sent to BOTH. Require
+ * an exact match against this environment's own hostnames.
+ *
+ * A suffix test is deliberately NOT used: `.example.com` is a suffix of
+ * `api-staging.example.com`, so a suffix rule would permit precisely the
+ * cross-environment value this guard exists to reject.
+ */
+export function assertCookieDomainScoped(input: {
+  cookieDomain: string | undefined;
+  ownHosts: string[];
+  env: string;
+}): void {
+  const raw = input.cookieDomain?.trim();
+  if (!raw) return;
+  const normalized = raw.startsWith(".") ? raw.slice(1) : raw;
+  if (input.ownHosts.includes(normalized)) return;
+  throw new Error(
+    `WEB_AUTH_COOKIE_DOMAIN=${raw} is not one of the ${input.env} hostnames ` +
+      `(${input.ownHosts.join(", ")}). A parent-domain cookie would be sent to ` +
+      `every environment under the same registrable domain.`,
+  );
+}
+
+/**
  * Merge order (later wins): infraVars → public URLs (derived or loopback) →
  * publicUrlOverrides → shared → byApp[appName].
  */
 export function buildAppRuntimeEnvironmentVariables(input: {
-  /** Env apex (e.g. `staging.example.com` or `example.com`). */
-  apexDomain: string;
+  /** Organization root domain (e.g. `example.com`). Empty → loopback. */
+  rootDomain: string;
+  env: PublicUrlEnvName;
   runtimeEnv: AwsRuntimeEnvConfig;
   appName: string;
   infraVars: Record<string, string>;
 }): Record<string, string> {
-  const { apexDomain, runtimeEnv, appName, infraVars } = input;
+  const { rootDomain, env, runtimeEnv, appName, infraVars } = input;
+  const root = rootDomain.trim();
   const publicUrls =
-    apexDomain.trim() === ""
-      ? LOOPBACK_PUBLIC_URL_ENV
-      : buildPublicUrlEnv(apexDomain);
+    root === "" ? LOOPBACK_PUBLIC_URL_ENV : buildPublicUrlEnv(root, env);
 
-  const overrides = Object.fromEntries(
-    Object.entries(runtimeEnv.publicUrlOverrides ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+  // `publicUrlOverrides` is a Partial, so spreading it widens values to
+  // `string | undefined`. Drop undefined entries rather than casting them
+  // away: an env var explicitly set to undefined must not reach App Runner.
+  const merged: Record<string, string> = Object.fromEntries(
+    Object.entries({
+      ...infraVars,
+      ...publicUrls,
+      ...runtimeEnv.publicUrlOverrides,
+      ...runtimeEnv.shared,
+      ...(runtimeEnv.byApp?.[appName] ?? {}),
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-  return {
-    ...infraVars,
-    ...publicUrls,
-    ...overrides,
-    ...runtimeEnv.shared,
-    ...(runtimeEnv.byApp?.[appName] ?? {}),
-  };
+  if (root !== "") {
+    assertCookieDomainScoped({
+      cookieDomain: merged.WEB_AUTH_COOKIE_DOMAIN,
+      ownHosts: [
+        ...resolveLbHosts(root, env).map((h) => h.host),
+        ...resolveStaticHosts(root, env).map((h) => h.host),
+      ],
+      env,
+    });
+  }
+
+  return merged;
 }

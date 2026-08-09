@@ -10,6 +10,11 @@ export interface AppDescriptor {
   needsPubsub: boolean;
   needsStorage: boolean;
   usesRedis: boolean;
+  /**
+   * When false, keep the app in the monorepo/catalog but skip cloud deploy
+   * (App Runner / Cloud Run / Render / image preflight). Defaults to true.
+   */
+  deploy?: boolean;
 }
 
 export const APPS: readonly AppDescriptor[] = [
@@ -25,6 +30,7 @@ export const APPS: readonly AppDescriptor[] = [
     needsPubsub: false,
     needsStorage: true,
     usesRedis: true,
+    deploy: true,
   },
   {
     name: "www",
@@ -38,6 +44,7 @@ export const APPS: readonly AppDescriptor[] = [
     needsPubsub: false,
     needsStorage: false,
     usesRedis: false,
+    deploy: true,
   },
   {
     name: "public-api",
@@ -51,6 +58,7 @@ export const APPS: readonly AppDescriptor[] = [
     needsPubsub: true,
     needsStorage: true,
     usesRedis: false,
+    deploy: true,
   },
   {
     name: "public-mcp",
@@ -64,6 +72,7 @@ export const APPS: readonly AppDescriptor[] = [
     needsPubsub: false,
     needsStorage: false,
     usesRedis: false,
+    deploy: true,
   },
   {
     name: "workers",
@@ -77,6 +86,7 @@ export const APPS: readonly AppDescriptor[] = [
     needsPubsub: true,
     needsStorage: true,
     usesRedis: false,
+    deploy: true,
   },
 ] as const;
 

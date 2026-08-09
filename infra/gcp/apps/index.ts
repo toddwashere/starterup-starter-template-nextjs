@@ -43,7 +43,11 @@ const imageRegistry = config.get("imageRegistry")
   : artifactRegistryRepo;
 const imageTag = config.get("imageTag") ?? "latest";
 const apexDomain = config.get("lbDomain") ?? "";
-const publicUrlEnv = apexDomain ? buildPublicUrlEnv(apexDomain) : {};
+// GCP `lbDomain` is the env apex (e.g. staging.example.com). Passing it as the
+// root with env=production preserves nested-under-apex host rules for the LB.
+const publicUrlEnv = apexDomain
+  ? buildPublicUrlEnv(apexDomain, "production")
+  : {};
 
 // VPC connector access — shared by Cloud Run Services AND the migrate Job so that
 // private-IP Cloud SQL is reachable in every topology (connector absent → undefined).
@@ -218,7 +222,7 @@ let dnsAuthorizationRecordsOut: pulumi.Output<unknown> = pulumi.output([]);
 
 if (enableHttpsLb && pulumi.getStack() !== "sandbox") {
   const baseDomain = config.require("lbDomain");
-  const hosts = resolveLbHosts(baseDomain);
+  const hosts = resolveLbHosts(baseDomain, "production");
 
   // P6 owns the LB + base Cloud Armor policy (built only when enableHttpsLb).
   // P8 adds rate-limit rules + adaptive protection when compliance.cloudArmor.

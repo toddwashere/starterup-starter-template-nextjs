@@ -49,7 +49,7 @@ describe("buildEnv - vercel profile", () => {
 
   it("produces https subdomain URLs for dashboard", () => {
     const env = buildEnv("vercel", { baseDomain: BASE });
-    expect(env.NEXT_PUBLIC_DASHBOARD_URL).toBe("https://app.example.com");
+    expect(env.NEXT_PUBLIC_DASHBOARD_URL).toBe("https://dashboard.example.com");
   });
 
   it("produces root domain URL for www", () => {
@@ -57,10 +57,10 @@ describe("buildEnv - vercel profile", () => {
     expect(env.NEXT_PUBLIC_WWW_URL).toBe("https://example.com");
   });
 
-  it("sets BETTER_AUTH_URL to app subdomain", () => {
+  it("sets BETTER_AUTH_URL to dashboard subdomain", () => {
     const env = buildEnv("vercel", { baseDomain: BASE });
-    expect(env.BETTER_AUTH_URL).toBe("https://app.example.com");
-    expect(env.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("https://app.example.com");
+    expect(env.BETTER_AUTH_URL).toBe("https://dashboard.example.com");
+    expect(env.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("https://dashboard.example.com");
   });
 
   it("sets WORKER_QUEUE_ADAPTER to bullmq", () => {

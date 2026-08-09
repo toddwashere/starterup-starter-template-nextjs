@@ -34,7 +34,9 @@ function publicUrls(
   if (!baseDomain) {
     throw new Error(`baseDomain is required for profile "${profile}"`);
   }
-  return buildPublicUrlEnv(baseDomain);
+  // Vercel / non-AWS profiles deploy at the organization root with bare labels
+  // (`dashboard.example.com`, www on the apex) — production host shape.
+  return buildPublicUrlEnv(baseDomain, "production");
 }
 
 function queueEnv(
