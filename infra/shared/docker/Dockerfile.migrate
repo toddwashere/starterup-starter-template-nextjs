@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+#
+# AWS Lambda container image that runs `prisma migrate deploy` inside the VPC.
+# Build context must be the repo root.
+#
+# Pruned to @workspace/database only (~476K tree) — it does not need any app
+# code, just the schema, the migrations, and the Prisma CLI.
+
+# ---------------------------------------------------------------------------
+# Stage 1: prune the monorepo down to @workspace/database.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS pruner
+WORKDIR /app
+RUN corepack enable
+COPY . .
+RUN npx --yes turbo@^2 prune @workspace/database --docker
+
+# ---------------------------------------------------------------------------
+# Stage 2: install deps and fetch the Prisma engines.
+# ---------------------------------------------------------------------------
+FROM node:24.16.0-slim AS builder
+WORKDIR /app
+RUN corepack enable
+
+# CRITICAL: `prisma migrate` needs the NATIVE schema-engine binary, which is
+# platform-specific. This stage is Debian; the runtime below is Amazon Linux
+# 2023. Without pinning the target, pnpm fetches a debian-openssl engine and
+# the image builds cleanly but fails at first invoke.
+#
+# (apps/workers/Dockerfile.lambda gets away with the same mismatch only because
+# Prisma 7's driver adapters use a WASM query compiler with no native engine.
+# Migrate has no such luxury.)
+ENV PRISMA_CLI_BINARY_TARGETS=rhel-openssl-3.0.x
+
+COPY --from=pruner /app/out/json/ .
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+COPY --from=pruner /app/out/full/ .
+
+# Generate the client. No DB connection is made, but prisma.config.ts resolves
+# env("DATABASE_URL") while loading, so pass a placeholder.
+RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" \
+    pnpm --filter @workspace/database exec prisma generate
+
+# ---------------------------------------------------------------------------
+# Stage 3: Lambda runtime image (AWS base bundles the RIC).
+# ---------------------------------------------------------------------------
+FROM public.ecr.aws/lambda/nodejs:20 AS runner
+
+ENV NODE_ENV=production
+
+COPY --from=builder /app/ ${LAMBDA_TASK_ROOT}/
+
+# Handler is plain .mjs, so no tsx loader is needed — the RIC probes
+# `<path>`, `.js`, `.mjs`, `.cjs` and resolves this directly.
+CMD ["packages/database/src/migrate-handler.handler"]
