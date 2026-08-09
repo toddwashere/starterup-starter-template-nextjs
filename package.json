@@ -31,6 +31,8 @@
     "infra:test:ephemeral": "dotenv -e infra/.env.local -- tsx infra/scripts/infra.ts ephemeral",
     "infra:aws": "dotenv -e infra/.env.local -- tsx infra/aws/scripts/aws.ts",
     "infra:aws:state": "dotenv -e infra/.env.local -- tsx infra/aws/scripts/state-bootstrap.ts",
+    "infra:public-urls": "tsx infra/shared/scripts/print-public-urls.ts",
+    "test:infra": "vitest run --config infra/vitest.config.ts",
     "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
