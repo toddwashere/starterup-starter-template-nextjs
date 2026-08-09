@@ -7,5 +7,5 @@ config:
   starter-gcp-bootstrap:complianceMode: "none"
   starter-gcp-bootstrap:githubRepo: "https://github.com/toddwashere/starterup-starter-template-nextjs"
   starter-gcp-bootstrap:privateNetwork: "false"
-  starter-gcp-bootstrap:securityContactEmail: "todd+security@intermission.health"
+  starter-gcp-bootstrap:securityContactEmail: "todd+security@example.com"
   starter-gcp-bootstrap:vpcCidr: "10.10.0.0/24"

@@ -8,7 +8,7 @@ config:
   starter-gcp-apps:enableHttpsLb: "false"
   starter-gcp-apps:enableMonitoring: "false"
   starter-gcp-apps:imageTag: "latest"
-  starter-gcp-apps:lbDomain: "sandbox.intermission-health.com"
+  starter-gcp-apps:lbDomain: "sandbox.example.com"
   starter-gcp-apps:messagingStackRef: "organization/starter-gcp-messaging/sandbox"
   starter-gcp-apps:secretsStackRef: "organization/starter-gcp-secrets/sandbox"
   starter-gcp-apps:storageStackRef: "organization/starter-gcp-storage/sandbox"
