@@ -13,7 +13,9 @@ export interface PoolerStackArgs {
   accountId: pulumi.Input<string>;
   poolerConfig: AwsPoolerConfig;
   hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
-  alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
+  alertTopics: Record<"critical" | "warning", Awaited<ReturnType<typeof aws.sns.getTopic>>>;
+  /** Environment tier. Distinct from `isProduction`, which is durable-data. */
+  alertTier: "critical" | "warning";
   vpcId: pulumi.Input<string>;
   publicSubnetIds: pulumi.Input<pulumi.Input<string>[]>;
   privateSubnetIds: pulumi.Input<pulumi.Input<string>[]>;
@@ -57,7 +59,8 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
     accountId,
     poolerConfig,
     hostedZone,
-    alertTopic,
+    alertTopics,
+    alertTier,
     vpcId,
     publicSubnetIds,
     privateSubnetIds,
@@ -85,7 +88,11 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
     accountId,
     hostname: poolerConfig.hostname,
     hostedZoneId: hostedZone.zoneId,
-    alertTopicArn: alertTopic.arn,
+    alertTopicArns: {
+      critical: alertTopics.critical.arn,
+      warning: alertTopics.warning.arn,
+    },
+    alertTier,
     clusterName: poolerClusterName,
     serviceName: poolerServiceName,
     isProduction,
@@ -115,12 +122,17 @@ export function buildPoolerStack(args: PoolerStackArgs): PoolerStackResult {
 
   // --- 3. TLS renewal wiring (depends on service) ----------------------------------
   buildPoolerTlsRenewal({
+    namePrefix,
     region,
     accountId,
     certificateArn: tlsFoundation.certificateArn,
     tlsSecretId: tlsFoundation.tlsSecretId,
     exporterFunction: tlsFoundation.exporterFunction,
-    alertTopicArn: alertTopic.arn,
+    alertTopicArns: {
+      critical: alertTopics.critical.arn,
+      warning: alertTopics.warning.arn,
+    },
+    alertTier,
     clusterName: poolerClusterName,
     serviceName: poolerServiceName,
     service: pgbouncer.service,

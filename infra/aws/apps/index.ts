@@ -8,7 +8,7 @@ import { bootstrapStackRefFromEnv, coreStackRefFromEnv } from "../env";
 import { deploymentNames, resolveDeploymentIdentity, type AwsEnvironment } from "../naming";
 import { resolveCompliance } from "../../shared/compliance";
 import { secretsForApp } from "../../shared/secret-catalog";
-import { resolveEnvApexDomain, resolveLbHosts } from "../../shared/public-urls";
+import { resolveLbHosts } from "../../shared/public-urls";
 import { buildAppRuntimeEnvironmentVariables } from "../../shared/aws-runtime-env";
 import {
   appRunnerInstanceSecretArns,
@@ -18,6 +18,15 @@ import {
   type CatalogSecretArnBag,
 } from "./app-secrets";
 import { associateAppRunnerCustomDomain } from "./custom-domains";
+import {
+  attachAppReleaseDeployPolicy,
+  roleNameFromArn,
+} from "./deploy-app-release-iam";
+import {
+  appRunnerServerErrorAlarm,
+  appRunnerServerErrorComposite,
+  lambdaErrorAlarm,
+} from "./alarms";
 
 // --- Config loading ---------------------------------------------------------
 // Mirror the core stack exactly: import all per-stack configs statically and
@@ -35,14 +44,7 @@ const cfg = CONFIGS[env] ?? sandboxConfig;
 
 const apexEnv: "sandbox" | "staging" | "production" =
   env === "production" || env === "staging" || env === "sandbox" ? env : "sandbox";
-const apexDomain = resolveEnvApexDomain(
-  {
-    base: process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "",
-    stagingPrefix: "staging",
-    sandboxPrefix: "sandbox",
-  },
-  apexEnv,
-);
+const rootDomain = process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "";
 
 const config = new pulumi.Config();
 
@@ -54,10 +56,9 @@ const coreStackRef = coreStackRefFromEnv(env);
 // and region, so no account-id-bearing value lives in committed stack config.
 const registryAccountId = aws.getCallerIdentityOutput({}).accountId;
 
-// CI passes the deploy-time image tag via `pulumi up --config imageTag=<sha>`
-// (see .github/workflows/deploy-aws.yml). Honor that override first so App
-// Runner/Lambda reference the SHA-tagged images CI actually pushed; fall back
-// to the env config's tag for local/default deploys.
+// Local/default deploys may pass `pulumi up --config imageTag=<sha>`. The
+// Release AWS apps workflow rolls images via UpdateService / UpdateFunctionCode
+// and the apps stack ignores image drift — so CI does not rely on this override.
 const imageTag = config.get("imageTag") ?? cfg.apps.imageTag;
 
 // The AWS provider reads `aws:region` from stack config; fall back to the env
@@ -98,22 +99,50 @@ const catalogSecretArns = coreStack.getOutput("catalogSecretArns") as pulumi.Out
   Record<string, string>
 >;
 
-// Custom domains whenever we have an apex. Staging/sandbox also manage DNS in
-// the bootstrap public-apps zone; production associates only (apex DNS stays
-// at the registrar — operator adds CNAME + ACM validation there).
-const wireCustomDomains = apexDomain.length > 0;
-const managePublicAppsZone = apexEnv !== "production" && wireCustomDomains;
-const bootstrapStack = managePublicAppsZone
+// Custom domains whenever we have a root domain. Every environment uses the
+// same model: one Route 53 zone per public hostname, Alias A + ACM records at
+// each zone apex. CNAME is illegal at a zone apex, which is why alias is not
+// optional here.
+const wireCustomDomains = rootDomain.length > 0;
+const bootstrapStack = wireCustomDomains
   ? new pulumi.StackReference(bootstrapStackRefFromEnv(env))
   : undefined;
-const publicAppsZoneId = bootstrapStack
-  ? (bootstrapStack.getOutput("publicAppsZoneId") as pulumi.Output<string>)
+const publicAppHostZoneIds = bootstrapStack
+  ? (bootstrapStack.getOutput("publicAppHostZoneIds") as pulumi.Output<
+      Record<string, string>
+    >)
   : undefined;
+const hostZoneId = (host: string): pulumi.Output<string> =>
+  publicAppHostZoneIds!.apply((zones) => {
+    const id = zones[host];
+    if (!id) {
+      throw new Error(
+        `No publicAppHostZoneIds entry for ${host}. Redeploy bootstrap.`,
+      );
+    }
+    return id;
+  });
 const lbHostsByApp = new Map<string, string>(
-  resolveLbHosts(apexDomain).map((entry) => [entry.app, entry.host]),
+  resolveLbHosts(rootDomain, apexEnv).map((entry) => [entry.app, entry.host]),
 );
 const customDomainAssociations: Record<string, aws.apprunner.CustomDomainAssociation> =
   {};
+
+// --- Alerts topics (created by bootstrap) ------------------------------------
+const alarmContext = {
+  namePrefix,
+  topicArns: {
+    critical: aws.sns.getTopicOutput({ name: `${namePrefix}-infra-alerts` }).arn,
+    warning: aws.sns.getTopicOutput({ name: `${namePrefix}-infra-alerts-warning` }).arn,
+  },
+  tags: baseTags,
+};
+
+const alertTier: "critical" | "warning" =
+  env === "production" ? "critical" : "warning";
+
+const serverErrorAlarms: { slug: string; alarm: aws.cloudwatch.MetricAlarm }[] =
+  [];
 
 // The single ARN bag every secret lookup on this stack goes through. Resolution
 // itself (including the `database-url` special case and the throw-on-missing
@@ -267,7 +296,8 @@ for (const app of apprunnerApps) {
   // Non-secret merge: infra → derived public URLs → overrides → shared → byApp.
   // SQS_QUEUE_URL stays a Pulumi Output and is applied after the sync map.
   const syncVars = buildAppRuntimeEnvironmentVariables({
-    apexDomain,
+    rootDomain,
+    env: apexEnv,
     runtimeEnv: cfg.runtimeEnv,
     appName: app.name,
     infraVars: {
@@ -321,9 +351,24 @@ for (const app of apprunnerApps) {
     },
     autoScalingConfigurationArn: autoScaling.arn,
     tags: { ...baseTags, Name: `${namePrefix}-${app.name}` },
+  },
+  {
+    // The image identifier is CI-owned after the initial create. Without this,
+    // any `pulumi up` would roll every service back to `imageTag` above —
+    // silently reverting production to a stale build.
+    ignoreChanges: ["sourceConfiguration.imageRepository.imageIdentifier"],
   });
 
   serviceUrls[app.name] = service.serviceUrl;
+
+  serverErrorAlarms.push({
+    slug: app.name,
+    alarm: appRunnerServerErrorAlarm(alarmContext, {
+      slug: app.name,
+      serviceName: service.serviceName,
+      severity: "silent",
+    }),
+  });
 
   const customHost = lbHostsByApp.get(app.name);
   if (wireCustomDomains && customHost) {
@@ -331,7 +376,9 @@ for (const app of apprunnerApps) {
       name: `${app.name}-custom-domain`,
       domainName: customHost,
       serviceArn: service.arn,
-      zoneId: publicAppsZoneId,
+      zoneId: hostZoneId(customHost),
+      trafficRecord: "alias",
+      region,
     });
   }
 
@@ -353,6 +400,11 @@ for (const app of apprunnerApps) {
     });
   }
 }
+
+appRunnerServerErrorComposite(alarmContext, {
+  children: serverErrorAlarms,
+  severity: alertTier,
+});
 
 // ===========================================================================
 // Workers Lambda + SQS event source mapping
@@ -433,7 +485,8 @@ const workersSecretEnv: Record<string, pulumi.Output<string>> = Object.fromEntri
 // resolve at deploy time via getSecretVersion below — Lambda has no native
 // runtimeEnvironmentSecrets equivalent.
 const workersSyncVars = buildAppRuntimeEnvironmentVariables({
-  apexDomain,
+  rootDomain,
+  env: apexEnv,
   runtimeEnv: cfg.runtimeEnv,
   appName: "workers",
   // Do not set AWS_REGION here — Lambda reserves it and CreateFunction fails
@@ -449,7 +502,9 @@ const workersSyncVars = buildAppRuntimeEnvironmentVariables({
 // built on the AWS Lambda Node base image and bundles the Runtime Interface
 // Client — NOT the `workers` image, whose CMD runs the long-lived poller
 // (`tsx src/index.ts`) and does not implement the Lambda Runtime API.
-const workersFn = new aws.lambda.Function("workers", {
+const workersFn = new aws.lambda.Function(
+  "workers",
+  {
   name: `${namePrefix}-workers`,
   packageType: "Image",
   imageUri: pulumi.interpolate`${imageRegistry}/workers-lambda:${imageTag}`,
@@ -474,6 +529,18 @@ const workersFn = new aws.lambda.Function("workers", {
     },
   },
   tags: { ...baseTags, Name: `${namePrefix}-workers` },
+  },
+  {
+    // Image URI is CI-owned after the initial create (same contract as App Runner).
+    ignoreChanges: ["imageUri"],
+  },
+);
+
+lambdaErrorAlarm(alarmContext, {
+  slug: "workers",
+  functionName: workersFn.name,
+  description: "Workers Lambda invocation or init errors",
+  severity: alertTier,
 });
 
 // SQS -> Lambda trigger.  ReportBatchItemFailures lets a handler fail
@@ -485,6 +552,75 @@ new aws.lambda.EventSourceMapping("workers-sqs", {
   batchSize: 10,
   functionResponseTypes: ["ReportBatchItemFailures"],
 });
+
+// ===========================================================================
+// Migrate Lambda — the release migration gate
+// ===========================================================================
+// GitHub-hosted runners cannot reach RDS (private subnets, no public route),
+// and PgBouncer's transaction pooling breaks Prisma's session-scoped advisory
+// lock. So `prisma migrate deploy` runs here, invoked by the Release workflow.
+const migrateRole = new aws.iam.Role("migrate-lambda-role", {
+  assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+    Service: "lambda.amazonaws.com",
+  }),
+  tags: { ...baseTags, Name: `${namePrefix}-migrate` },
+});
+new aws.iam.RolePolicyAttachment("migrate-vpc-access", {
+  role: migrateRole.name,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+});
+new aws.iam.RolePolicyAttachment("migrate-basic-exec", {
+  role: migrateRole.name,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+});
+// Exactly one secret. Deliberately NOT the shared instance-role policy — the
+// migration runner has no business reading Stripe keys or auth secrets.
+new aws.iam.RolePolicy("migrate-lambda-inline", {
+  role: migrateRole.id,
+  policy: pulumi.jsonStringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: [directUrlSecretArn],
+      },
+      ...kmsDecryptStatements,
+    ],
+  }),
+});
+
+const migrateFn = new aws.lambda.Function(
+  "migrate",
+  {
+    name: `${namePrefix}-migrate`,
+    packageType: "Image",
+    imageUri: pulumi.interpolate`${imageRegistry}/migrate:${imageTag}`,
+    imageConfig: {
+      commands: ["packages/database/src/migrate-handler.handler"],
+    },
+    role: migrateRole.arn,
+    // 900s is the Lambda maximum. A migration that needs longer must run from
+    // an allowlisted workstation or move to ECS Fargate (no ceiling).
+    timeout: 900,
+    memorySize: 1024,
+    vpcConfig: {
+      subnetIds: privateSubnetIds,
+      securityGroupIds: [appSecurityGroupId],
+    },
+    environment: {
+      variables: {
+        DIRECT_URL_SECRET_ARN: directUrlSecretArn,
+      },
+    },
+    tags: { ...baseTags, Name: `${namePrefix}-migrate` },
+  },
+  {
+    // CI-owned after create — the Release workflow pushes a content-hashed
+    // image and calls lambda:UpdateFunctionCode.
+    ignoreChanges: ["imageUri"],
+  },
+);
 
 // ===========================================================================
 // EventBridge Scheduler: repeatable jobs
@@ -521,6 +657,36 @@ new aws.scheduler.Schedule("cleanup-expired-sessions", {
   },
 });
 
+// ===========================================================================
+// Release role IAM (GitHub Actions "Release AWS apps")
+// ===========================================================================
+// The bootstrap stack owns the role + its OIDC trust; this stack owns the
+// inline policy, because only here are the ECR namespace and the workers
+// function name known. Sandbox has no Actions CD, so bootstrap leaves
+// `appReleaseRoleArn` empty there and this attachment is skipped.
+if (
+  bootstrapStack &&
+  (apexEnv === "staging" || apexEnv === "production")
+) {
+  const appReleaseRoleArn = bootstrapStack.getOutput(
+    "appReleaseRoleArn",
+  ) as pulumi.Output<string>;
+  attachAppReleaseDeployPolicy({
+    namePrefix,
+    deployRoleName: appReleaseRoleArn.apply((arn) => {
+      if (!arn) {
+        throw new Error(
+          "appReleaseRoleArn is empty — redeploy bootstrap (staging/production) first",
+        );
+      }
+      return roleNameFromArn(arn);
+    }),
+    accountId: registryAccountId,
+    region,
+    ecrNamespace: names.ecrNamespace,
+  });
+}
+
 // --- Exports ----------------------------------------------------------------
 export { imageRegistry };
 export const dashboardUrl = serviceUrls["dashboard"];
@@ -529,6 +695,8 @@ export const publicApiUrl = serviceUrls["public-api"];
 export const publicMcpUrl = serviceUrls["public-mcp"];
 export const workersFunctionArn = workersFn.arn;
 export const workersFunctionName = workersFn.name;
+export const migrateFunctionName = migrateFn.name;
+export const migrateFunctionArn = migrateFn.arn;
 
 /** App Runner DNS targets + ACM validation hints for registrar-managed apex (prod). */
 export const customDomainDns = Object.fromEntries(

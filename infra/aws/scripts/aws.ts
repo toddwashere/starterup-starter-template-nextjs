@@ -24,6 +24,28 @@ function isLayer(value: string | undefined): value is Layer {
   return value !== undefined && (LAYERS as readonly string[]).includes(value);
 }
 
+/**
+ * Force `pulumi up` to refresh first, matching .github/workflows/infra-aws.yml.
+ *
+ * Two systems write App Runner's `sourceConfiguration`: the Release workflow
+ * owns `imageIdentifier`, this stack owns everything else. `ignoreChanges` on
+ * the image stops Pulumi DIFFING it, but an update still sends the whole
+ * `sourceConfiguration` built from STATE -- so a stack whose state predates the
+ * last release silently rolls every service back to an older image while
+ * reporting a tidy "N updated".
+ *
+ * Escape hatch: pass `--skip-refresh` (Pulumi's own flag) when you deliberately
+ * want state-as-written, and it is left untouched.
+ */
+export function withRefresh(pulumiArgs: readonly string[]): string[] {
+  const [command, ...rest] = pulumiArgs;
+  if (command !== "up") return [...pulumiArgs];
+  if (pulumiArgs.some((a) => a === "--refresh" || a === "--skip-refresh")) {
+    return [...pulumiArgs];
+  }
+  return [command, "--refresh", ...rest];
+}
+
 function main(): void {
   const [layer, ...pulumiArgs] = process.argv.slice(2);
 
@@ -53,8 +75,16 @@ function main(): void {
     );
   }
 
-  console.log(`▶ pulumi ${pulumiArgs.join(" ")}  (${path.relative(process.cwd(), cwd)})`);
-  execFileSync("pulumi", pulumiArgs, { cwd, stdio: "inherit", env: process.env });
+  const args = withRefresh(pulumiArgs);
+  console.log(`▶ pulumi ${args.join(" ")}  (${path.relative(process.cwd(), cwd)})`);
+  execFileSync("pulumi", args, { cwd, stdio: "inherit", env: process.env });
 }
 
-main();
+// Only run when invoked as a CLI. Without this guard, importing `withRefresh`
+// (from its unit test) would execute main() and exit the process.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main();
+}

@@ -12,6 +12,7 @@ export interface DeploymentNames {
   logGroupPrefix: string;
   tags: Record<string, string>;
   deployRoleName: string;
+  appReleaseRoleName: string;
   queueName(name: string, options?: { dlq?: boolean }): string;
 }
 
@@ -82,6 +83,7 @@ export function deploymentNames(
       ManagedBy: "pulumi",
     },
     deployRoleName: `${identity.value}-${environment}-github-deploy`,
+    appReleaseRoleName: `${identity.value}-${environment}-github-app-release`,
     queueName: (name, options) =>
       `${identity.value}-${name}-${environment}${options?.dlq ? "-dlq" : ""}`,
   };

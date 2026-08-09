@@ -8,32 +8,33 @@ describe("resolveDeploymentIdentity", () => {
   });
 
   it("uses AWS_RESOURCE_PREFIX for global identity and prefixed queue names", () => {
-    const identity = resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "int-health" });
+    const identity = resolveDeploymentIdentity({ AWS_RESOURCE_PREFIX: "acme" });
     expect(identity.source).toBe("canonical");
     const names = deploymentNames(identity, "staging");
-    expect(names.ecrNamespace).toBe("int-health");
-    expect(names.globalPrefix).toBe("int-health-staging");
+    expect(names.ecrNamespace).toBe("acme");
+    expect(names.globalPrefix).toBe("acme-staging");
     expect(names.secretPathPrefix).toBe("/staging");
     expect(names.logGroupPrefix).toBe("/staging");
-    expect(names.deployRoleName).toBe("int-health-staging-github-deploy");
+    expect(names.deployRoleName).toBe("acme-staging-github-deploy");
+    expect(names.appReleaseRoleName).toBe("acme-staging-github-app-release");
     expect(names.tags).toEqual({
-      Project: "int-health",
+      Project: "acme",
       Environment: "staging",
       ManagedBy: "pulumi",
     });
-    expect(names.queueName("jobs")).toBe("int-health-jobs-staging");
-    expect(names.queueName("jobs", { dlq: true })).toBe("int-health-jobs-staging-dlq");
+    expect(names.queueName("jobs")).toBe("acme-jobs-staging");
+    expect(names.queueName("jobs", { dlq: true })).toBe("acme-jobs-staging-dlq");
   });
 
   it("warns for the legacy alias and rejects a conflict", () => {
     const warn = vi.fn();
-    const legacy = resolveDeploymentIdentity({ AWS_STATE_RESOURCE_PREFIX: "int-health" }, warn);
-    expect(legacy).toEqual({ value: "int-health", source: "legacy" });
+    const legacy = resolveDeploymentIdentity({ AWS_STATE_RESOURCE_PREFIX: "acme" }, warn);
+    expect(legacy).toEqual({ value: "acme", source: "legacy" });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0]?.[0]).toMatch(/AWS_STATE_RESOURCE_PREFIX/);
     expect(() =>
       resolveDeploymentIdentity({
-        AWS_RESOURCE_PREFIX: "int-health",
+        AWS_RESOURCE_PREFIX: "acme",
         AWS_STATE_RESOURCE_PREFIX: "other",
       }),
     ).toThrow("must match");
@@ -55,12 +56,12 @@ describe("resolveDeploymentIdentity", () => {
     const warn = vi.fn();
     const identity = resolveDeploymentIdentity(
       {
-        AWS_RESOURCE_PREFIX: "int-health",
-        AWS_STATE_RESOURCE_PREFIX: "int-health",
+        AWS_RESOURCE_PREFIX: "acme",
+        AWS_STATE_RESOURCE_PREFIX: "acme",
       },
       warn,
     );
-    expect(identity).toEqual({ value: "int-health", source: "canonical" });
+    expect(identity).toEqual({ value: "acme", source: "canonical" });
     expect(warn).not.toHaveBeenCalled();
   });
 });

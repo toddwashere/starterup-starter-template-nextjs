@@ -132,6 +132,14 @@ const STACK_OUTPUTS: Record<string, unknown> = {
   publicAppsZoneId: "ZPUBLICAPPSTAGING",
   publicAppsZoneName: "staging.example.com",
   publicAppsZoneNameServers: ["ns-1.awsdns-01.org", "ns-2.awsdns-02.com"],
+  publicAppHostZoneIds: {
+    "dashboard-staging.example.com": "ZDASHBOARDSTAGING",
+    "api-staging.example.com": "ZAPISTAGING",
+    "mcp-staging.example.com": "ZMCPSTAGING",
+    "www-staging.example.com": "ZWWWSTAGING",
+  },
+  appReleaseRoleArn:
+    "arn:aws:iam::123456789012:role/platform-staging-github-app-release",
 };
 
 /** The ARN a catalog secret id must resolve to, given CORE_OUTPUTS. */
@@ -292,12 +300,16 @@ describe("aws apps configured identity (mocked)", () => {
     "injects derived public URLs into %s",
     (appName: string) => {
       const vars = imageConfiguration(appName).runtimeEnvironmentVariables ?? {};
-      // Mock stack is "staging" + AWS_DNS_ROOT_DOMAIN=example.com → staging.example.com
-      expect(vars.BETTER_AUTH_URL).toBe("https://app.staging.example.com");
-      expect(vars.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("https://app.staging.example.com");
-      expect(vars.NEXT_PUBLIC_DASHBOARD_URL).toBe("https://app.staging.example.com");
-      expect(vars.NEXT_PUBLIC_MCP_URL).toBe("https://mcp.staging.example.com");
-      expect(vars.NEXT_PUBLIC_WWW_URL).toBe("https://staging.example.com");
+      // Mock stack is "staging" + AWS_DNS_ROOT_DOMAIN=example.com → flat hosts
+      expect(vars.BETTER_AUTH_URL).toBe("https://dashboard-staging.example.com");
+      expect(vars.NEXT_PUBLIC_BETTER_AUTH_URL).toBe(
+        "https://dashboard-staging.example.com",
+      );
+      expect(vars.NEXT_PUBLIC_DASHBOARD_URL).toBe(
+        "https://dashboard-staging.example.com",
+      );
+      expect(vars.NEXT_PUBLIC_MCP_URL).toBe("https://mcp-staging.example.com");
+      expect(vars.NEXT_PUBLIC_WWW_URL).toBe("https://www-staging.example.com");
     },
   );
 

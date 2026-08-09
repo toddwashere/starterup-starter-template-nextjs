@@ -108,6 +108,7 @@ describe("aws bootstrap layer (mocked)", () => {
     const names = repos.map((r) => r.inputs.name as string).sort();
     expect(names).toEqual([
       "platform/dashboard",
+      "platform/migrate",
       "platform/public-api",
       "platform/public-mcp",
       "platform/workers",
@@ -165,10 +166,19 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(repoUrl).toContain("dkr.ecr");
   });
 
-  it("creates public delegated hosted zones for infra and app apex", () => {
+  it("creates public delegated hosted zones for infra, legacy apex, and per-host apps", () => {
     const zones = recorded.filter((r) => r.type === "aws:route53/zone:Zone");
     const names = zones.map((z) => z.inputs.name as string).sort();
-    expect(names).toEqual(["sandbox.aws.example.com", "sandbox.example.com"]);
+    expect(names).toEqual(
+      [
+        "api-sandbox.example.com",
+        "dashboard-sandbox.example.com",
+        "mcp-sandbox.example.com",
+        "sandbox.aws.example.com",
+        "sandbox.example.com",
+        "www-sandbox.example.com",
+      ].sort(),
+    );
     const infraZone = zones.find((z) => z.inputs.name === "sandbox.aws.example.com");
     expect(infraZone?.inputs.comment as string).toContain("delegated");
   });
@@ -196,8 +206,8 @@ describe("aws bootstrap layer (mocked)", () => {
     );
     expect(snsGrant.Action).toEqual(["kms:GenerateDataKey*", "kms:Decrypt"]);
     expect(snsGrant.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
-    expect(snsGrant.Condition.StringEquals["aws:SourceArn"]).toBe(
-      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts",
+    expect(snsGrant.Condition.ArnLike["aws:SourceArn"]).toBe(
+      "arn:aws:sns:us-east-2:123456789012:platform-sandbox-infra-alerts*",
     );
     const eventBridgeGrant = parsedKeyPolicy.Statement.find(
       (statement: { Principal?: { Service?: string } }) =>
@@ -209,45 +219,51 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(eventBridgeGrant.Condition).toBeUndefined();
 
     const topics = recorded.filter((r) => r.type === "aws:sns/topic:Topic");
-    expect(topics).toHaveLength(1);
-    expect(topics[0].inputs.name).toBe("platform-sandbox-infra-alerts");
-    expect(topics[0].inputs.kmsMasterKeyId).toBeDefined();
-    expect(topics[0].inputs.kmsMasterKeyId).not.toBe("alias/aws/sns");
+    expect(topics.map((t) => t.inputs.name as string).sort()).toEqual([
+      "platform-sandbox-infra-alerts",
+      "platform-sandbox-infra-alerts-warning",
+    ]);
+    for (const topic of topics) {
+      expect(topic.inputs.kmsMasterKeyId).toBeDefined();
+      expect(topic.inputs.kmsMasterKeyId).not.toBe("alias/aws/sns");
+    }
+    // Sandbox does not email-subscribe critical; production does.
     const subscriptions = recorded.filter(
       (r) => r.type === "aws:sns/topicSubscription:TopicSubscription",
     );
-    expect(subscriptions).toHaveLength(1);
-    expect(subscriptions[0].inputs.endpoint).toBe("ops@example.com");
+    expect(subscriptions).toHaveLength(0);
   });
 
   it("allows only account-scoped EventBridge and CloudWatch publishers", async () => {
     const policies = recorded.filter((r) => r.type === "aws:sns/topicPolicy:TopicPolicy");
-    expect(policies).toHaveLength(1);
-    const policyJson = await new Promise<string>((resolve) =>
-      pulumi.output(policies[0].inputs.policy as string).apply(resolve),
-    );
-    const policy = JSON.parse(policyJson);
-
-    const owner = policy.Statement.find(
-      (statement: { Sid?: string }) => statement.Sid === "OwnerPermissions",
-    );
-    expect(owner.Principal).toEqual({ AWS: "arn:aws:iam::123456789012:root" });
-    expect(owner.Action).toContain("sns:SetTopicAttributes");
-
-    for (const service of ["events.amazonaws.com", "cloudwatch.amazonaws.com"]) {
-      const publisher = policy.Statement.find(
-        (statement: { Principal?: { Service?: string } }) =>
-          statement.Principal?.Service === service,
+    expect(policies).toHaveLength(2);
+    for (const policyResource of policies) {
+      const policyJson = await new Promise<string>((resolve) =>
+        pulumi.output(policyResource.inputs.policy as string).apply(resolve),
       );
-      expect(publisher).toBeDefined();
-      expect(publisher.Action).toBe("sns:Publish");
-      expect(publisher.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
-      expect(publisher.Condition.ArnLike["aws:SourceArn"]).toContain("123456789012");
-    }
+      const policy = JSON.parse(policyJson);
 
-    expect(
-      policy.Statement.every((statement: { Principal?: unknown }) => statement.Principal !== "*"),
-    ).toBe(true);
+      const owner = policy.Statement.find(
+        (statement: { Sid?: string }) => statement.Sid === "OwnerPermissions",
+      );
+      expect(owner.Principal).toEqual({ AWS: "arn:aws:iam::123456789012:root" });
+      expect(owner.Action).toContain("sns:SetTopicAttributes");
+
+      for (const service of ["events.amazonaws.com", "cloudwatch.amazonaws.com"]) {
+        const publisher = policy.Statement.find(
+          (statement: { Principal?: { Service?: string } }) =>
+            statement.Principal?.Service === service,
+        );
+        expect(publisher).toBeDefined();
+        expect(publisher.Action).toBe("sns:Publish");
+        expect(publisher.Condition.StringEquals["aws:SourceAccount"]).toBe("123456789012");
+        expect(publisher.Condition.ArnLike["aws:SourceArn"]).toContain("123456789012");
+      }
+
+      expect(
+        policy.Statement.every((statement: { Principal?: unknown }) => statement.Principal !== "*"),
+      ).toBe(true);
+    }
   });
 
   it("attaches an inline deployment policy with least-privilege resource scoping", async () => {
@@ -338,5 +354,27 @@ describe("aws bootstrap layer (mocked)", () => {
     expect(await output(infra.publicAppsZoneName)).toBe("sandbox.example.com");
     expect(await output(infra.publicAppsZoneId)).toBeTruthy();
     expect(await output(infra.publicAppsZoneNameServers)).toHaveLength(4);
+  });
+
+  it("exports per-host public app zones for NS delegation", async () => {
+    const output = <T>(val: pulumi.Output<T>) => new Promise<T>((res) => val.apply(res));
+    const zoneIds = infra.publicAppHostZoneIds as Record<string, pulumi.Output<string>>;
+    const hosts = Object.keys(zoneIds).sort();
+    expect(hosts).toEqual(
+      [
+        "api-sandbox.example.com",
+        "dashboard-sandbox.example.com",
+        "mcp-sandbox.example.com",
+        "www-sandbox.example.com",
+      ].sort(),
+    );
+    for (const host of hosts) {
+      expect(await output(zoneIds[host]!)).toBeTruthy();
+    }
+    const nameServers = infra.publicAppHostZoneNameServers as Record<
+      string,
+      pulumi.Output<string[]>
+    >;
+    expect(Object.keys(nameServers).sort()).toEqual(hosts);
   });
 });

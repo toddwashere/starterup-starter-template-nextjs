@@ -1,13 +1,17 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { validatedGithubRepo } from "./bootstrap-config";
+import { validatedGithubRepo, buildAppReleaseAssumeRolePolicy } from "./bootstrap-config";
+import { buildSlackNotifications } from "./chatbot";
 import { poolerDnsFromEnv, type AwsEnvName } from "../env";
 import {
   deploymentNames,
   resolveDeploymentIdentity,
   type AwsEnvironment,
 } from "../naming";
-import { resolveEnvApexDomain } from "../../shared/public-urls";
+import {
+  resolveDelegatedAppHosts,
+  resolveEnvApexDomain,
+} from "../../shared/public-urls";
 
 // ===========================================================================
 // AWS bootstrap — per-account foundations
@@ -33,6 +37,7 @@ const ECR_IMAGE_NAMES = [
   "public-mcp",
   "workers",
   "workers-lambda",
+  "migrate",
 ] as const;
 
 const ecrLifecyclePolicy = JSON.stringify({
@@ -76,6 +81,9 @@ const budgetAmount = config.get("budgetAmount") ?? "100";
 const budgetNotificationEmail = config.get("budgetNotificationEmail");
 const complianceMode = config.get("complianceMode") ?? "none";
 const isCompliant = complianceMode !== "none";
+const slackTeamId = config.get("slackTeamId")?.trim();
+const slackChannelId = config.get("slackChannelId")?.trim();
+const slackWarningChannelId = config.get("slackWarningChannelId")?.trim();
 
 // --- 1. ECR repositories for app images -------------------------------------
 // Apps resolve images as `<account>.dkr.ecr.<region>.amazonaws.com/<identity>/<name>:<tag>`.
@@ -135,6 +143,30 @@ const deployRole = new aws.iam.Role("github-deploy", {
   tags: baseTags,
 });
 
+// Narrow OIDC role for THIS repo's "Release AWS apps" workflow: push ECR images
+// and roll the running services. Deliberately separate from `deployRole` above —
+// per-commit releases must not carry Pulumi's fat infra permissions (RDS,
+// Secrets Manager, IAM). The inline policy is attached by the apps stack, which
+// is where the App Runner / Lambda resource names are known.
+//
+// Sandbox is local-Pulumi-only (no Actions CD), so this role is staging/production.
+const appReleaseRole =
+  stack === "staging" || stack === "production"
+    ? new aws.iam.Role("github-app-release", {
+        name: names.appReleaseRoleName,
+        description:
+          "Assumed by GitHub Actions (OIDC) to push ECR images and update App Runner / workers Lambda",
+        assumeRolePolicy: githubOidc.arn.apply((providerArn) =>
+          buildAppReleaseAssumeRolePolicy({
+            providerArn,
+            githubRepo,
+            environment: stack as "staging" | "production",
+          }),
+        ),
+        tags: { ...baseTags, Purpose: "app-release" },
+      })
+    : undefined;
+
 // Managed policies the deploy role needs (mirrors infra/aws/README.md). The
 // compliance set is only attached when complianceMode != none. IAMFullAccess is
 // broad — narrow it to a custom role/policy-management policy for stricter
@@ -179,11 +211,17 @@ const hostedZone = new aws.route53.Zone(
   { protect: true },
 );
 
-// Env-apex zone for public apps (staging.example.com). Production apex stays at
-// the registrar so mail/other systems can coexist; only non-prod is delegated.
+// Public-app DNS zones (registrar keeps bare apex + mail): one zone per public
+// hostname in EVERY environment. The operator adds one NS set per hostname and
+// the apps stack writes Alias A + ACM records at each zone apex.
+//
+// `publicAppsZone` below is the legacy staging/sandbox env-apex zone. It is
+// still declared during the flat-hostname transition because it is
+// `protect: true` and cannot be added-and-removed in a single `pulumi up`.
+const dnsRoot = process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "";
 const publicAppsApex = resolveEnvApexDomain(
   {
-    base: process.env.AWS_DNS_ROOT_DOMAIN?.trim() ?? "",
+    base: dnsRoot,
     stagingPrefix: "staging",
     sandboxPrefix: "sandbox",
   },
@@ -201,6 +239,24 @@ const publicAppsZone =
         { protect: true },
       )
     : undefined;
+
+const delegatedAppHosts = dnsRoot
+  ? resolveDelegatedAppHosts(dnsRoot, stack as AwsEnvName)
+  : [];
+const publicAppHostZones = Object.fromEntries(
+  delegatedAppHosts.map((entry) => [
+    entry.host,
+    new aws.route53.Zone(
+      `public-app-host-${entry.label}`,
+      {
+        name: entry.host,
+        comment: `Public app hostname ${entry.host} (${stack})`,
+        tags: { ...baseTags, Purpose: "public-apps", App: entry.app },
+      },
+      { protect: true },
+    ),
+  ]),
+) as Record<string, aws.route53.Zone>;
 
 // The Pulumi backend lives in a dedicated state account. Its resource policies
 // grant this deterministic role cross-account access; this identity policy is
@@ -258,6 +314,8 @@ new aws.iam.RolePolicy("github-state-access", {
 // The core stack needs least-privilege access to Route 53, ACM, Lambda,
 // EventBridge, CloudWatch, SNS, Secrets Manager, KMS, and ECS for the pooler
 // deployment. Scope resource-level permissions where AWS supports them.
+const publicAppHostZoneArns = Object.values(publicAppHostZones).map((z) => z.arn);
+
 new aws.iam.RolePolicy("github-deploy-access", {
   role: deployRole.name,
   policy: pulumi
@@ -266,10 +324,14 @@ new aws.iam.RolePolicy("github-deploy-access", {
       hostedZone.zoneId,
       publicAppsZone?.arn ?? pulumi.output(""),
       publicAppsZone?.zoneId ?? pulumi.output(""),
+      ...publicAppHostZoneArns,
     ])
-    .apply(([zoneArn, _zoneId, publicZoneArn, _publicZoneId]) => {
+    .apply(([zoneArn, _zoneId, publicZoneArn, _publicZoneId, ...hostZoneArns]) => {
       const route53Zones = [zoneArn as string, "arn:aws:route53:::change/*"];
       if (publicZoneArn) route53Zones.unshift(publicZoneArn as string);
+      for (const arn of hostZoneArns) {
+        if (typeof arn === "string" && arn.length > 0) route53Zones.unshift(arn);
+      }
       return JSON.stringify({
       Version: "2012-10-17",
       Statement: [
@@ -383,6 +445,13 @@ new aws.iam.RolePolicy("github-deploy-access", {
             "cloudwatch:ListTagsForResource",
           ],
           Resource: `arn:aws:cloudwatch:${region}:*:alarm:${namePrefix}-*`,
+        },
+        {
+          // Cannot be narrowed. The PutCompositeAlarm API requires Resource "*".
+          Sid: "CloudWatchCompositeAlarms",
+          Effect: "Allow",
+          Action: ["cloudwatch:PutCompositeAlarm"],
+          Resource: "*",
         },
         {
           Sid: "CloudWatchAlarmRead",
@@ -508,10 +577,9 @@ new aws.iam.RolePolicy("github-deploy-access", {
     }),
 });
 
-// --- 3. Infrastructure alert topic ------------------------------------------
-// The core stack publishes operational alerts (certificate expiry, pooler
-// health) to this SNS topic. Subscribe additional endpoints (PagerDuty, Slack)
-// as needed.
+// --- 3. Infrastructure alert topics (critical + warning) --------------------
+// The core/apps stacks publish operational alerts here. Dual tiers keep staging
+// visible without paging; production critical can email + Slack.
 const alertTopicName = `${namePrefix}-infra-alerts`;
 const alertTopicArn = pulumi.interpolate`arn:aws:sns:${region}:${accountId}:${alertTopicName}`;
 const alertKey = new aws.kms.Key("infra-alerts", {
@@ -535,9 +603,11 @@ const alertKey = new aws.kms.Key("infra-alerts", {
           Action: ["kms:GenerateDataKey*", "kms:Decrypt"],
           Resource: "*",
           Condition: {
-            StringEquals: {
-              "aws:SourceAccount": id,
-              "aws:SourceArn": topicArn,
+            StringEquals: { "aws:SourceAccount": id },
+            // Covers both the critical (`{prefix}-infra-alerts`) and warning
+            // (`{prefix}-infra-alerts-warning`) topics, which share this key.
+            ArnLike: {
+              "aws:SourceArn": `arn:aws:sns:${region}:${id}:${namePrefix}-infra-alerts*`,
             },
           },
         },
@@ -547,9 +617,6 @@ const alertKey = new aws.kms.Key("infra-alerts", {
           Principal: { Service: "events.amazonaws.com" },
           Action: ["kms:GenerateDataKey*", "kms:Decrypt"],
           Resource: "*",
-          // EventBridge-to-encrypted-SNS KMS requests do not support
-          // aws:SourceAccount or aws:SourceArn. The SNS topic policy below
-          // still restricts publishing to this account's pooler rules.
         },
         {
           Sid: "AllowCloudWatchEncryptedPublish",
@@ -581,9 +648,13 @@ const alertTopic = new aws.sns.Topic("infra-alerts", {
   tags: baseTags,
 });
 
-new aws.sns.TopicPolicy("infra-alerts", {
-  arn: alertTopic.arn,
-  policy: pulumi.all([accountId, alertTopic.arn]).apply(([id, topicArn]) =>
+/**
+ * Publish policy for an alert topic. Identical for both tiers: the account
+ * root administers, EventBridge and CloudWatch publish, both scoped to this
+ * deployment's `{prefix}-*` resources.
+ */
+function alertTopicPolicy(topicArn: pulumi.Input<string>) {
+  return pulumi.all([accountId, topicArn]).apply(([id, arn]) =>
     JSON.stringify({
       Version: "2012-10-17",
       Statement: [
@@ -602,7 +673,7 @@ new aws.sns.TopicPolicy("infra-alerts", {
             "sns:SetTopicAttributes",
             "sns:Subscribe",
           ],
-          Resource: topicArn,
+          Resource: arn,
           Condition: { StringEquals: { "AWS:SourceOwner": id } },
         },
         {
@@ -610,7 +681,7 @@ new aws.sns.TopicPolicy("infra-alerts", {
           Effect: "Allow",
           Principal: { Service: "events.amazonaws.com" },
           Action: "sns:Publish",
-          Resource: topicArn,
+          Resource: arn,
           Condition: {
             StringEquals: { "aws:SourceAccount": id },
             ArnLike: {
@@ -623,7 +694,7 @@ new aws.sns.TopicPolicy("infra-alerts", {
           Effect: "Allow",
           Principal: { Service: "cloudwatch.amazonaws.com" },
           Action: "sns:Publish",
-          Resource: topicArn,
+          Resource: arn,
           Condition: {
             StringEquals: { "aws:SourceAccount": id },
             ArnLike: {
@@ -633,10 +704,46 @@ new aws.sns.TopicPolicy("infra-alerts", {
         },
       ],
     }),
-  ),
+  );
+}
+
+new aws.sns.TopicPolicy("infra-alerts", {
+  arn: alertTopic.arn,
+  policy: alertTopicPolicy(alertTopic.arn),
 });
 
-if (budgetNotificationEmail) {
+const alertWarningTopic = new aws.sns.Topic("infra-alerts-warning", {
+  name: `${alertTopicName}-warning`,
+  kmsMasterKeyId: alertKey.arn,
+  tags: baseTags,
+});
+
+new aws.sns.TopicPolicy("infra-alerts-warning", {
+  arn: alertWarningTopic.arn,
+  policy: alertTopicPolicy(alertWarningTopic.arn),
+});
+
+if (!slackTeamId && stack !== "sandbox") {
+  pulumi.log.warn(
+    `No slackTeamId for "${stack}" — the warning topic will have no subscribers` +
+      (stack === "production" ? "." : ", and neither will the critical topic."),
+  );
+}
+if (slackTeamId && !slackChannelId) {
+  throw new Error("slackChannelId is required when slackTeamId is set.");
+}
+
+buildSlackNotifications({
+  namePrefix,
+  topicArns: { critical: alertTopic.arn, warning: alertWarningTopic.arn },
+  slackTeamId,
+  slackChannelId,
+  slackWarningChannelId,
+  tags: baseTags,
+});
+
+// Email is the interrupt channel, so it is reserved for production critical.
+if (budgetNotificationEmail && stack === "production") {
   new aws.sns.TopicSubscription("infra-alerts-email", {
     topic: alertTopic.arn,
     protocol: "email",
@@ -690,4 +797,14 @@ export const hostedZoneNameServers = hostedZone.nameServers;
 export const publicAppsZoneId = publicAppsZone?.zoneId ?? pulumi.output("");
 export const publicAppsZoneName = publicAppsZone?.name ?? pulumi.output("");
 export const publicAppsZoneNameServers = publicAppsZone?.nameServers ?? pulumi.output([]);
+/** Hostname → zone id / name servers for per-app NS delegation at the registrar. */
+export const publicAppHostZoneIds = Object.fromEntries(
+  Object.entries(publicAppHostZones).map(([host, zone]) => [host, zone.zoneId]),
+);
+export const publicAppHostZoneNameServers = Object.fromEntries(
+  Object.entries(publicAppHostZones).map(([host, zone]) => [host, zone.nameServers]),
+);
+export const appReleaseRoleArn = appReleaseRole?.arn ?? pulumi.output("");
 export const infraAlertTopicArn = alertTopic.arn;
+/** Warning tier. Core and apps resolve this by name, not by stack reference. */
+export const infraAlertWarningTopicArn = alertWarningTopic.arn;

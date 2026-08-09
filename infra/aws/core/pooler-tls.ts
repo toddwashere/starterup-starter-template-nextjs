@@ -39,7 +39,9 @@ export interface PoolerTlsArgs {
   accountId: pulumi.Input<string>;
   hostname: string;
   hostedZoneId: pulumi.Input<string>;
-  alertTopicArn: pulumi.Input<string>;
+  alertTopicArns: Record<"critical" | "warning", pulumi.Input<string>>;
+  /** Environment tier. Not `isProduction` — that value conflates staging. */
+  alertTier: "critical" | "warning";
   clusterName: string;
   serviceName: string;
   isProduction: boolean;
@@ -57,15 +59,30 @@ export interface PoolerTlsResult {
 }
 
 export interface PoolerTlsRenewalArgs {
+  namePrefix: string;
   region: string;
   accountId: pulumi.Input<string>;
   certificateArn: pulumi.Output<string>;
   tlsSecretId: pulumi.Output<string>;
   exporterFunction: aws.lambda.Function;
-  alertTopicArn: pulumi.Input<string>;
+  alertTopicArns: Record<"critical" | "warning", pulumi.Input<string>>;
+  /** Environment tier. Not `isProduction` — that value conflates staging. */
+  alertTier: "critical" | "warning";
   clusterName: string;
   serviceName: string;
   service: pulumi.Resource;
+}
+
+/** EventBridge rule names are capped at 64 chars (fails for long production prefixes). */
+export function poolerTlsEventRuleName(namePrefix: string, slug: string): string {
+  const name = `${namePrefix}-pooler-tls-${slug}`;
+  if (name.length > 64) {
+    throw new Error(
+      `EventBridge rule name exceeds 64 characters (${name.length}): ${name}. ` +
+        `Shorten namePrefix or slug.`,
+    );
+  }
+  return name;
 }
 
 /**
@@ -83,7 +100,8 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
     accountId,
     hostname,
     hostedZoneId,
-    alertTopicArn,
+    alertTopicArns,
+    alertTier,
     clusterName,
     serviceName,
     isProduction,
@@ -254,7 +272,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
     evaluationPeriods: 1,
     metricName: "Errors",
     namespace: "AWS/Lambda",
-    period: 60,
+    period: 300,
     statistic: "Sum",
     threshold: 0,
     datapointsToAlarm: 1,
@@ -263,8 +281,10 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
       FunctionName: exporterFunction.name,
     },
     alarmDescription: `Pooler TLS certificate exporter Lambda errors`,
-    alarmActions: [alertTopicArn],
-    okActions: [alertTopicArn],
+    // Warning in every environment: the exporter retries, and a failed export
+    // does not break connectivity until the certificate actually lapses — which
+    // the ACM lifecycle rules below catch on their own.
+    alarmActions: [alertTopicArns.warning],
     tags,
   });
 
@@ -289,12 +309,14 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
  */
 export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
   const {
+    namePrefix,
     region,
     accountId,
     certificateArn,
     tlsSecretId,
     exporterFunction,
-    alertTopicArn,
+    alertTopicArns,
+    alertTier,
     clusterName,
     serviceName,
     service,
@@ -308,7 +330,9 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
   const renewalRule = new aws.cloudwatch.EventRule(
     `${logicalPrefix}-renewal`,
     {
-      name: pulumi.interpolate`${exporterFunction.name}-renewal`,
+      // Do not derive from the Lambda name: `${namePrefix}-pooler-tls-exporter-…`
+      // exceeds EventBridge's 64-char limit for production prefixes.
+      name: poolerTlsEventRuleName(namePrefix, "renewal"),
       description: "Trigger pooler TLS exporter on certificate renewal",
       eventPattern: pulumi.all([certificateArn]).apply(([certArn]) =>
         JSON.stringify({
@@ -363,7 +387,7 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
 
   for (const event of lifecycleEvents) {
     const lifecycleRule = new aws.cloudwatch.EventRule(`${logicalPrefix}-${event.slug}`, {
-      name: pulumi.interpolate`${exporterFunction.name}-${event.slug}`,
+      name: poolerTlsEventRuleName(namePrefix, event.slug),
       description: `Alert on ${event.name}`,
       eventPattern: pulumi.all([certificateArn]).apply(([certArn]) =>
         JSON.stringify({
@@ -376,7 +400,9 @@ export function buildPoolerTlsRenewal(args: PoolerTlsRenewalArgs): void {
 
     new aws.cloudwatch.EventTarget(`${logicalPrefix}-${event.slug}-sns-target`, {
       rule: lifecycleRule.name,
-      arn: alertTopicArn,
+      // A lapsed pooler certificate breaks database connectivity outright, so
+      // this follows the environment tier rather than being pinned to warning.
+      arn: alertTopicArns[alertTier],
     });
   }
 }

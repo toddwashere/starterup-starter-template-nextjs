@@ -17,6 +17,11 @@ import { buildPoolerStack } from "./pooler-stack";
 import { buildQueues } from "./queues";
 import { buildCatalogPlaceholderSecrets } from "./manual-secrets";
 import { poolerConfigFromEnv } from "../env";
+import {
+  dlqDepthAlarm,
+  queueBacklogAgeAlarm,
+  rdsSaturationAlarms,
+} from "./alarms";
 
 // --- Config loading ---------------------------------------------------------
 // Robust static-import + stack-name selection.  A dynamic template import
@@ -340,6 +345,49 @@ const queues = buildQueues({ tags: baseTags, queueName: names.queueName });
 const jobsQueue = queues.jobs.queue;
 const dlq = queues.jobs.dlq;
 
+// --- Alerts topics (created by bootstrap) ------------------------------------
+async function requireTopic(name: string) {
+  try {
+    return await aws.sns.getTopic({ name });
+  } catch (error) {
+    throw new Error(
+      `Missing SNS topic ${name}. Deploy bootstrap first. Cause: ${String(error)}`,
+    );
+  }
+}
+
+const alertTopic = await requireTopic(`${namePrefix}-infra-alerts`);
+const alertWarningTopic = await requireTopic(`${namePrefix}-infra-alerts-warning`);
+
+const alertTier: "critical" | "warning" =
+  env === "production" ? "critical" : "warning";
+
+const alarmContext = {
+  namePrefix,
+  topicArns: { critical: alertTopic.arn, warning: alertWarningTopic.arn },
+  tags: baseTags,
+};
+
+for (const [key, built] of Object.entries(queues)) {
+  dlqDepthAlarm(alarmContext, {
+    slug: key,
+    dlqName: built.dlq.name,
+    severity: alertTier,
+  });
+  queueBacklogAgeAlarm(alarmContext, {
+    slug: key,
+    queueName: built.queue.name,
+    severity: alertTier,
+  });
+}
+
+rdsSaturationAlarms(alarmContext, {
+  instanceId: db.identifier,
+  instanceClass: cfg.database.instanceClass,
+  allocatedStorageGb: cfg.database.allocatedStorage,
+  severity: alertTier,
+});
+
 // --- S3 uploads bucket ------------------------------------------------------
 const uploadsBucketResource = new aws.s3.BucketV2("uploads", {
   bucketPrefix: `${namePrefix}-uploads-`,
@@ -428,15 +476,11 @@ let vercelDbUrlSecretArn: pulumi.Output<string> | undefined;
 if (cfg.database.pooler.enabled) {
   const poolerConfig = poolerConfigFromEnv(env);
   let hostedZone: Awaited<ReturnType<typeof aws.route53.getZone>>;
-  let alertTopic: Awaited<ReturnType<typeof aws.sns.getTopic>>;
   try {
-    [hostedZone, alertTopic] = await Promise.all([
-      aws.route53.getZone({
-        name: `${poolerConfig.zoneName}.`,
-        privateZone: false,
-      }),
-      aws.sns.getTopic({ name: `${namePrefix}-infra-alerts` }),
-    ]);
+    hostedZone = await aws.route53.getZone({
+      name: `${poolerConfig.zoneName}.`,
+      privateZone: false,
+    });
   } catch (error) {
     throw new Error(
       `Missing ${poolerConfig.zoneName} bootstrap resources. Deploy bootstrap, ` +
@@ -454,7 +498,8 @@ if (cfg.database.pooler.enabled) {
     accountId,
     poolerConfig,
     hostedZone,
-    alertTopic,
+    alertTopics: { critical: alertTopic, warning: alertWarningTopic },
+    alertTier,
     vpcId: vpc.id,
     publicSubnetIds: publicSubnets.map((s) => s.id),
     privateSubnetIds,
