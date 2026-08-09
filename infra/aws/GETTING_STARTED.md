@@ -201,25 +201,26 @@ ACM certificate validation will fail.
    The answer section must list all four AWS name servers. Repeat for `staging`
    and `production` as you configure each environment.
 
-4. **Non-prod public apps zone (sandbox/staging only):** Bootstrap also exports
-   `publicAppsZoneNameServers` for the env apex (`sandbox.example.com` /
-   `staging.example.com`). Create a second NS record set at the registrar for
-   that apex so App Runner custom domains and ACM validation can be automated.
-   Production keeps the apex at the registrar — no `public-apps-zone`; after
-   apps deploy, use the `customDomainDns` stack output to add CNAME + ACM
-   validation records for `app.`, `api.`, `mcp.`, and the apex (`www`).
+4. **Public app host zones (every environment):** Bootstrap exports
+   `publicAppHostZoneNameServers` — one Route 53 zone per public hostname
+   (`dashboard-sandbox.example.com`, `api-sandbox.example.com`, … in non-prod;
+   `dashboard.example.com`, `api.example.com`, … in production). At the registrar,
+   add an **NS** record set for each hostname (copy the name servers from the
+   bootstrap stack). The apps stack writes Alias A + ACM validation records
+   inside those zones. Keep bare apex / mail at the registrar; do not paste
+   App Runner CNAMEs there.
 
    ```bash
-   AWS_PROFILE=platform-sandbox pulumi stack output publicAppsZoneNameServers -s sandbox
-   dig NS sandbox.example.com
+   AWS_PROFILE=platform-sandbox pulumi stack output publicAppHostZoneNameServers -s sandbox
+   dig NS dashboard-sandbox.example.com
    ```
 
-5. **Confirm the SNS subscription** (one-time per environment): The bootstrap
-   stack creates an SNS topic for certificate expiration and renewal alerts. AWS
-   sends a confirmation email to the bootstrap
-   `starter-aws-bootstrap:budgetNotificationEmail` address. That shared setting
-   is intentionally reused for both AWS Budgets notifications and the
-   infrastructure alert topic subscription. Click the confirmation link once.
+5. **Confirm the SNS subscription** (production only for email): The bootstrap
+   stack creates critical + warning SNS topics for operational alerts. Optional
+   Slack delivery uses AWS Chatbot (`slackTeamId` / `slackChannelId` stack
+   config). Production may also email the
+   `starter-aws-bootstrap:budgetNotificationEmail` address for critical alerts —
+   confirm that subscription once if configured.
 
 6. **Deploy core:**
 
@@ -800,13 +801,13 @@ Edit non-secrets in `runtimeEnv` on `infra/aws/config.<env>.ts` (defaults in
 
 **Public URLs** are derived at deploy time from `AWS_DNS_ROOT_DOMAIN` (in
 gitignored `infra/.env.local`) via `buildPublicUrlEnv` — e.g. staging
-`https://app.staging.example.com` and production `https://app.example.com`
-(same pattern for `api` / `mcp`; www uses the env apex). Keys include
-`BETTER_AUTH_URL` and the `NEXT_PUBLIC_*` URL vars. For staging/sandbox,
-bootstrap creates a Route 53 zone for the env apex so App Runner custom
-domains + ACM validation are automated; delegate that zone with an NS record
-at your registrar (apex/`mail` stay there). Production associates App Runner
-domains only — add the records from `customDomainDns` at the registrar.
+`https://dashboard-staging.example.com` and production
+`https://dashboard.example.com` (same flat pattern for `api` / `mcp`; www uses
+`www-staging.example.com` / bare apex). Keys include `BETTER_AUTH_URL` and the
+`NEXT_PUBLIC_*` URL vars. Every environment uses one Route 53 zone per public
+hostname; delegate those zones with NS records at your registrar (apex/`mail`
+stay there). CI must call `pnpm infra:public-urls <root> <env>` rather than
+recomputing hostnames in shell.
 
 Merge order into `runtimeEnvironmentVariables` (later wins): infra-injected
 vars → derived public URLs → `publicUrlOverrides` → `shared` → `byApp[app]`.

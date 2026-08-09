@@ -13,7 +13,7 @@ Three Pulumi projects live here:
 | ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `starter-aws-bootstrap` | `infra/aws/bootstrap/` | Per-account foundations: GitHub OIDC deploy role, ECR repository, cost budget, delegated Route 53 zone, and encrypted infrastructure-alert SNS topic. Run once per account with admin credentials. |
 | `starter-aws-core`      | `infra/aws/core/`      | VPC, RDS Postgres, RDS Proxy, public TLS PgBouncer, SQS queue registry (+ automatic DLQs), S3 uploads bucket, Secrets Manager entries, and compliance resources                                    |
-| `starter-aws-apps`      | `infra/aws/apps/`      | 4 App Runner services (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector                                                                                           |
+| `starter-aws-apps`      | `infra/aws/apps/`      | App Runner for deployable apps (dashboard, www, public-api, public-mcp), workers Lambda, App Runner VPC connector                                                                                           |
 
 `apps` depends on `core` via `pulumi.StackReference`. Deploy order: `bootstrap` → `core` → `apps`.
 
@@ -460,73 +460,56 @@ AWS_PROFILE=platform-sandbox pnpm infra:aws apps up -s sandbox
 
 ## GitHub Actions deploy
 
-The workflow at `.github/workflows/deploy-aws.yml` automates image builds and deploys for all environments. OIDC authentication is used; no long-lived AWS access keys are stored.
+AWS deploy is split into two workflows:
 
-### Workflow steps
+| Workflow | File | When | Role |
+| --- | --- | --- | --- |
+| **Infra AWS** | `.github/workflows/infra-aws.yml` | `workflow_dispatch` only | Fat `AWS_DEPLOY_ROLE_ARN` — Pulumi shape |
+| **Release AWS apps** | `.github/workflows/release-aws-apps.yml` | push / dispatch | Narrow `AWS_APP_RELEASE_ROLE_ARN` — images + roll |
 
-1. **build-images** — builds all 5 app images (dashboard, www, public-api, public-mcp, workers) and pushes to ECR, SHA-tagged.
-2. **migrate** — runs `prisma migrate deploy` against `DIRECT_URL_DEPLOY` (direct RDS instance connection). This is a gate; deploy does not proceed if migrations fail.
-3. **deploy core** — `pulumi up` core stack (VPC, RDS, Proxy, SQS, S3, Secrets Manager).
-4. **deploy apps** — `pulumi up` apps stack (App Runner rolling deploys pinned to `github.sha`, Lambda update + publish).
-5. **smoke test** — `GET /api/health` on the dashboard App Runner service.
+Infra changes are deliberate (`pulumi up` with `--refresh`). Application code
+ships via Release: ECR push, App Runner `UpdateService` (image merge helper),
+workers Lambda `UpdateFunctionCode`, and an in-VPC migrate Lambda invoke.
+Image fields on App Runner / Lambda carry `ignoreChanges`, so infra applies do
+not roll images back.
 
-Each deploy uses its matching `<stack>-aws` GitHub Environment so credentials,
-account IDs, state settings, and migration secrets cannot cross environments.
-Add required reviewers to `production-aws`.
+### Release workflow steps
 
-### Required secrets
+1. **resolve-urls** — `pnpm infra:public-urls <root> <env>` → GitHub outputs for build-args.
+2. **migrate** — build/push content-hashed migrate image (skip if already in ECR), invoke migrate Lambda (3-signal success gate). No DB URL in GitHub secrets.
+3. **build-push** — matrix for dashboard, www, public-api, public-mcp, workers (+ workers-lambda).
+4. **roll** — App Runner describe→merge→update; Lambda image update.
+5. **smoke** — health checks + image SHA drift check.
 
-| Secret                | Description                                                                                              |
-| --------------------- | -------------------------------------------------------------------------------------------------------- |
-| `AWS_DEPLOY_ROLE_ARN` | ARN of the IAM role GitHub Actions assumes via OIDC, e.g. `arn:aws:iam::123456789012:role/github-deploy` |
-| `DIRECT_URL_DEPLOY`   | Direct Postgres connection string (RDS instance, not proxy) used by `prisma migrate deploy`              |
+Each deploy uses its matching `<stack>-aws` GitHub Environment. Add required
+reviewers to `production-aws`. Sandbox is local-Pulumi-only by design.
 
-Note: `DATABASE_URL_DEPLOY` is **not** used by the migrate step. The migrate step requires a direct connection to the RDS instance (`DIRECT_URL_DEPLOY`).
+### Required secrets / vars
 
-### Required variables
+| Name | Kind | Description |
+| --- | --- | --- |
+| `AWS_DEPLOY_ROLE_ARN` | secret | Fat OIDC role for Infra AWS (bootstrap output `deployRoleArn`) |
+| `AWS_APP_RELEASE_ROLE_ARN` | var/secret | Narrow OIDC role for Release (bootstrap output `appReleaseRoleArn`) |
+| `AWS_ACCOUNT_ID` | var | Workload account ID |
+| `AWS_REGION` | var | e.g. `us-east-2` |
+| `AWS_ECR_REGISTRY` | var | `…dkr.ecr.…amazonaws.com/<identity>` |
+| `AWS_RESOURCE_PREFIX` | var | Deployment identity (defaults to `platform`) |
+| `AWS_DNS_ROOT_DOMAIN` | var | Organization root domain for public URLs |
+| `AWS_STATE_ACCOUNT_ID` | var | State account ID |
+| `AWS_STATE_REGION` | var | `us-east-2` |
 
-| Variable               | Example                                                |
-| ---------------------- | ------------------------------------------------------ |
-| `AWS_ACCOUNT_ID`       | Selected workload environment's 12-digit ID            |
-| `AWS_REGION`           | `us-east-2`                                            |
-| `AWS_ECR_REGISTRY`     | `123456789012.dkr.ecr.us-east-2.amazonaws.com/platform` |
-| `AWS_RESOURCE_PREFIX`  | Deployment identity (defaults to `platform` if unset)   |
-| `AWS_STATE_ACCOUNT_ID` | Dedicated state account's 12-digit ID                  |
-| `AWS_STATE_REGION`     | `us-east-2`                                            |
-
-### GitHub OIDC with AWS IAM
-
-Create an IAM OIDC identity provider for `token.actions.githubusercontent.com`. The deploy role needs these policies:
-
-- `AWSAppRunnerFullAccess`
-- `AWSLambda_FullAccess`
-- `AmazonRDSFullAccess`
-- `AmazonSQSFullAccess`
-- `SecretsManagerReadWrite`
-- `AmazonEC2ContainerRegistryPowerUser`
-- `AmazonS3FullAccess`
-- `AmazonEC2FullAccess` (scoped to VPC/networking actions)
-- `AWSKeyManagementServicePowerUser` (when `complianceMode != none`)
-- `AWSCloudTrail_FullAccess` (when `complianceMode != none`)
-- `AWSWAFFullAccess` (when `complianceMode != none`)
-- `AWSConfigUserAccess` (when `complianceMode != none`)
-- `IAMFullAccess` (or a narrower custom policy for role/policy management)
-- Inline cross-account state policy scoped to the environment's exact S3 bucket
-  and KMS alias
-
-Setup guide: <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html>
-
-### Manual deploy
+### Manual runs
 
 ```sh
-gh workflow run deploy-aws.yml -f stack=sandbox
+gh workflow run infra-aws.yml -f stack=staging
+gh workflow run release-aws-apps.yml -f stack=staging
 ```
 
 ### GitHub Environments
 
 Create `sandbox-aws`, `staging-aws`, and `production-aws` at
 **Settings → Environments → New environment**. Store each workload account's
-role, account ID, registry, and migration secret only in its matching
+role, account ID, and registry only in its matching
 environment. Add required reviewers to production so deployment pauses before
 applying changes.
 
