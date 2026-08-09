@@ -1,0 +1,159 @@
+name: Infra AWS
+
+# Applies INFRASTRUCTURE SHAPE with Pulumi: VPC, RDS, SQS, Secrets Manager,
+# App Runner / Lambda service definitions, IAM, DNS.
+#
+# Opt-in by design (workflow_dispatch only). Infra changes are rare, occasionally
+# destructive, and should be a deliberate act with a human watching the preview —
+# not a side effect of merging application code.
+#
+# Application code ships via "Release AWS apps"
+# (.github/workflows/release-aws-apps.yml), which pushes images and rolls the
+# running services using a narrow OIDC role. The apps stack marks image fields
+# `ignoreChanges`, so a `pulumi up` here will NOT revert whatever CI last
+# released.
+#
+# Uses the fat `secrets.AWS_DEPLOY_ROLE_ARN` role (RDS, Secrets Manager, IAM).
+# Sandbox is intentionally absent: deploy it locally with
+# `AWS_PROFILE=… pulumi up -s sandbox`.
+on:
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Pulumi stack (staging or production)"
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+
+# Never cancel an in-flight infra apply — a half-applied Pulumi update is
+# considerably worse than a queued one.
+concurrency:
+  group: infra-aws-${{ inputs.stack }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC
+
+env:
+  PULUMI_SKIP_UPDATE_CHECK: "true"
+  PULUMI_ORG: organization
+
+jobs:
+  deploy:
+    name: Pulumi up (${{ inputs.stack }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ format('{0}-aws', inputs.stack) }}
+    env:
+      # Prefer canonical identity; keep legacy alias for migrating environments.
+      AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX || vars.AWS_STATE_RESOURCE_PREFIX || 'platform' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Require AWS Environment configuration
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${AWS_REGION:-}" ]] || missing+=("vars.AWS_REGION")
+          [[ -n "${AWS_ACCOUNT_ID:-}" ]] || missing+=("vars.AWS_ACCOUNT_ID")
+          [[ -n "${AWS_DEPLOY_ROLE_ARN:-}" ]] || missing+=("secrets.AWS_DEPLOY_ROLE_ARN")
+          if ((${#missing[@]})); then
+            echo "GitHub Environment '${{ format('{0}-aws', inputs.stack) }}' is missing: ${missing[*]}" >&2
+            echo "Set these under Settings → Environments (see infra/aws/README.md)." >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS account
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          test "$actual" = "${{ vars.AWS_ACCOUNT_ID }}" || {
+            echo "Expected AWS account ${{ vars.AWS_ACCOUNT_ID }}, got $actual" >&2
+            exit 1
+          }
+
+      - name: Install AWS infrastructure dependencies
+        working-directory: infra/aws
+        run: pnpm install --frozen-lockfile
+
+      # Root deps supply vitest; infra/aws's own install above supplies
+      # @pulumi/* so the Pulumi layer suites resolve.
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The infra suite runs HERE rather than in the main CI workflow: infra
+      # changes rarely, so re-running it on every application PR buys nothing.
+      # It must stay ahead of both `pulumi up` steps — this is the only gate
+      # between a broken infra change and real resources (secret-catalog readers,
+      # refresh-before-up invariants, and similar).
+      - name: Test infra
+        run: pnpm test:infra
+
+      - name: Pulumi up (core)
+        uses: pulumi/actions@v6
+        env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+          AWS_POOLER_APP_EGRESS_CIDRS: ${{ vars.AWS_POOLER_APP_EGRESS_CIDRS }}
+          AWS_POOLER_DEVELOPER_CIDRS: ${{ vars.AWS_POOLER_DEVELOPER_CIDRS }}
+        with:
+          command: up
+          # See the apps step below for why every `up` here refreshes first.
+          refresh: true
+          stack-name: ${{ inputs.stack }}
+          work-dir: infra/aws/core
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ inputs.stack }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+
+      # No `imageTag` config-map: images are owned by the Release workflow, and
+      # the apps stack ignores image drift. Passing a tag here would be a no-op
+      # at best and a silent rollback at worst.
+      - name: Pulumi up (apps)
+        uses: pulumi/actions@v6
+        env:
+          AWS_RESOURCE_PREFIX: ${{ env.AWS_RESOURCE_PREFIX }}
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+        with:
+          command: up
+          # REQUIRED, not an optimisation. Two systems write App Runner's
+          # sourceConfiguration: Release owns imageIdentifier, this stack owns
+          # everything else. `ignoreChanges` on imageIdentifier stops Pulumi
+          # DIFFING the image, but an update still sends the whole
+          # sourceConfiguration built from STATE — so a stack whose state
+          # predates the last release silently rolls every service back to the
+          # older image, while reporting a tidy "N updated".
+          #
+          # Refreshing first makes state match live, so `ignoreChanges` then
+          # preserves the image that is actually running. Program-declared
+          # values still win for every field Pulumi does own.
+          refresh: true
+          stack-name: ${{ inputs.stack }}
+          work-dir: infra/aws/apps
+          cloud-url: "s3://${{ env.AWS_RESOURCE_PREFIX }}-${{ inputs.stack }}-${{ vars.AWS_STATE_ACCOUNT_ID }}-${{ vars.AWS_STATE_REGION }}?region=${{ vars.AWS_STATE_REGION }}&awssdk=v2"
+
+      - name: Next steps
+        run: |
+          echo "Infra applied for stack '${{ inputs.stack }}'."
+          echo "Bootstrap outputs feed GitHub Environment vars — see infra/aws/GETTING_STARTED.md."
+          echo "To ship application code, run the 'Release AWS apps' workflow."

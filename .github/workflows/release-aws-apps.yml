@@ -1,0 +1,827 @@
+name: Release AWS apps
+
+# `run-name` sets the title shown in the Actions run list. Without it GitHub uses
+# the commit message, so every release reads like "docs(aws): fix typo" and you
+# cannot tell staging from production at a glance.
+run-name: >-
+  Release ${{ inputs.stack || (github.ref_name == 'production' && 'production' || 'staging') }}
+  @ ${{ github.event_name == 'workflow_dispatch' && 'dispatch' || github.ref_name }}
+  ${{ inputs.skip_migrate && '(migrations skipped)' || '' }}
+
+# Ships APPLICATION CODE to AWS: migrate → build/push images → roll the running
+# App Runner services and workers Lambda → smoke.
+#
+# This workflow does NOT run Pulumi. Infrastructure *shape* (VPC, RDS, secrets,
+# service definitions) is owned by "Infra AWS" (.github/workflows/infra-aws.yml),
+# which is workflow_dispatch-only and uses the fat deploy role. The apps stack
+# marks image fields `ignoreChanges`, so the two never fight over the image tag.
+#
+# Credentials: the narrow `vars.AWS_APP_RELEASE_ROLE_ARN` OIDC role — ECR push +
+# apprunner:UpdateService + lambda:UpdateFunctionCode only. It deliberately
+# cannot read secrets or reach the database.
+#
+# Sandbox is local-Pulumi-only and has no release path here.
+on:
+  push:
+    branches: [main, production]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "infra/shared/docker/**"
+      - "apps/workers/Dockerfile*"
+      - ".github/workflows/release-aws-apps.yml"
+      # NOTE: infra/aws/** is deliberately absent — infra changes go through
+      # the Infra AWS workflow, not a per-commit app release.
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target stack. Sandbox is local-Pulumi-only and is rejected."
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      skip_migrate:
+        description: "Skip the migration gate. Off by default. Use when you know there is nothing to migrate, or to ship app code while a migration is handled separately."
+        required: false
+        type: boolean
+        default: false
+
+# One release at a time per ref, and NEVER cancel one in flight — on any ref.
+#
+# The deploy matrix rolls services independently, so a cancel lands mid-roll:
+# some services take the new image, the rest stay on whatever they were running,
+# and the run list shows a tidy "cancelled" that reads like nothing happened.
+# The stack is then silently heterogeneous until the next successful release.
+# A slow queue is cheaper than a half-applied roll.
+concurrency:
+  group: release-aws-apps-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # resolve-stack — map event → Pulumi / GitHub Environment stack name
+  # ---------------------------------------------------------------------------
+  resolve-stack:
+    name: Resolve release stack
+    runs-on: ubuntu-latest
+    outputs:
+      stack: ${{ steps.resolve.outputs.stack }}
+    steps:
+      - id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            stack="${{ inputs.stack }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+            stack="production"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            stack="staging"
+          else
+            echo "No release stack for ref ${{ github.ref }}" >&2
+            exit 1
+          fi
+          if [[ "$stack" == "sandbox" ]]; then
+            echo "Sandbox has no Actions release path — deploy it locally with Pulumi." >&2
+            exit 1
+          fi
+          echo "stack=${stack}" >> "$GITHUB_OUTPUT"
+          echo "Release stack: ${stack}"
+
+      # Skipping migrations is a supported, deliberate choice — not an incident.
+      # Recorded ONCE here (resolve-stack runs a single time) rather than in the
+      # build matrix, which would repeat the same notice for every app.
+      # `::notice` not `::warning`: an explicit opt-in should not decorate the
+      # run with warning chrome, and a skipped job does not fail the run.
+      - name: Note migration mode
+        if: ${{ inputs.skip_migrate }}
+        run: |
+          set -euo pipefail
+          echo "::notice title=Migrations skipped::Requested via the skip_migrate input."
+          {
+            echo "### Migrations skipped"
+            echo
+            echo "Requested explicitly via the \`skip_migrate\` input, so \`prisma migrate deploy\` did not run."
+            echo "Images were built and rolled normally — this is a successful deployment."
+            echo
+            echo "Migrations remain pending until the next run with the gate enabled (the default)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # resolve-urls — public hostnames for this stack, from the ONE resolver.
+  #
+  # A separate job on purpose: `build-and-deploy` is a matrix with no
+  # Node/pnpm setup, so resolving there would mean N installs. These values
+  # become Docker build-args baked into the images, so they must never be
+  # recomputed in shell — see infra/shared/public-url-outputs.ts.
+  # ---------------------------------------------------------------------------
+  resolve-urls:
+    name: Resolve public URLs
+    runs-on: ubuntu-latest
+    needs: [resolve-stack]
+    environment: ${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}
+    outputs:
+      dashboard: ${{ steps.public_urls.outputs.dashboard }}
+      www: ${{ steps.public_urls.outputs.www }}
+      api: ${{ steps.public_urls.outputs.api }}
+      mcp: ${{ steps.public_urls.outputs.mcp }}
+      auth: ${{ steps.public_urls.outputs.auth }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve public URLs
+        id: public_urls
+        env:
+          STACK: ${{ needs.resolve-stack.outputs.stack }}
+          ROOT: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+        run: |
+          set -euo pipefail
+          pnpm -s infra:public-urls "${ROOT:?AWS_DNS_ROOT_DOMAIN var required}" "$STACK" \
+            >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # migrate — gates the release; runs BEFORE new images roll so the currently
+  # deployed code keeps running against the migrated schema (expand/contract).
+  #
+  # When the migrate content hash was already successfully applied on this
+  # stack (ECR tag `{hash}-applied-{stack}`), build + invoke are skipped. The
+  # marker is written only after a successful invoke so a failed migrate never
+  # becomes a permanent skip.
+  # ---------------------------------------------------------------------------
+  migrate:
+    name: Prisma migrate deploy
+    needs: [resolve-stack]
+    # `skip_migrate` is only settable via workflow_dispatch, so a normal push can
+    # never bypass the gate — `inputs.skip_migrate` is empty (falsy) on push.
+    if: ${{ !inputs.skip_migrate }}
+    runs-on: ubuntu-latest
+    # Budget: a cold uncached Docker build including the Prisma engine
+    # download (~10m worst case) + image push (~5m) + update-function-code /
+    # wait function-updated (~2m) + the Lambda's own 900s (15m) migration
+    # ceiling = ~32m worst case. 45m leaves headroom without masking a truly
+    # stuck run. A tighter budget here previously let GitHub kill the runner
+    # mid-migration while the Lambda kept running server-side, unobserved.
+    timeout-minutes: 45
+    environment: ${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      STACK: ${{ needs.resolve-stack.outputs.stack }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require AWS Environment configuration
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ECR_REGISTRY: ${{ vars.AWS_ECR_REGISTRY }}
+          AWS_APP_RELEASE_ROLE_ARN: ${{ vars.AWS_APP_RELEASE_ROLE_ARN }}
+          AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${AWS_REGION:-}" ]] || missing+=("vars.AWS_REGION")
+          [[ -n "${AWS_ACCOUNT_ID:-}" ]] || missing+=("vars.AWS_ACCOUNT_ID")
+          [[ -n "${AWS_ECR_REGISTRY:-}" ]] || missing+=("vars.AWS_ECR_REGISTRY")
+          [[ -n "${AWS_APP_RELEASE_ROLE_ARN:-}" ]] || missing+=("vars.AWS_APP_RELEASE_ROLE_ARN")
+          [[ -n "${AWS_RESOURCE_PREFIX:-}" ]] || missing+=("vars.AWS_RESOURCE_PREFIX")
+          if ((${#missing[@]})); then
+            echo "GitHub Environment '${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}' is missing: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      # Hash EVERY input baked into the image, not just the migrations. Hashing
+      # only migrations/** would leave the tag unchanged after a handler or
+      # Dockerfile fix, the ECR check below would report a hit, the build would
+      # be skipped, and the Lambda would keep running stale code.
+      - name: Compute migrate image tag
+        id: tag
+        run: |
+          set -euo pipefail
+          # Directory prefixes, not globs: a `migrations/*` pathspec is fnmatch
+          # and its behaviour on nested paths is easy to get wrong. A trailing
+          # slash matches everything beneath, unambiguously.
+          #
+          # The NUL-separated file list is written to a temp file rather than
+          # a shell variable: bash strings cannot hold embedded NUL bytes, so
+          # `files=$(... -z ...)` would silently truncate at the first entry.
+          # `packages/database/prisma/migrations/` is deliberately omitted: it
+          # is a strict subset of `packages/database/prisma/` below, so it can
+          # never add a file the parent pathspec would miss.
+          #
+          # `pnpm-lock.yaml`, `pnpm-workspace.yaml`, and the root `package.json`
+          # are included because `turbo prune` copies all three into the image
+          # build context — a lockfile-only bump (e.g. `pnpm update prisma`)
+          # changes the resolved Prisma/schema-engine version without touching
+          # any file under packages/database, and without these the tag would
+          # stay put, the ECR check below would hit, and the build would be
+          # skipped while the Lambda kept running the old engine indefinitely.
+          filelist="$(mktemp)"
+          git ls-files -z \
+              'packages/database/prisma/' \
+              'packages/database/prisma.config.ts' \
+              'packages/database/src/migrate-handler.mjs' \
+              'packages/database/package.json' \
+              'infra/shared/docker/Dockerfile.migrate' \
+              'pnpm-lock.yaml' \
+              'pnpm-workspace.yaml' \
+              'package.json' \
+            | sort -zu > "$filelist"
+
+          # Check the FILE LIST itself, not the resulting hash. If all eight
+          # pathspecs above ever match nothing (e.g. a directory rename), the
+          # `xargs -0 git hash-object | git hash-object --stdin` pipeline does
+          # NOT yield an empty string — it yields git's well-known empty-blob
+          # SHA (e69de29bb2d1d6434b8b29ae775ad8c2e48c5391), a fixed non-empty
+          # constant. A `[[ -z "$hash" ]]` check alone would never fire, the
+          # ECR existence check below would hit on that constant forever, and
+          # the build would be silently skipped on every run from then on.
+          if [[ ! -s "$filelist" ]]; then
+            echo "No files matched the migrate image pathspecs — refusing to tag an image blindly." >&2
+            exit 1
+          fi
+
+          hash=$(xargs -0 git hash-object < "$filelist" | git hash-object --stdin)
+          # Belt-and-braces: also reject the known empty-blob constant
+          # explicitly, in case the file-list guard above is ever refactored
+          # away and this line is the only thing left standing.
+          if [[ -z "$hash" || "$hash" == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" ]]; then
+            echo "Hash computation produced nothing — refusing to tag an image blindly." >&2
+            exit 1
+          fi
+          echo "tag=${hash}" >> "$GITHUB_OUTPUT"
+          echo "Migrate image tag: ${hash}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APP_RELEASE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Skip build + Lambda invoke when this exact migrate content hash was
+      # already successfully applied on this stack. Marker is an extra ECR tag
+      # (`{hash}-applied-{stack}`) written only after a successful invoke —
+      # so a failed migrate never leaves a skip that sticks. Image-exists alone
+      # is NOT enough: the image can be pushed and the invoke still fail.
+      - name: Check whether migrations already applied for this tag
+        id: applied
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          applied_tag="${TAG}-applied-${STACK}"
+          if aws ecr describe-images \
+               --repository-name "${PREFIX}/migrate" \
+               --image-ids "imageTag=${applied_tag}" >/dev/null 2>&1; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            echo "Already applied on ${STACK} (${applied_tag}) — skipping build/invoke."
+            {
+              echo "### Migrations"
+              echo
+              echo "Skipped: content hash \`${TAG}\` already marked applied on \`${STACK}\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+            echo "No applied marker for ${applied_tag} — will migrate."
+          fi
+
+      - name: Check whether this migrate image already exists
+        if: steps.applied.outputs.skipped != 'true'
+        id: exists
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images \
+               --repository-name "${PREFIX}/migrate" \
+               --image-ids "imageTag=${TAG}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Image already in ECR — skipping build."
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Image not in ECR — building."
+          fi
+
+      # Login whenever we will migrate (not only on build): the applied-marker
+      # put-image at the end needs an auth'd ECR client too.
+      - name: Login to Amazon ECR
+        if: steps.applied.outputs.skipped != 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.applied.outputs.skipped != 'true' && steps.exists.outputs.found == 'false'
+
+      - name: Build and push migrate image
+        if: steps.applied.outputs.skipped != 'true' && steps.exists.outputs.found == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/shared/docker/Dockerfile.migrate
+          push: true
+          tags: ${{ vars.AWS_ECR_REGISTRY }}/migrate:${{ steps.tag.outputs.tag }}
+          # Lambda accepts only a plain Docker v2 manifest. Buildx defaults to
+          # emitting an OCI manifest LIST plus an attestation manifest, which
+          # Lambda rejects with:
+          #   InvalidParameterValueException: The image manifest, config or
+          #   layer media type for the source image ... is not supported.
+          provenance: false
+          sbom: false
+          # Lambda functions here default to the x86_64 architecture (nothing
+          # sets `architectures`), so the image must be amd64 regardless of what
+          # the builder happens to be.
+          platforms: linux/amd64
+          cache-from: type=gha,scope=migrate
+          cache-to: type=gha,scope=migrate,mode=max
+
+      - name: Point the migrate Lambda at this image
+        if: steps.applied.outputs.skipped != 'true'
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          IMAGE_URI: ${{ vars.AWS_ECR_REGISTRY }}/migrate:${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          fn="${PREFIX}-${STACK}-migrate"
+
+          # Most releases change no migration input, so the function is already
+          # pointing at this exact image. update-function-code + wait costs
+          # ~30-60s to achieve nothing in that case. Compare first.
+          #
+          # This compares against the URI we INTEND to deploy, so an image
+          # changed out-of-band still gets corrected — the check can only skip
+          # when the deployed image is already precisely what we want.
+          # `Code.ImageUri` is on get-function, NOT get-function-configuration —
+          # the latter returns None for it.
+          # An empty/None result falls through to the update, which is the safe
+          # direction: worst case we do redundant work, never a skipped one.
+          current=$(aws lambda get-function --function-name "$fn" \
+            --query 'Code.ImageUri' --output text 2>/dev/null || echo "")
+
+          if [[ -n "$current" && "$current" != "None" && "$current" == "$IMAGE_URI" ]]; then
+            echo "Lambda already points at ${IMAGE_URI} — skipping update."
+          else
+            echo "Updating ${fn}: ${current:-<unknown>} -> ${IMAGE_URI}"
+            aws lambda update-function-code \
+              --function-name "$fn" \
+              --image-uri "$IMAGE_URI" \
+              --no-cli-pager >/dev/null
+            aws lambda wait function-updated --function-name "$fn"
+          fi
+
+      # `aws lambda invoke` exits 0 even when the FUNCTION throws — it only
+      # reports whether the API call succeeded. Checking the exit code alone
+      # would make every failed migration look successful and let the release
+      # roll app code onto an un-migrated database. Check all three signals.
+      - name: Run migrations
+        if: steps.applied.outputs.skipped != 'true'
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          # The Lambda's own timeout is 900s, but AWS CLI v2 defaults
+          # `cli_read_timeout` to 60s — a container-image Lambda that was just
+          # re-pointed at a new image cold-starts by pulling that image, which
+          # alone can exceed 60s before any migration DDL even runs. Worse,
+          # botocore's "standard" retry mode would then re-invoke while the
+          # first migration is still running; `reservedConcurrentExecutions: 1`
+          # turns that into a 429 that fails the step even though the original
+          # invocation is still correctly migrating the database. Disabling the
+          # CLI read timeout (0 = wait indefinitely) and forcing exactly one
+          # attempt makes this call block until the Lambda actually returns,
+          # instead of racing it.
+          AWS_MAX_ATTEMPTS: 1
+        run: |
+          set -euo pipefail
+          fn="${PREFIX}-${STACK}-migrate"
+
+          # Capture the API response as JSON and parse with jq rather than
+          # string-splitting a JMESPath join — one absent field would silently
+          # shift every positional field and mis-read the result.
+          aws lambda invoke \
+            --function-name "$fn" \
+            --cli-read-timeout 0 \
+            --log-type Tail \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            --output json \
+            response.json > invoke-meta.json
+
+          status=$(jq -r '.StatusCode // 0' invoke-meta.json)
+          function_error=$(jq -r '.FunctionError // "none"' invoke-meta.json)
+
+          echo "--- Lambda log tail ---"
+          jq -r '.LogResult // ""' invoke-meta.json | base64 --decode || true
+          echo "--- payload ---"
+          cat response.json; echo
+
+          if [[ "$status" != "200" ]]; then
+            echo "::error title=Migration failed::Lambda returned StatusCode ${status}" >&2
+            exit 1
+          fi
+          if [[ "$function_error" != "none" ]]; then
+            echo "::error title=Migration failed::Lambda FunctionError=${function_error}" >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.ok' response.json)" != "true" ]]; then
+            echo "::error title=Migration failed::$(jq -r '.error // .stderr' response.json)" >&2
+            exit 1
+          fi
+
+          applied=$(jq -r '.applied | length' response.json)
+          {
+            echo "### Migrations"
+            echo
+            if [[ "$applied" == "0" ]]; then
+              echo "No pending migrations. Database already up to date."
+            else
+              echo "Applied **${applied}** migration(s):"
+              echo
+              jq -r '.applied[] | "- `\(.)`"' response.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Only after a successful invoke. A failed run leaves no marker, so the
+      # next release retries instead of skipping a broken migrate.
+      - name: Mark migrate content hash applied on this stack
+        if: steps.applied.outputs.skipped != 'true'
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          repo="${PREFIX}/migrate"
+          applied_tag="${TAG}-applied-${STACK}"
+
+          manifest=$(aws ecr batch-get-image \
+            --repository-name "$repo" \
+            --image-ids "imageTag=${TAG}" \
+            --query 'images[0].imageManifest' --output text)
+          if [[ -z "$manifest" || "$manifest" == "None" ]]; then
+            echo "::error title=Migrate marker failed::No ECR manifest for tag ${TAG}" >&2
+            exit 1
+          fi
+
+          if aws ecr describe-images \
+               --repository-name "$repo" \
+               --image-ids "imageTag=${applied_tag}" >/dev/null 2>&1; then
+            echo "Applied tag ${applied_tag} already present."
+            exit 0
+          fi
+
+          aws ecr put-image \
+            --repository-name "$repo" \
+            --image-tag "$applied_tag" \
+            --image-manifest "$manifest" \
+            --no-cli-pager >/dev/null
+          echo "Marked ${applied_tag}"
+
+  # ---------------------------------------------------------------------------
+  # build-and-deploy — per-app: build → push to ECR → roll the live resource
+  # ---------------------------------------------------------------------------
+  build-and-deploy:
+    name: "Release ${{ matrix.app.name }}"
+    needs: [resolve-stack, resolve-urls, migrate]
+    # A skipped `needs:` job would normally skip this one too, so the gate is
+    # spelled out: proceed when migrate SUCCEEDED or was deliberately SKIPPED,
+    # never when it FAILED. `!cancelled()` rather than `always()` so cancelling a
+    # run does not roll images anyway.
+    if: >-
+      ${{ !cancelled()
+        && needs.resolve-stack.result == 'success'
+        && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: true
+      matrix:
+        app:
+          - { name: dashboard, dockerfile: infra/shared/docker/Dockerfile.dashboard, kind: apprunner }
+          - { name: www, dockerfile: infra/shared/docker/Dockerfile.www, kind: apprunner }
+          - { name: public-api, dockerfile: infra/shared/docker/Dockerfile.public-api, kind: apprunner }
+          - { name: public-mcp, dockerfile: infra/shared/docker/Dockerfile.public-mcp, kind: apprunner }
+          # Pushed for artifact parity with the Lambda image; nothing runs it as
+          # a long-lived poller today, so there is no live resource to update.
+          - { name: workers, dockerfile: apps/workers/Dockerfile, kind: ecr-only }
+          - { name: workers-lambda, dockerfile: apps/workers/Dockerfile.lambda, kind: lambda, functionSuffix: workers }
+    env:
+      STACK: ${{ needs.resolve-stack.outputs.stack }}
+      IMAGE_URI: ${{ vars.AWS_ECR_REGISTRY }}/${{ matrix.app.name }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require AWS Environment configuration
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ECR_REGISTRY: ${{ vars.AWS_ECR_REGISTRY }}
+          AWS_APP_RELEASE_ROLE_ARN: ${{ vars.AWS_APP_RELEASE_ROLE_ARN }}
+          AWS_DNS_ROOT_DOMAIN: ${{ vars.AWS_DNS_ROOT_DOMAIN }}
+          AWS_RESOURCE_PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${AWS_REGION:-}" ]] || missing+=("vars.AWS_REGION")
+          [[ -n "${AWS_ACCOUNT_ID:-}" ]] || missing+=("vars.AWS_ACCOUNT_ID")
+          [[ -n "${AWS_ECR_REGISTRY:-}" ]] || missing+=("vars.AWS_ECR_REGISTRY")
+          [[ -n "${AWS_APP_RELEASE_ROLE_ARN:-}" ]] || missing+=("vars.AWS_APP_RELEASE_ROLE_ARN")
+          [[ -n "${AWS_DNS_ROOT_DOMAIN:-}" ]] || missing+=("vars.AWS_DNS_ROOT_DOMAIN")
+          # Required, not defaulted: guessing the prefix would build correct
+          # images and then roll a service that does not exist (or worse, one
+          # belonging to another deployment identity in the same account).
+          [[ -n "${AWS_RESOURCE_PREFIX:-}" ]] || missing+=("vars.AWS_RESOURCE_PREFIX")
+          if ((${#missing[@]})); then
+            echo "GitHub Environment '${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}' is missing: ${missing[*]}" >&2
+            echo "Set these under Settings → Environments (see infra/aws/GETTING_STARTED.md)." >&2
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APP_RELEASE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS account
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          test "$actual" = "${{ vars.AWS_ACCOUNT_ID }}" || {
+            echo "Expected AWS account ${{ vars.AWS_ACCOUNT_ID }}, got $actual" >&2
+            exit 1
+          }
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.app.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.app.dockerfile }}
+          push: true
+          tags: ${{ env.IMAGE_URI }}
+          # `workers-lambda` is consumed by lambda:UpdateFunctionCode, and Lambda
+          # accepts only a plain Docker v2 manifest — buildx's default OCI
+          # manifest list + attestation manifest is rejected outright. Applied to
+          # the whole matrix rather than just that leg: it costs nothing for the
+          # App Runner images and removes a footgun if another app ever moves to
+          # Lambda. App Runner is x86_64, so amd64 is correct for all of them.
+          provenance: false
+          sbom: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.app.name }}
+          cache-to: type=gha,scope=${{ matrix.app.name }},mode=max
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            NEXT_PUBLIC_DASHBOARD_URL=${{ needs.resolve-urls.outputs.dashboard }}
+            NEXT_PUBLIC_WWW_URL=${{ needs.resolve-urls.outputs.www }}
+            NEXT_PUBLIC_API_URL=${{ needs.resolve-urls.outputs.api }}
+            NEXT_PUBLIC_MCP_URL=${{ needs.resolve-urls.outputs.mcp }}
+            NEXT_PUBLIC_BETTER_AUTH_URL=${{ needs.resolve-urls.outputs.auth }}
+
+      # `update-service` REPLACES the whole source configuration rather than
+      # merging it, so a hand-built payload silently wipes the service's
+      # runtime env + secrets. Describe first, swap exactly one field, send it
+      # back. The merge algorithm is unit-tested in
+      # infra/aws/apps/apprunner-source-image.ts — keep the jq below in step
+      # with that helper.
+      - name: Roll App Runner service
+        if: matrix.app.kind == 'apprunner'
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          APP: ${{ matrix.app.name }}
+        run: |
+          set -euo pipefail
+          service_name="${PREFIX}-${STACK}-${APP}"
+
+          arn=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='${service_name}'].ServiceArn | [0]" \
+            --output text)
+          if [[ -z "$arn" || "$arn" == "None" ]]; then
+            echo "No App Runner service named ${service_name}. Run the Infra AWS workflow first." >&2
+            exit 1
+          fi
+          echo "Service: ${service_name} (${arn})"
+
+          # App Runner accepts ONE operation per service at a time. If anything
+          # else is mid-flight, UpdateService fails outright:
+          #   InvalidStateException: Service cannot be updated in the current
+          #   state: OPERATION_IN_PROGRESS
+          #
+          # `cancel-in-progress: false` stops this workflow racing itself, but
+          # it cannot stop a `pulumi up` on the apps stack, a console action, or
+          # a manual roll — all of which touch the same services. Wait for the
+          # service to become updatable instead of failing the release on a
+          # transient state that resolves itself in a minute or two.
+          for _ in $(seq 1 40); do
+            svc_status=$(aws apprunner describe-service --service-arn "$arn" \
+              --query 'Service.Status' --output text 2>/dev/null || echo "UNKNOWN")
+            case "$svc_status" in
+              RUNNING)
+                break
+                ;;
+              OPERATION_IN_PROGRESS)
+                echo "  ${service_name}: another operation in progress — waiting"
+                sleep 15
+                ;;
+              CREATE_FAILED|DELETED|DELETE_FAILED)
+                echo "::error title=Service not deployable::${service_name} is ${svc_status}" >&2
+                exit 1
+                ;;
+              *)
+                echo "  ${service_name}: ${svc_status} — waiting"
+                sleep 15
+                ;;
+            esac
+          done
+
+          svc_status=$(aws apprunner describe-service --service-arn "$arn" \
+            --query 'Service.Status' --output text 2>/dev/null || echo "UNKNOWN")
+          if [[ "$svc_status" != "RUNNING" ]]; then
+            echo "::error title=Service never became updatable::${service_name} stuck in ${svc_status} after 10m" >&2
+            exit 1
+          fi
+
+          source_config=$(aws apprunner describe-service --service-arn "$arn" \
+            --query 'Service.SourceConfiguration' --output json)
+
+          # Guard the same invariant the TS helper throws on: never send a
+          # partial source configuration.
+          if [[ "$(jq 'has("ImageRepository")' <<<"$source_config")" != "true" ]]; then
+            echo "describe-service returned no ImageRepository for ${service_name}" >&2
+            exit 1
+          fi
+
+          updated=$(jq --arg id "$IMAGE_URI" \
+            '.ImageRepository.ImageIdentifier = $id' <<<"$source_config")
+
+          operation_id=$(aws apprunner update-service \
+            --service-arn "$arn" \
+            --source-configuration "$updated" \
+            --query 'OperationId' --output text)
+
+          if [[ -z "$operation_id" || "$operation_id" == "None" ]]; then
+            echo "update-service was a no-op (image already ${IMAGE_URI})."
+            exit 0
+          fi
+          echo "Operation: ${operation_id}"
+
+          # Poll the operation rather than the service status: a service can
+          # read RUNNING for a moment before the new deployment is picked up.
+          for _ in $(seq 1 60); do
+            status=$(aws apprunner list-operations --service-arn "$arn" --max-results 20 \
+              --query "OperationSummaryList[?Id=='${operation_id}'].Status | [0]" \
+              --output text)
+            case "$status" in
+              SUCCEEDED)
+                echo "Deployment succeeded."
+                exit 0
+                ;;
+              FAILED|ROLLBACK_IN_PROGRESS|ROLLBACK_SUCCEEDED|ROLLBACK_FAILED)
+                echo "Deployment ended in status ${status} for ${service_name}" >&2
+                exit 1
+                ;;
+              *)
+                echo "  ${service_name}: ${status:-PENDING}"
+                sleep 15
+                ;;
+            esac
+          done
+          echo "Timed out after 15m waiting for ${service_name} deployment ${operation_id}" >&2
+          exit 1
+
+      - name: Update workers Lambda image
+        if: matrix.app.kind == 'lambda'
+        env:
+          PREFIX: ${{ vars.AWS_RESOURCE_PREFIX }}
+          SUFFIX: ${{ matrix.app.functionSuffix }}
+        run: |
+          set -euo pipefail
+          function_name="${PREFIX}-${STACK}-${SUFFIX}"
+          echo "Function: ${function_name} → ${IMAGE_URI}"
+          aws lambda update-function-code \
+            --function-name "$function_name" \
+            --image-uri "$IMAGE_URI" \
+            --no-cli-pager >/dev/null
+          aws lambda wait function-updated --function-name "$function_name"
+          echo "Lambda updated."
+
+      - name: Image pushed (no live resource)
+        if: matrix.app.kind == 'ecr-only'
+        run: echo "Pushed ${IMAGE_URI}; ${{ matrix.app.name }} has no running service to roll."
+
+  # ---------------------------------------------------------------------------
+  # smoke — public health checks against the custom domains
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: Smoke test
+    needs: [resolve-stack, resolve-urls, build-and-deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ format('{0}-aws', needs.resolve-stack.outputs.stack) }}
+    steps:
+      - name: Curl public health endpoints
+        env:
+          DASHBOARD: ${{ needs.resolve-urls.outputs.dashboard }}
+          WWW: ${{ needs.resolve-urls.outputs.www }}
+          API: ${{ needs.resolve-urls.outputs.api }}
+          MCP: ${{ needs.resolve-urls.outputs.mcp }}
+        run: |
+          set -euo pipefail
+          # Every deployed service gets checked, not just two — a release that
+          # rolls four services should not be declared healthy on the strength
+          # of one of them. Health paths come from infra/shared/apps.manifest.ts:
+          # Next.js apps serve /api/health; Hono/node services serve /health.
+          #
+          # All of these are UNAUTHENTICATED on purpose. The /sign-in check
+          # confirms the dashboard actually renders a page rather than merely
+          # answering a health route — that catches a broken build that still
+          # passes /api/health.
+          failed=()
+          for url in \
+            "${DASHBOARD}/api/health" \
+            "${DASHBOARD}/sign-in" \
+            "${WWW}/api/health" \
+            "${API}/health" \
+            "${MCP}/health"; do
+            echo "Smoke: $url"
+            if curl --fail --silent --show-error --output /dev/null \
+                 --retry 5 --retry-all-errors --retry-delay 15 "$url"; then
+              echo "  ok"
+            else
+              echo "  FAILED"
+              failed+=("$url")
+            fi
+          done
+
+          # Check every endpoint before failing, so one broken service does not
+          # hide the state of the others. A first-failure exit would make a
+          # multi-service outage look like a single-service one.
+          if ((${#failed[@]})); then
+            printf '::error title=Smoke test failed::%s unreachable\n' "${failed[*]}"
+            { echo "### Smoke test failed"; echo;
+              for u in "${failed[@]}"; do echo "- \`$u\`"; done; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          { echo "### Smoke test passed"; echo;
+            echo "All 5 public endpoints healthy."; } >> "$GITHUB_STEP_SUMMARY"
+
+      # A 200 from /health only proves *something* is answering. This step
+      # proves it is the RIGHT something: the commit this run built.
+      - name: Verify public-api and dashboard are running this commit
+        env:
+          API: ${{ needs.resolve-urls.outputs.api }}
+          DASHBOARD: ${{ needs.resolve-urls.outputs.dashboard }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # App Runner shifts traffic as part of the operation the deploy job
+          # already polled to SUCCEEDED, so this is normally true on the first
+          # try. Retry anyway rather than fail a good release on a straggler.
+          drift=()
+          for target in "${API}/health" "${DASHBOARD}/api/health"; do
+            sha=""
+            for attempt in 1 2 3 4 5; do
+              sha=$(curl --fail --silent --show-error "${target}" | jq -r '.sha // "unknown"')
+              if [[ "$sha" == "$EXPECTED_SHA" ]]; then break; fi
+              echo "attempt ${attempt}: ${target} reports ${sha}"
+              sleep 15
+            done
+            if [[ "$sha" != "$EXPECTED_SHA" ]]; then
+              printf '::error title=Deployed image drift::%s is serving %s, expected %s\n' "$target" "$sha" "$EXPECTED_SHA"
+              drift+=("\`${target}\` reports \`${sha}\`")
+            else
+              echo "${target} is serving ${sha}"
+            fi
+          done
+
+          if ((${#drift[@]})); then
+            { echo "### Deployed image drift"; echo;
+              echo "Expected \`${EXPECTED_SHA}\`:"; echo;
+              for d in "${drift[@]}"; do echo "- $d"; done; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
