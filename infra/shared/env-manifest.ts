@@ -27,7 +27,6 @@ function publicUrls(
       NEXT_PUBLIC_WWW_URL: LOCAL_HOSTS.www,
       NEXT_PUBLIC_API_URL: LOCAL_HOSTS["public-api"],
       NEXT_PUBLIC_MCP_URL: LOCAL_HOSTS["public-mcp"],
-      NEXT_PUBLIC_BETTER_AUTH_URL: LOCAL_HOSTS.dashboard,
       BETTER_AUTH_URL: LOCAL_HOSTS.dashboard,
     };
   }

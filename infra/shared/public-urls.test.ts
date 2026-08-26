@@ -135,7 +135,6 @@ describe("buildPublicUrlEnv", () => {
       NEXT_PUBLIC_WWW_URL: "https://example.com",
       NEXT_PUBLIC_API_URL: "https://api.example.com",
       NEXT_PUBLIC_MCP_URL: "https://mcp.example.com",
-      NEXT_PUBLIC_BETTER_AUTH_URL: "https://dashboard.example.com",
       BETTER_AUTH_URL: "https://dashboard.example.com",
     });
   });
@@ -146,7 +145,6 @@ describe("buildPublicUrlEnv", () => {
       NEXT_PUBLIC_WWW_URL: "https://www-staging.example.com",
       NEXT_PUBLIC_API_URL: "https://api-staging.example.com",
       NEXT_PUBLIC_MCP_URL: "https://mcp-staging.example.com",
-      NEXT_PUBLIC_BETTER_AUTH_URL: "https://dashboard-staging.example.com",
       BETTER_AUTH_URL: "https://dashboard-staging.example.com",
     });
   });

@@ -10,14 +10,31 @@ describe("auth keys", () => {
 
   it("defaults BETTER_AUTH_SECRET for local dev", () => {
     delete process.env.BETTER_AUTH_SECRET;
-    expect(keys().BETTER_AUTH_SECRET).toBe(
-      "better-auth-secret-12345678901234567890",
-    );
+    expect(keys().BETTER_AUTH_SECRET).toBe("better-auth-secret-12345678901234567890");
   });
 
   it("defaults BETTER_AUTH_URL for local dev", () => {
     delete process.env.BETTER_AUTH_URL;
+    delete process.env.NEXT_PUBLIC_DASHBOARD_URL;
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    delete process.env.VERCEL_URL;
     expect(keys().BETTER_AUTH_URL).toBe("http://localhost:4000");
+  });
+
+  it("uses NEXT_PUBLIC_DASHBOARD_URL when BETTER_AUTH_URL is unset", () => {
+    delete process.env.BETTER_AUTH_URL;
+    process.env.NEXT_PUBLIC_DASHBOARD_URL = "https://app.example.com";
+    expect(keys().BETTER_AUTH_URL).toBe("https://app.example.com");
+  });
+
+  it("prefers an explicit BETTER_AUTH_URL over the dashboard URL", () => {
+    process.env.BETTER_AUTH_URL = "https://auth.example.com";
+    process.env.NEXT_PUBLIC_DASHBOARD_URL = "https://app.example.com";
+    expect(keys().BETTER_AUTH_URL).toBe("https://auth.example.com");
+  });
+
+  it("does not expose a separate NEXT_PUBLIC_BETTER_AUTH_URL", () => {
+    expect(keys()).not.toHaveProperty("NEXT_PUBLIC_BETTER_AUTH_URL");
   });
 
   it("allows OAuth vars to be unset", () => {

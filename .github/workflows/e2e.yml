@@ -59,7 +59,6 @@ jobs:
       # origin is rejected by Better Auth's CSRF checks).
       BETTER_AUTH_SECRET: ci-e2e-3f9a1c7d8b2e4f6a0c5d9e1b3a7f2c4d6e8b0a2c
       BETTER_AUTH_URL: http://localhost:4000
-      NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:4000
 
       # Dashboard URL (used by UI cross-links)
       NEXT_PUBLIC_DASHBOARD_URL: http://localhost:4000

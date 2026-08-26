@@ -149,7 +149,6 @@ export function buildPublicUrlEnv(
     NEXT_PUBLIC_WWW_URL: url(LB_HOST_SUBDOMAINS.www),
     NEXT_PUBLIC_API_URL: url(LB_HOST_SUBDOMAINS["public-api"]),
     NEXT_PUBLIC_MCP_URL: url(LB_HOST_SUBDOMAINS["public-mcp"]),
-    NEXT_PUBLIC_BETTER_AUTH_URL: dashboard,
     BETTER_AUTH_URL: dashboard,
   };
 }

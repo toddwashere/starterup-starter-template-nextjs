@@ -138,8 +138,6 @@ envVarGroups:
         generateValue: true
       - key: BETTER_AUTH_URL
         sync: false  # set in dashboard after first deploy (Render external URL)
-      - key: NEXT_PUBLIC_BETTER_AUTH_URL
-        sync: false
       - key: NEXT_PUBLIC_DASHBOARD_URL
         sync: false
       - key: NEXT_PUBLIC_WWW_URL

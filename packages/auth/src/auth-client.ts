@@ -4,10 +4,16 @@ import { ac, orgRoles } from "./org-roles";
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { stripeClient } from "@better-auth/stripe/client";
-import { keys as authKeys } from "../keys";
+import { fallbackAuthUrl, resolveAuthClientBaseURL } from "./auth-base-url";
 
 export const authClient = createAuthClient({
-  baseURL: authKeys().NEXT_PUBLIC_BETTER_AUTH_URL,
+  // Same-origin: Better Auth is served by the dashboard. Using the page origin
+  // prevents a missing/localhost NEXT_PUBLIC_* bake from calling loopback in
+  // production (Chrome "access other apps and services on this device").
+  baseURL: resolveAuthClientBaseURL({
+    configured: fallbackAuthUrl(),
+    currentOrigin: (globalThis as { location?: { origin?: string } }).location?.origin,
+  }),
   plugins: [
     organizationClient({ ac, roles: orgRoles }),
     adminClient(),

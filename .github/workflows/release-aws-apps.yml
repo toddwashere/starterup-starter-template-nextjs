@@ -599,7 +599,6 @@ jobs:
             NEXT_PUBLIC_WWW_URL=${{ needs.resolve-urls.outputs.www }}
             NEXT_PUBLIC_API_URL=${{ needs.resolve-urls.outputs.api }}
             NEXT_PUBLIC_MCP_URL=${{ needs.resolve-urls.outputs.mcp }}
-            NEXT_PUBLIC_BETTER_AUTH_URL=${{ needs.resolve-urls.outputs.auth }}
 
       # `update-service` REPLACES the whole source configuration rather than
       # merging it, so a hand-built payload silently wipes the service's

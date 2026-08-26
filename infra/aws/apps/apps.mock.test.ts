@@ -302,9 +302,6 @@ describe("aws apps configured identity (mocked)", () => {
       const vars = imageConfiguration(appName).runtimeEnvironmentVariables ?? {};
       // Mock stack is "staging" + AWS_DNS_ROOT_DOMAIN=example.com → flat hosts
       expect(vars.BETTER_AUTH_URL).toBe("https://dashboard-staging.example.com");
-      expect(vars.NEXT_PUBLIC_BETTER_AUTH_URL).toBe(
-        "https://dashboard-staging.example.com",
-      );
       expect(vars.NEXT_PUBLIC_DASHBOARD_URL).toBe(
         "https://dashboard-staging.example.com",
       );
@@ -356,7 +353,6 @@ describe("aws apps configured identity (mocked)", () => {
         "WORKER_QUEUE_ADAPTER",
         "SQS_QUEUE_URL",
         "BETTER_AUTH_URL",
-        "NEXT_PUBLIC_BETTER_AUTH_URL",
         "NEXT_PUBLIC_DASHBOARD_URL",
         "NEXT_PUBLIC_WWW_URL",
         "NEXT_PUBLIC_API_URL",

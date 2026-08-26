@@ -10,10 +10,9 @@ describe("buildEnv - local profile", () => {
     expect(env.NEXT_PUBLIC_MCP_URL).toBe("http://localhost:4003");
   });
 
-  it("sets BETTER_AUTH_URL and NEXT_PUBLIC_BETTER_AUTH_URL to dashboard localhost", () => {
+  it("sets BETTER_AUTH_URL to dashboard localhost", () => {
     const env = buildEnv("local");
     expect(env.BETTER_AUTH_URL).toBe("http://localhost:4000");
-    expect(env.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("http://localhost:4000");
   });
 
   it("sets REDIS_URL to localhost redis", () => {
@@ -60,7 +59,6 @@ describe("buildEnv - vercel profile", () => {
   it("sets BETTER_AUTH_URL to dashboard subdomain", () => {
     const env = buildEnv("vercel", { baseDomain: BASE });
     expect(env.BETTER_AUTH_URL).toBe("https://dashboard.example.com");
-    expect(env.NEXT_PUBLIC_BETTER_AUTH_URL).toBe("https://dashboard.example.com");
   });
 
   it("sets WORKER_QUEUE_ADAPTER to bullmq", () => {

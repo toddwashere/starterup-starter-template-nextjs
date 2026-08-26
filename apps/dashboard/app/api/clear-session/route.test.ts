@@ -7,22 +7,22 @@ vi.mock("next/headers", () => ({
 
 import { GET } from "./route";
 
+const REQUEST = new Request("http://localhost:4000/api/clear-session");
+
 describe("GET /api/clear-session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("deletes both session cookie variants", async () => {
-    await GET();
+    await GET(REQUEST);
 
     expect(mockDelete).toHaveBeenCalledWith("better-auth.session_token");
-    expect(mockDelete).toHaveBeenCalledWith(
-      "__Secure-better-auth.session_token",
-    );
+    expect(mockDelete).toHaveBeenCalledWith("__Secure-better-auth.session_token");
   });
 
   it("redirects to /sign-in", async () => {
-    const response = await GET();
+    const response = await GET(REQUEST);
 
     expect(response.status).toBe(307);
     const location = new URL(response.headers.get("location")!);
@@ -30,7 +30,7 @@ describe("GET /api/clear-session", () => {
   });
 
   it("deletes cookies before redirecting to prevent redirect loops", async () => {
-    await GET();
+    await GET(REQUEST);
 
     expect(mockDelete).toHaveBeenCalledTimes(2);
   });

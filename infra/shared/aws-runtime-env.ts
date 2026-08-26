@@ -16,7 +16,6 @@ export interface AwsRuntimeEnvConfig {
 /** Safe loopback URLs when no apex domain is configured (local / bootstrap). */
 const LOOPBACK_PUBLIC_URL_ENV: Record<PublicUrlEnvKey, string> = {
   BETTER_AUTH_URL: "http://127.0.0.1:4000",
-  NEXT_PUBLIC_BETTER_AUTH_URL: "http://127.0.0.1:4000",
   NEXT_PUBLIC_DASHBOARD_URL: "http://127.0.0.1:4000",
   NEXT_PUBLIC_API_URL: "http://127.0.0.1:4002",
   NEXT_PUBLIC_MCP_URL: "http://127.0.0.1:4003",
