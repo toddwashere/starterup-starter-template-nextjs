@@ -1,6 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "cacheMaxAge": "7d",
+  "cacheMaxSize": "1GB",
   "globalPassThroughEnv": ["BETTER_AUTH_SECRET"],
   "globalEnv": [
     "DATABASE_URL",
