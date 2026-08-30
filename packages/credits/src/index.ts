@@ -11,7 +11,9 @@ export type {
 export { ensureOrgCanSpendCredits, getOrgCreditBalance } from "./services/balance-service";
 export { normalizeModelUsage } from "./services/normalization";
 export {
+  applyAllowancePeriodReset,
   beginCreditUsage,
+  createAdminCreditAdjustment,
   grantCredits,
   listCreditActivity,
   recordMeteredOnlyUsage,

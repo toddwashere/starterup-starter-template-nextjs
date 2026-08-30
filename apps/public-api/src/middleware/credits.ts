@@ -1,5 +1,5 @@
 import { createId } from "@workspace/common";
-import { runWithCreditCharge, type CreditCost } from "@workspace/credits";
+import { InsufficientCreditsError, runWithCreditCharge, type CreditCost } from "@workspace/credits";
 import type { PublicApiAuthContext } from "@workspace/auth/public-api";
 
 function actorFromAuthContext(authContext: PublicApiAuthContext) {
@@ -18,26 +18,36 @@ function actorFromAuthContext(authContext: PublicApiAuthContext) {
   };
 }
 
+/** Narrow an unknown route error to the credits package's balance error. */
+export function isInsufficientCreditsError(err: unknown): err is InsufficientCreditsError {
+  return err instanceof InsufficientCreditsError;
+}
+
 export async function runPublicApiWithCredits<T>(input: {
   authContext: PublicApiAuthContext;
   routeId: string;
   usageArea: string;
   chargeToOrg?: boolean;
   cost: CreditCost;
+  /** Org-scoped routes resolve the org from the path, not the credential. */
+  organizationId?: string | null;
+  /** Pass the caller's `Idempotency-Key` so retries settle exactly once. */
+  idempotencyKey?: string;
   run: () => Promise<T>;
 }): Promise<T> {
-  if (!input.authContext.orgId) {
+  const organizationId = input.organizationId ?? input.authContext.orgId;
+  if (!organizationId) {
     return input.run();
   }
 
   return runWithCreditCharge({
-    organizationId: input.authContext.orgId,
+    organizationId,
     actor: actorFromAuthContext(input.authContext),
     source: "public_api",
     usageArea: input.usageArea,
     chargeToOrg: input.chargeToOrg,
     cost: input.cost,
-    idempotencyKey: `public_api:${input.routeId}:${createId("creduse")}`,
+    idempotencyKey: `public_api:${input.routeId}:${input.idempotencyKey ?? createId("creduse")}`,
     metadata: {
       routeId: input.routeId,
       authKind: input.authContext.kind,

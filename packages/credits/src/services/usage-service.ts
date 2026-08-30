@@ -289,6 +289,127 @@ async function debitCredits(input: UsageInput & { amountCredits: number }) {
   });
 }
 
+/**
+ * Close out the previous allowance period before a new grant. Leftover
+ * allowance either expires or carries forward up to `rolloverCapCredits`, and
+ * the account records the new period window either way.
+ */
+export async function applyAllowancePeriodReset(input: {
+  organizationId: string;
+  planName: string;
+  periodStart: Date;
+  periodEnd: Date;
+  unusedPolicy: "expire" | "rollover";
+  rolloverCapCredits?: number | null;
+}) {
+  const usageInput: UsageInput = {
+    organizationId: input.organizationId,
+    source: "system",
+    usageArea: "monthly_allowance",
+    idempotencyKey: `monthly_allowance_reset:${input.organizationId}:${input.planName}:${input.periodStart.toISOString()}`,
+    metadata: {
+      planName: input.planName,
+      periodStart: input.periodStart.toISOString(),
+      periodEnd: input.periodEnd.toISOString(),
+      allowanceUnusedPolicy: input.unusedPolicy,
+      rolloverCapCredits: input.rolloverCapCredits ?? null,
+    },
+  };
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await findUsageEvent(tx, usageInput);
+    if (existing) {
+      return { alreadyApplied: true, expiredCredits: 0, carriedCredits: 0 };
+    }
+
+    const account = await getOrCreateCreditAccount(input.organizationId, tx);
+    const leftoverCredits = account.monthlyAllowanceBalanceCredits;
+    const cap = input.rolloverCapCredits;
+    const carriedCredits =
+      input.unusedPolicy === "rollover"
+        ? typeof cap === "number"
+          ? Math.min(leftoverCredits, Math.max(0, cap))
+          : leftoverCredits
+        : 0;
+    const expiredCredits = leftoverCredits - carriedCredits;
+
+    const event = await createUsageEvent(tx, {
+      ...usageInput,
+      status: "settled",
+      settledAt: new Date(),
+    });
+
+    await tx.creditAccount.update({
+      where: { organizationId: input.organizationId },
+      data: {
+        monthlyAllowanceBalanceCredits: carriedCredits,
+        totalBalanceCredits: calculateTotalBalance({
+          monthlyAllowanceBalanceCredits: carriedCredits,
+          walletBalanceCredits: account.walletBalanceCredits,
+          overdraftCredits: account.overdraftCredits,
+        }),
+        currentPeriodStart: input.periodStart,
+        currentPeriodEnd: input.periodEnd,
+      },
+    });
+
+    if (expiredCredits > 0) {
+      await tx.creditLedgerEntry.createMany({
+        data: [
+          {
+            id: createId("credled"),
+            organizationId: input.organizationId,
+            usageEventId: event.id,
+            effect: "decrease",
+            bucket: "monthly_allowance",
+            amountCredits: expiredCredits,
+            balanceAfterCredits: carriedCredits,
+          },
+        ],
+      });
+    }
+
+    return { alreadyApplied: false, expiredCredits, carriedCredits };
+  });
+}
+
+/**
+ * Manual balance correction made by an operator. Grants land in the wallet by
+ * default; debits follow the normal spend order and may create overdraft.
+ */
+export async function createAdminCreditAdjustment(input: {
+  organizationId: string;
+  amountCredits: number;
+  direction: "grant" | "debit";
+  reason: string;
+  bucket?: CreditGrantBucket;
+  actor?: CreditActor;
+  idempotencyKey?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  assertPositiveCredits(input.amountCredits);
+
+  const shared = {
+    organizationId: input.organizationId,
+    source: "system" as const,
+    usageArea: "admin_adjustment" as const,
+    actor: input.actor ?? ({ kind: "system" } as const),
+    idempotencyKey:
+      input.idempotencyKey ?? `admin_adjustment:${input.organizationId}:${createId("creduse")}`,
+    metadata: { ...input.metadata, reason: input.reason, direction: input.direction },
+  };
+
+  if (input.direction === "grant") {
+    return grantCredits({
+      ...shared,
+      amountCredits: input.amountCredits,
+      bucket: input.bucket ?? "wallet",
+    });
+  }
+
+  return debitCredits({ ...shared, amountCredits: input.amountCredits });
+}
+
 async function recordFailedUsage(input: UsageInput & { errorCode?: string }) {
   return createUsageEvent(prisma, {
     ...input,

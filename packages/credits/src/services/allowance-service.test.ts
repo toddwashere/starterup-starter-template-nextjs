@@ -4,6 +4,11 @@ import { grantCredits } from "./usage-service";
 
 vi.mock("./usage-service", () => ({
   grantCredits: vi.fn(async (input) => input),
+  applyAllowancePeriodReset: vi.fn(async () => ({
+    alreadyApplied: false,
+    expiredCredits: 0,
+    carriedCredits: 0,
+  })),
 }));
 
 describe("grantMonthlyAllowance", () => {

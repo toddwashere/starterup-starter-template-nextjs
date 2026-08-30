@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InsufficientCreditsError,
   beginCreditUsage,
+  createAdminCreditAdjustment,
   ensureOrgCanSpendCredits,
   getOrgCreditBalance,
   grantCredits,
+  recordMeteredOnlyUsage,
   runWithCreditCharge,
 } from "../index";
 
@@ -238,5 +240,217 @@ describe("credit usage services", () => {
       walletBalanceCredits: 625,
       totalBalanceCredits: 625,
     });
+  });
+});
+
+describe("metered-only and unmetered usage", () => {
+  beforeEach(() => {
+    state.accounts.clear();
+    state.events.clear();
+    state.ledgers.length = 0;
+    vi.clearAllMocks();
+  });
+
+  it("records metered-only usage without creating ledger movement", async () => {
+    await grantCredits({
+      organizationId: "org_1",
+      amountCredits: 1_000,
+      bucket: "wallet",
+      source: "system",
+      usageArea: "admin_adjustment",
+      idempotencyKey: "grant_wallet",
+    });
+    state.ledgers.length = 0;
+
+    const event = await recordMeteredOnlyUsage({
+      organizationId: "org_1",
+      source: "dashboard",
+      usageArea: "assistant_chat",
+      idempotencyKey: "metered_1",
+      providerModel: "openai:gpt-4o-mini",
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    expect(event).toMatchObject({
+      status: "metered_only",
+      chargeToOrg: false,
+      normalizedTokens: 300,
+      creditsCharged: 375,
+    });
+    expect(state.ledgers).toHaveLength(0);
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      walletBalanceCredits: 1_000,
+      totalBalanceCredits: 1_000,
+    });
+  });
+
+  it("records metered-only usage when chargeToOrg is false even on a charged helper", async () => {
+    const result = await runWithCreditCharge({
+      organizationId: "org_1",
+      chargeToOrg: false,
+      source: "public_mcp",
+      usageArea: "mcp_tool",
+      idempotencyKey: "tool_metered",
+      cost: { mode: "fixed", credits: 10 },
+      run: async () => "ok",
+    });
+
+    expect(result).toBe("ok");
+    expect(state.ledgers).toHaveLength(0);
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      totalBalanceCredits: 0,
+    });
+  });
+
+  it("records unmetered usage with no charge when the AI call reports no usage", async () => {
+    await grantCredits({
+      organizationId: "org_1",
+      amountCredits: 1_000,
+      bucket: "wallet",
+      source: "system",
+      usageArea: "admin_adjustment",
+      idempotencyKey: "grant_wallet",
+    });
+    state.ledgers.length = 0;
+
+    const usage = await beginCreditUsage({
+      organizationId: "org_1",
+      chargeToOrg: true,
+      source: "dashboard",
+      usageArea: "assistant_chat",
+      idempotencyKey: "chat_unmetered",
+    });
+
+    const event = await usage.settleModelUsage({
+      providerModel: "openai:gpt-4o-mini",
+      usage: undefined,
+    });
+
+    expect(event).toMatchObject({ status: "unmetered" });
+    expect(event.creditsCharged).toBeUndefined();
+    expect(state.ledgers).toHaveLength(0);
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      walletBalanceCredits: 1_000,
+    });
+  });
+
+  it("settles at most once for the same organization and idempotency key", async () => {
+    await grantCredits({
+      organizationId: "org_1",
+      amountCredits: 1_000,
+      bucket: "wallet",
+      source: "system",
+      usageArea: "admin_adjustment",
+      idempotencyKey: "grant_wallet",
+    });
+
+    const usage = await beginCreditUsage({
+      organizationId: "org_1",
+      chargeToOrg: true,
+      source: "dashboard",
+      usageArea: "assistant_chat",
+      idempotencyKey: "chat_retry",
+    });
+
+    const first = await usage.settleModelUsage({
+      providerModel: "openai:gpt-4o-mini",
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+    const second = await usage.settleModelUsage({
+      providerModel: "openai:gpt-4o-mini",
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    expect(second.id).toBe(first.id);
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      walletBalanceCredits: 625,
+      totalBalanceCredits: 625,
+    });
+  });
+});
+
+describe("createAdminCreditAdjustment", () => {
+  beforeEach(() => {
+    state.accounts.clear();
+    state.events.clear();
+    state.ledgers.length = 0;
+    vi.clearAllMocks();
+  });
+
+  it("grants wallet credits and records the reason", async () => {
+    const event = await createAdminCreditAdjustment({
+      organizationId: "org_1",
+      amountCredits: 500,
+      direction: "grant",
+      reason: "goodwill",
+      idempotencyKey: "adjust_1",
+    });
+
+    expect(event).toMatchObject({
+      status: "settled",
+      usageArea: "admin_adjustment",
+      source: "system",
+    });
+    expect(event.metadata).toMatchObject({ reason: "goodwill", direction: "grant" });
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      walletBalanceCredits: 500,
+      totalBalanceCredits: 500,
+    });
+  });
+
+  it("debits credits in the configured spend order", async () => {
+    await grantCredits({
+      organizationId: "org_1",
+      amountCredits: 200,
+      bucket: "monthly_allowance",
+      source: "system",
+      usageArea: "monthly_allowance",
+      idempotencyKey: "grant_allowance",
+    });
+
+    await createAdminCreditAdjustment({
+      organizationId: "org_1",
+      amountCredits: 120,
+      direction: "debit",
+      reason: "duplicate grant reversal",
+      idempotencyKey: "adjust_2",
+    });
+
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      monthlyAllowanceBalanceCredits: 80,
+      totalBalanceCredits: 80,
+    });
+  });
+
+  it("applies the same adjustment only once", async () => {
+    await createAdminCreditAdjustment({
+      organizationId: "org_1",
+      amountCredits: 500,
+      direction: "grant",
+      reason: "goodwill",
+      idempotencyKey: "adjust_1",
+    });
+    await createAdminCreditAdjustment({
+      organizationId: "org_1",
+      amountCredits: 500,
+      direction: "grant",
+      reason: "goodwill",
+      idempotencyKey: "adjust_1",
+    });
+
+    await expect(getOrgCreditBalance("org_1")).resolves.toMatchObject({
+      walletBalanceCredits: 500,
+    });
+  });
+
+  it("rejects non-positive adjustment amounts", async () => {
+    await expect(
+      createAdminCreditAdjustment({
+        organizationId: "org_1",
+        amountCredits: 0,
+        direction: "grant",
+        reason: "noop",
+      }),
+    ).rejects.toThrow("amountCredits must be a positive integer");
   });
 });

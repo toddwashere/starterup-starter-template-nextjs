@@ -18,6 +18,10 @@ export const creditsConfig = {
       markupBasisPoints: 12_500,
     },
     models: {
+      "openrouter:openai/gpt-4o-mini": {
+        inputTokenWeight: 1,
+        outputTokenWeight: 4,
+      },
       "openai:gpt-4o-mini": {
         inputTokenWeight: 1,
         outputTokenWeight: 4,

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+vi.mock("@workspace/credits", () => ({
+  creditsConfig: { policy: { chargeToOrgDefault: false } },
+  InsufficientCreditsError: class extends Error {},
+  runWithCreditCharge: vi.fn(async ({ run }) => run()),
+}));
+
 vi.mock("@workspace/auth/public-api", () => ({
   registerUserForPublicApi: vi.fn(),
   PublicApiRegisterError: class PublicApiRegisterError extends Error {

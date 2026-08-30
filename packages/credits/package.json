@@ -9,7 +9,8 @@
   },
   "scripts": {
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:pricing": "tsx scripts/check-pricing.ts"
   },
   "dependencies": {
     "@workspace/common": "workspace:*",
@@ -18,7 +19,9 @@
   },
   "devDependencies": {
     "@types/node": "^24",
+    "@workspace/ai": "workspace:*",
     "@workspace/tooling": "workspace:*",
+    "tsx": "^4",
     "typescript": "^5.7",
     "vitest": "^3.2.7"
   }

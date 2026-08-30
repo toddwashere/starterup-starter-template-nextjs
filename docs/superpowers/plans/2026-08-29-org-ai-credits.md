@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-29-org-ai-credits-design.md`
 
-**Status:** Mid-stream. Schema is already on `main` (`packages/database/prisma/credits.prisma`). Application code, billing hooks, and dashboard UI exist as uncommitted work. Charging stays observe-only (`chargeToOrgDefault: false`). Do not archive this plan until remaining work below is done.
+**Status:** Complete. All tasks implemented and verified. Charging remains observe-only (`chargeToOrgDefault: false`) by design — rollout step 6 (flipping selected AI calls to `chargeToOrg: true`) is deliberately deferred until metering is proven in production.
 
 ## Global Constraints
 
@@ -38,30 +38,48 @@
 
 ### Remaining
 
-- `createAdminCreditAdjustment` is in the spec and not implemented.
-- Monthly allowance rollover/expiration is stored on grant metadata only; it does not expire leftover allowance or apply `rolloverCapCredits`, and it does not write `currentPeriodStart` / `currentPeriodEnd` onto the account.
-- Core tests still missing: metered-only no debit, unmetered missing usage, dedicated idempotency, rollover, expiration.
-- Dashboard tests for billing UI flags, insufficient credits, failed AI (no charge), and successful AI settlement.
-- AI chat balance display and low-balance warning (`showInAiChat`, `showLowBalanceWarnings`) are config-only.
-- Public API helper is not wired into any real route; MCP/API tests do not cover forbidden/failing work skipping charges.
-- `packages/credits/scripts/check-pricing.ts` was not added (schema naming checks exist instead).
-- Full `pnpm test` / lint / type-check / build verification has not been recorded.
-- Flip selected AI calls to `chargeToOrg: true` only after metering is proven (rollout step 6).
+None. Rollout step 6 (flip selected AI calls to `chargeToOrg: true`) is intentionally deferred until metering is observed in production.
+
+## Verification Evidence
+
+Recorded 2026-08-29 on branch `feat/org-ai-credits`.
+
+| Command | Result |
+|---------|--------|
+| `pnpm --filter @workspace/credits test` | 6 files, 30 tests passed |
+| `pnpm --filter @workspace/billing test` | 11 files, 35 tests passed |
+| `pnpm --filter @workspace/common test` | 6 files, 28 tests passed |
+| `pnpm --filter @apps/public-api test` | 11 files, 41 tests passed |
+| `pnpm --filter @apps/public-mcp test` | 3 files, 16 tests passed |
+| `pnpm --filter @apps/workers test` | 12 files, 32 tests passed |
+| `pnpm --filter @apps/dashboard test` | 46 files, 306 tests passed |
+| `pnpm type-check` | 21/21 tasks successful |
+| `pnpm build` | 6/6 tasks successful |
+| `pnpm check:credit-conventions` | passed |
+| `pnpm check:credit-pricing` | passed (9 catalog models priced) |
+
+Pre-existing failures on this branch, unrelated to credits and left untouched:
+
+- `@workspace/auth` — 2 failing tests (`auth-email-lifecycle.test.ts` password-reset wiring, `create-organization.test.ts` duplicate slug). Confirmed failing on a clean stash of this work.
+- `@apps/dashboard` lint — `TypeError: expand is not a function` from the ESLint/Next tooling. Confirmed failing on a clean stash. Only the two Next.js apps define a `lint` script, so the credits packages are covered by `type-check` instead.
 
 ## Critical Tests
 
 - `packages/credits/src/config.test.ts`: default policy is observe-only; ID prefixes mint `credacct_` / `creduse_` / `credled_` / `credtopup_`.
 - `packages/credits/src/services/normalization.test.ts`: integer markup math; local models can be zero-cost.
 - `packages/credits/src/services/usage-service.test.ts`: zero-balance blocks charged work; failed wrapped work does not debit; spend order is allowance then wallet; overdraft is allowed and repaid before wallet grants.
-- Still needed in `usage-service.test.ts`: metered-only records no ledger; missing AI usage is unmetered with no charge; settlement is idempotent by `organizationId + idempotencyKey`.
-- `packages/credits/src/services/allowance-service.test.ts`: no grant when allowance is 0; period idempotency key is stable. Still needed: expire leftover allowance vs rollover with cap.
+- `usage-service.test.ts` also covers: metered-only records no ledger; missing AI usage is unmetered with no charge; settlement is idempotent by `organizationId + idempotencyKey`; admin adjustments grant, debit, and apply once.
+- `packages/credits/src/services/allowance-service.test.ts`: no grant when allowance is 0; period idempotency key is stable.
+- `packages/credits/src/services/allowance-period.test.ts`: expire leftover allowance vs rollover with cap; period window written to the account; reset and grant apply once per period; downgrade to a no-allowance plan still expires.
 - `packages/credits/src/services/top-up-service.test.ts`: lists configured products; fulfills wallet grants by checkout session id.
 - `packages/billing/src/hooks/subscription-credits.test.ts`: subscription complete grants plan `creditPolicy` allowance.
 - `packages/billing/src/hooks/credit-top-up-lifecycle.test.ts`: checkout completion grants the matching top-up product.
-- `apps/public-mcp/src/tools/registry.test.ts`: successful billable tools call `runWithCreditCharge`. Still needed: forbidden and failed tools do not charge.
-- `apps/public-api/src/middleware/credits.test.ts`: helper attributes org + API key. Still needed: wire a real route and prove API errors use `INSUFFICIENT_CREDITS`.
+- `apps/public-mcp/src/tools/registry.test.ts`: successful billable tools call `runWithCreditCharge`; forbidden and failed tools do not charge.
+- `apps/public-api/src/middleware/credits.test.ts`: helper attributes org + API key; failed work does not charge; no org means no credit call; caller-supplied idempotency keys are honored.
+- `apps/public-api/src/routes/v1/org.test.ts`: `GET /v1/orgs/{orgId}/ping` meters against the path org and returns 402 `INSUFFICIENT_CREDITS`.
 - `apps/workers/src/handlers/ai-example.test.ts`: settles model usage after success; marks failed without charge.
-- Still needed: dashboard billing UI flag tests and `apps/dashboard/app/api/ai/chat` tests for 402 / failed-no-charge / settle-after-finish.
+- `apps/dashboard/app/api/ai/chat/route.test.ts`: 402 without calling the model; failed AI marks usage failed without charging; settlement happens only after the stream finishes; metering stays observe-only.
+- `apps/dashboard/features/organization/data/credit-actions.test.ts` and `features/ai-chat/data/ai-chat-credit-actions.test.ts`: UI flags gate reads; low-balance and exhausted thresholds.
 
 ---
 
@@ -85,7 +103,7 @@
 - [x] Write tests for config defaults and ID prefixes.
 - [x] Run tests and verify they fail because package/files do not exist.
 - [x] Add package scaffold, config, domain errors, public types, and credit ID prefixes.
-- [ ] Run `pnpm --filter @workspace/credits test` and `pnpm --filter @workspace/common test` and record evidence.
+- [x] Run `pnpm --filter @workspace/credits test` and `pnpm --filter @workspace/common test` and record evidence.
 
 ### Task 2: Balance, Ledger, And Usage Services
 
@@ -101,13 +119,13 @@
 **Interfaces:**
 
 - Produces `getOrgCreditBalance`, `ensureOrgCanSpendCredits`, `beginCreditUsage`, `runWithCreditCharge`, `settleModelUsage` (method on `beginCreditUsage`), `recordMeteredOnlyUsage`, `grantCredits`.
-- Spec also lists `createAdminCreditAdjustment` — not implemented yet.
+- Also produces `createAdminCreditAdjustment` and `applyAllowancePeriodReset`.
 
 - [x] Write tests for account creation, insufficient balance, failed operation no debit, successful fixed debit, overdraft, incoming credits repaying overdraft, and model usage normalization.
-- [ ] Add tests for metered-only no debit, unmetered missing usage, and settlement idempotency.
+- [x] Add tests for metered-only no debit, unmetered missing usage, and settlement idempotency.
 - [x] Implement transactional account/usage/ledger services.
-- [ ] Implement `createAdminCreditAdjustment`.
-- [ ] Run `pnpm --filter @workspace/credits test` and record evidence.
+- [x] Implement `createAdminCreditAdjustment`.
+- [x] Run `pnpm --filter @workspace/credits test` and record evidence.
 
 ### Task 3: Monthly Allowance And Stripe Top-Up APIs
 
@@ -130,9 +148,9 @@
 - Produces `grantMonthlyAllowance`, `grantStripeTopUp`, `listCreditTopUpProducts`.
 
 - [x] Write tests for monthly grant idempotency key and top-up fulfillment / webhook routing.
-- [ ] Write tests and implement rollover vs expiration, including writing period dates onto `CreditAccount`.
+- [x] Write tests and implement rollover vs expiration, including writing period dates onto `CreditAccount` (`applyAllowancePeriodReset`, `allowance-period.test.ts`).
 - [x] Implement allowance/top-up services and call them from billing hooks where data is available.
-- [ ] Run `pnpm --filter @workspace/credits test` and `pnpm --filter @workspace/billing test` and record evidence.
+- [x] Run `pnpm --filter @workspace/credits test` and `pnpm --filter @workspace/billing test` and record evidence.
 
 ### Task 4: Dashboard Billing And AI Integration
 
@@ -150,10 +168,10 @@
 
 - Dashboard can list balances/activity/top-up products, start top-up checkout, and settle assistant chat usage only after successful stream finish.
 
-- [ ] Write route/action tests for insufficient credits, failed AI no charge, successful AI settlement, and hidden UI flags.
+- [x] Write route/action tests for insufficient credits, failed AI no charge, successful AI settlement, and hidden UI flags.
 - [x] Implement dashboard config, server actions, billing credits panel, top-up dialog, and AI route integration.
-- [ ] Implement AI chat balance display and low-balance warning behind `showInAiChat` / `showLowBalanceWarnings`.
-- [ ] Run dashboard targeted tests.
+- [x] Implement AI chat balance display and low-balance warning behind `showInAiChat` / `showLowBalanceWarnings`.
+- [x] Run dashboard targeted tests.
 
 ### Task 5: Public MCP, Public API, And Worker Helpers
 
@@ -173,10 +191,10 @@
 - MCP and public API can run fixed-cost credit wrappers. Workers can meter or charge AI jobs with org context.
 
 - [x] Write tests that successful billable MCP/API helper/worker paths call credits.
-- [ ] Write tests that forbidden/failing MCP/API work does not charge.
+- [x] Write tests that forbidden/failing MCP/API work does not charge.
 - [x] Implement wrappers and package dependencies.
-- [ ] Wire `runPublicApiWithCredits` into at least one real public API route.
-- [ ] Run targeted app tests.
+- [x] Wire `runPublicApiWithCredits` into at least one real public API route (`GET /v1/orgs/{orgId}/ping`).
+- [x] Run targeted app tests.
 
 ### Task 6: Conventions, Validation, And Full Verification
 
@@ -191,7 +209,7 @@
 - Developers can check pricing coverage and schema naming conventions.
 
 - [x] Add schema/config convention checks (`pnpm check:credit-conventions`).
-- [ ] Add pricing coverage check (`packages/credits/scripts/check-pricing.ts`) or explicitly drop it from scope.
-- [ ] Run package tests, lint, type-check, and build.
-- [ ] Fix all failures.
-- [ ] Report verification evidence.
+- [x] Add pricing coverage check (`packages/credits/scripts/check-pricing.ts`, `pnpm check:credit-pricing`).
+- [x] Run package tests, lint, type-check, and build.
+- [x] Fix all failures (except two pre-existing `@workspace/auth` failures and the pre-existing dashboard lint tooling error, both documented above).
+- [x] Report verification evidence.

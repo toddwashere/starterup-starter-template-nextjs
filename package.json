@@ -21,6 +21,7 @@
     "eval:ai:live": "echo '⚠️  LIVE LLM CALLS — bypassing cache (--no-cache). See evals/promptfoo/README.md' && dotenv -- npx promptfoo@latest eval -c evals/promptfoo/assistant-chat/promptfooconfig.yaml --no-cache",
     "validate:env": "tsx scripts/validate-env.mts",
     "check:credit-conventions": "tsx scripts/check-credit-conventions.ts",
+    "check:credit-pricing": "pnpm --filter @workspace/credits check:pricing",
     "infra:init:profile": "tsx scripts/infra-init.ts",
     "infra:init": "dotenv -e infra/.env.local -- tsx infra/scripts/infra.ts init",
     "infra:configure": "dotenv -e infra/.env.local -- tsx infra/scripts/configure.ts",

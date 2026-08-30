@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
@@ -17,6 +17,10 @@ import {
   listAvailableAiModelsAction,
   loadChatThreadAction,
 } from "../data/ai-chat-actions";
+import {
+  getAiChatCreditStatusAction,
+  type AiChatCreditStatus,
+} from "../data/ai-chat-credit-actions";
 import type { ChatMessage, ToolResult } from "../data/ai-chat-types";
 
 // ---------------------------------------------------------------------------
@@ -140,6 +144,9 @@ export function AiChatPageContent() {
     [],
   );
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [creditStatus, setCreditStatus] = useState<AiChatCreditStatus | null>(
+    null,
+  );
 
   // Send the selected model on every request. Recreating the transport when the
   // selection changes keeps the request body in sync without a stale closure.
@@ -177,6 +184,20 @@ export function AiChatPageContent() {
   }, []);
 
   // ------------------------------------------------------------------
+  // Credit balance for the header. Returns null when the chat credit UI is
+  // disabled in dashboard.config.ts, so nothing renders in that case.
+  // ------------------------------------------------------------------
+  const refreshCreditStatus = useCallback(() => {
+    getAiChatCreditStatusAction().then((res) => {
+      setCreditStatus(res.success ? res.data : null);
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshCreditStatus();
+  }, [refreshCreditStatus]);
+
+  // ------------------------------------------------------------------
   // Hydrate history on mount from the DB
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -210,10 +231,12 @@ export function AiChatPageContent() {
           setMessages(res.data.messages.map(toUIMessage));
         }
       });
+      // Usage settles in the route's onFinish, so re-read the balance here.
+      refreshCreditStatus();
     }
 
     prevStatusRef.current = status;
-  }, [status, setMessages]);
+  }, [status, setMessages, refreshCreditStatus]);
 
   // ------------------------------------------------------------------
   // Send handler
@@ -235,15 +258,36 @@ export function AiChatPageContent() {
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          {modelOptions.length > 0 && providerModel && (
-            <div className="flex shrink-0 items-center justify-end gap-2 border-b px-4 py-2">
+          {(creditStatus || (modelOptions.length > 0 && providerModel)) && (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b px-4 py-2">
+              {creditStatus && (
+                <span
+                  className="mr-auto text-xs text-muted-foreground"
+                  data-testid="ai-chat-credit-balance"
+                >
+                  {creditStatus.totalBalanceCredits.toLocaleString()} credits
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">Model</span>
-              <AiProviderModelSelect
-                value={providerModel}
-                onValueChange={setProviderModel}
-                options={modelOptions}
-                disabled={isActive}
-              />
+              {providerModel && modelOptions.length > 0 && (
+                <AiProviderModelSelect
+                  value={providerModel}
+                  onValueChange={setProviderModel}
+                  options={modelOptions}
+                  disabled={isActive}
+                />
+              )}
+            </div>
+          )}
+
+          {creditStatus?.isLow && (
+            <div
+              className="shrink-0 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
+              data-testid="ai-chat-low-balance-warning"
+            >
+              {creditStatus.isExhausted
+                ? "Your organization is out of AI credits. Add credits in Billing to keep chatting."
+                : `Low AI credit balance (${creditStatus.totalBalanceCredits.toLocaleString()} left). Add credits in Billing to avoid interruptions.`}
             </div>
           )}
 

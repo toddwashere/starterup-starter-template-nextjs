@@ -17,6 +17,7 @@ export const ErrorResponseSchema = z
         "RATE_LIMITED",
         "NOT_FOUND",
         "VALIDATION_ERROR",
+        "INSUFFICIENT_CREDITS",
         "INTERNAL_ERROR",
       ]),
       message: z.string(),
