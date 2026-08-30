@@ -1,3 +1,4 @@
+/// Product billing plan catalog synced into Stripe subscription options.
 model BillingPlan {
   id                     String   @id
   name                   String   @unique
@@ -7,6 +8,7 @@ model BillingPlan {
   stripeLookupKeyMonthly String?
   stripeLookupKeyAnnual  String?
   limits                 Json
+  creditPolicy           Json? /// Plan-specific AI credit allowance, rollover, and charging policy.
   freeTrialDays          Int?
   seatPriceId            String?
   group                  String?
@@ -16,6 +18,7 @@ model BillingPlan {
   updatedAt              DateTime @updatedAt
 }
 
+/// Stripe subscription state mirrored by Better Auth for an organization.
 model Subscription {
   id                   String    @id
   plan                 String

@@ -1,3 +1,4 @@
+/// Better Auth user account.
 model User {
   id               String    @id @default(cuid())
   name             String
@@ -24,6 +25,7 @@ model User {
   aiThreads          AiThread[]
 }
 
+/// Better Auth session with optional active organization context.
 model Session {
   id                   String   @id @default(cuid())
   expiresAt            DateTime
@@ -43,6 +45,7 @@ model Session {
   @@index([userId])
 }
 
+/// Better Auth external identity or credential account.
 model Account {
   id                    String    @id @default(cuid())
   accountId             String
@@ -64,6 +67,7 @@ model Account {
   @@index([userId])
 }
 
+/// Better Auth verification token.
 model Verification {
   id         String   @id @default(cuid())
   identifier String
@@ -75,6 +79,7 @@ model Verification {
   @@index([identifier])
 }
 
+/// Better Auth JSON Web Key Set storage.
 model Jwks {
   id         String    @id @default(cuid())
   publicKey  String
@@ -85,6 +90,7 @@ model Jwks {
   @@map("jwks")
 }
 
+/// Better Auth organization that owns billing, members, AI threads, and credits.
 model Organization {
   id               String   @id @default(cuid())
   name             String
@@ -97,8 +103,12 @@ model Organization {
   members     Member[]
   invitations Invitation[]
   aiThreads   AiThread[]
+  creditAccount CreditAccount?
+  creditUsageEvents CreditUsageEvent[]
+  creditTopUpPurchases CreditTopUpPurchase[]
 }
 
+/// Better Auth organization membership.
 model Member {
   id             String   @id @default(cuid())
   organizationId String
@@ -113,6 +123,7 @@ model Member {
   @@index([userId])
 }
 
+/// Better Auth organization invitation.
 model Invitation {
   id             String   @id @default(cuid())
   organizationId String
@@ -131,7 +142,7 @@ model Invitation {
   @@index([inviterId])
 }
 
-/// Better Auth Wants This Table Name to be lowercase "key"
+/// Better Auth API key table mapped to lowercase `apikey`.
 model Apikey {
   id                  String    @id @default(cuid())
   configId            String    @default("default")
@@ -160,6 +171,7 @@ model Apikey {
   @@map("apikey")
 }
 
+/// OAuth client registered for public API and MCP access.
 model OauthClient {
   id                      String   @id
   clientId                String   @unique
@@ -201,6 +213,7 @@ model OauthClient {
   @@map("oauthClient")
 }
 
+/// OAuth access token issued to a registered client.
 model OauthAccessToken {
   id          String   @id
   token       String   @unique
@@ -225,6 +238,7 @@ model OauthAccessToken {
   @@map("oauthAccessToken")
 }
 
+/// OAuth refresh token issued to a registered client.
 model OauthRefreshToken {
   id          String    @id
   token       String    @unique
@@ -249,6 +263,7 @@ model OauthRefreshToken {
   @@map("oauthRefreshToken")
 }
 
+/// OAuth consent granted by a user for a registered client.
 model OauthConsent {
   id          String   @id
   clientId    String
