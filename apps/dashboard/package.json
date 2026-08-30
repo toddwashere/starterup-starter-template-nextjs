@@ -30,6 +30,7 @@
     "@workspace/billing": "workspace:*",
     "@workspace/campaigns": "workspace:*",
     "@workspace/common": "workspace:*",
+    "@workspace/credits": "workspace:*",
     "@workspace/contacts": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",

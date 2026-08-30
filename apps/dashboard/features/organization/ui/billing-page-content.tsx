@@ -18,12 +18,9 @@ import { Button } from "@workspace/ui/components/button";
 import { Page, PageBody } from "@workspace/ui/components/page";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { toast } from "@workspace/ui/components/sonner";
-import {
-  IconForBilling,
-  IconForVerified,
-  IconForWarning,
-} from "@workspace/ui/components/icon-for";
+import { IconForBilling, IconForVerified, IconForWarning } from "@workspace/ui/components/icon-for";
 import { PageHeaderInOrg } from "@/common/ui/page-header-in-org";
+import { dashboardConfig } from "../../../dashboard.config";
 import {
   getBillingContextForOrg,
   listPublicBillingPlans,
@@ -31,35 +28,29 @@ import {
 } from "../data/billing-actions";
 import { BillingUpgradeDialog } from "./billing-upgrade-dialog";
 import { formatLimitLabel } from "./billing-format";
+import { CreditsPanel } from "./credits-panel";
 import { useCurrentOrg } from "./org-provider";
 
-type ListSubscriptionsResult = Awaited<
-  ReturnType<typeof authClient.subscription.list>
->;
-type ActiveSubscription = ListSubscriptionsResult extends (infer T)[]
-  ? T
-  : never;
+type ListSubscriptionsResult = Awaited<ReturnType<typeof authClient.subscription.list>>;
+type ActiveSubscription = ListSubscriptionsResult extends (infer T)[] ? T : never;
 
 const ACTIVE_STATUSES = new Set(["active", "trialing"]);
 
-function statusBadgeVariant(
-  status: string,
-): "default" | "secondary" | "outline" {
+function statusBadgeVariant(status: string): "default" | "secondary" | "outline" {
   if (status === "active") return "default";
   if (status === "trialing") return "secondary";
   return "outline";
 }
 
 function LimitsList({ limits }: { limits: Record<string, unknown> }) {
-  const entries = Object.entries(limits).filter(
-    ([, value]) => typeof value === "number",
-  ) as [string, number][];
+  const entries = Object.entries(limits).filter(([, value]) => typeof value === "number") as [
+    string,
+    number,
+  ][];
   if (entries.length === 0) return null;
   return (
     <div className="grid gap-1">
-      <span className="text-sm font-medium text-muted-foreground">
-        Plan limits
-      </span>
+      <span className="text-sm font-medium text-muted-foreground">Plan limits</span>
       <ul className="text-sm">
         {entries.map(([key, value]) => (
           <li key={key}>
@@ -75,9 +66,7 @@ export function BillingPageContent() {
   const { organization, isLoading: orgLoading } = useCurrentOrg();
   const orgId = organization?.id;
   const orgSlug = organization?.slug;
-  const [actionPending, setActionPending] = useState<
-    "portal" | "cancel" | "restore" | null
-  >(null);
+  const [actionPending, setActionPending] = useState<"portal" | "cancel" | "restore" | null>(null);
 
   const { data: context, isLoading: contextLoading } = useQuery({
     queryKey: ["billing-context", orgId],
@@ -106,22 +95,15 @@ export function BillingPageContent() {
   });
 
   const canManage = context?.canManage ?? false;
-  const activeSub =
-    subscriptions?.find((sub) => ACTIVE_STATUSES.has(sub.status)) ?? null;
+  const activeSub = subscriptions?.find((sub) => ACTIVE_STATUSES.has(sub.status)) ?? null;
 
   const planList: PublicBillingPlan[] = plans ?? [];
   const planDisplayName = (planName: string) =>
     planList.find((p) => p.name === planName)?.displayName ?? planName;
 
-  const showSkeleton =
-    orgLoading ||
-    !organization ||
-    contextLoading ||
-    subsLoading ||
-    plansLoading;
+  const showSkeleton = orgLoading || !organization || contextLoading || subsLoading || plansLoading;
 
-  const billingReturnUrl = () =>
-    `${window.location.origin}/${orgSlug}/settings/billing`;
+  const billingReturnUrl = () => `${window.location.origin}/${orgSlug}/settings/billing`;
 
   const openUpgradeDialog = (subscriptionId?: string) => {
     if (!orgId || !orgSlug) return;
@@ -149,9 +131,7 @@ export function BillingPageContent() {
       }
       toast.error("Unable to open the billing portal.");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to open billing portal",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to open billing portal");
     } finally {
       setActionPending(null);
     }
@@ -170,9 +150,7 @@ export function BillingPageContent() {
       await refetchSubs();
       toast.success("Subscription set to cancel at the end of the period.");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to cancel subscription",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to cancel subscription");
     } finally {
       setActionPending(null);
     }
@@ -190,9 +168,7 @@ export function BillingPageContent() {
       await refetchSubs();
       toast.success("Subscription restored.");
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to restore subscription",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to restore subscription");
     } finally {
       setActionPending(null);
     }
@@ -210,26 +186,30 @@ export function BillingPageContent() {
         {showSkeleton ? (
           <Skeleton className="h-64 w-full" />
         ) : !activeSub ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <IconForBilling className="text-muted-foreground" />
-                <CardTitle>Current plan: Free</CardTitle>
-              </div>
-              <CardDescription>
-                You are on the Free plan. Upgrade to unlock higher limits and
-                additional features.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {freePlan && <LimitsList limits={freePlan.limits} />}
-            </CardContent>
-            {canManage && (
-              <CardFooter>
-                <Button onClick={() => openUpgradeDialog()}>Upgrade</Button>
-              </CardFooter>
+          <>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <IconForBilling className="text-muted-foreground" />
+                  <CardTitle>Current plan: Free</CardTitle>
+                </div>
+                <CardDescription>
+                  You are on the Free plan. Upgrade to unlock higher limits and additional features.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {freePlan && <LimitsList limits={freePlan.limits} />}
+              </CardContent>
+              {canManage && (
+                <CardFooter>
+                  <Button onClick={() => openUpgradeDialog()}>Upgrade</Button>
+                </CardFooter>
+              )}
+            </Card>
+            {dashboardConfig.features.credits.showInBilling && orgId && orgSlug && (
+              <CreditsPanel organizationId={orgId} orgSlug={orgSlug} canManage={canManage} />
             )}
-          </Card>
+          </>
         ) : (
           <>
             {activeSub.cancelAtPeriodEnd ? (
@@ -241,23 +221,13 @@ export function BillingPageContent() {
                   </div>
                   <CardDescription>
                     Your subscription is set to cancel. Access ends on{" "}
-                    {formatDate(
-                      activeSub.cancelAt ??
-                        activeSub.periodEnd ??
-                        new Date(),
-                    )}
-                    .
+                    {formatDate(activeSub.cancelAt ?? activeSub.periodEnd ?? new Date())}.
                   </CardDescription>
                 </CardHeader>
                 {canManage && (
                   <CardFooter>
-                    <Button
-                      onClick={handleRestore}
-                      disabled={actionPending !== null}
-                    >
-                      {actionPending === "restore"
-                        ? "Restoring..."
-                        : "Keep subscription"}
+                    <Button onClick={handleRestore} disabled={actionPending !== null}>
+                      {actionPending === "restore" ? "Restoring..." : "Keep subscription"}
                     </Button>
                   </CardFooter>
                 )}
@@ -269,23 +239,15 @@ export function BillingPageContent() {
                 <div className="flex items-center gap-2">
                   <IconForVerified className="text-muted-foreground" />
                   <CardTitle>{planDisplayName(activeSub.plan)}</CardTitle>
-                  <Badge variant={statusBadgeVariant(activeSub.status)}>
-                    {activeSub.status}
-                  </Badge>
+                  <Badge variant={statusBadgeVariant(activeSub.status)}>{activeSub.status}</Badge>
                 </div>
-                <CardDescription>
-                  Your organization&apos;s current subscription.
-                </CardDescription>
+                <CardDescription>Your organization&apos;s current subscription.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {activeSub.status === "trialing" && activeSub.trialEnd && (
                   <div className="grid gap-1">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Trial ends
-                    </span>
-                    <span className="text-sm">
-                      {formatDate(activeSub.trialEnd)}
-                    </span>
+                    <span className="text-sm font-medium text-muted-foreground">Trial ends</span>
+                    <span className="text-sm">{formatDate(activeSub.trialEnd)}</span>
                   </div>
                 )}
                 {activeSub.periodEnd && (
@@ -293,26 +255,18 @@ export function BillingPageContent() {
                     <span className="text-sm font-medium text-muted-foreground">
                       {activeSub.cancelAtPeriodEnd ? "Access ends" : "Renews"}
                     </span>
-                    <span className="text-sm">
-                      {formatDate(activeSub.periodEnd)}
-                    </span>
+                    <span className="text-sm">{formatDate(activeSub.periodEnd)}</span>
                   </div>
                 )}
                 {activeSub.limits && (
-                  <LimitsList
-                    limits={activeSub.limits as Record<string, unknown>}
-                  />
+                  <LimitsList limits={activeSub.limits as Record<string, unknown>} />
                 )}
               </CardContent>
               {canManage && (
                 <CardFooter className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      openUpgradeDialog(
-                        activeSub.stripeSubscriptionId ?? undefined,
-                      )
-                    }
+                    onClick={() => openUpgradeDialog(activeSub.stripeSubscriptionId ?? undefined)}
                   >
                     Change plan
                   </Button>
@@ -321,9 +275,7 @@ export function BillingPageContent() {
                     onClick={handleManageBilling}
                     disabled={actionPending !== null}
                   >
-                    {actionPending === "portal"
-                      ? "Opening..."
-                      : "Manage billing"}
+                    {actionPending === "portal" ? "Opening..." : "Manage billing"}
                   </Button>
                   {!activeSub.cancelAtPeriodEnd && (
                     <Button
@@ -332,14 +284,15 @@ export function BillingPageContent() {
                       onClick={handleCancel}
                       disabled={actionPending !== null}
                     >
-                      {actionPending === "cancel"
-                        ? "Canceling..."
-                        : "Cancel subscription"}
+                      {actionPending === "cancel" ? "Canceling..." : "Cancel subscription"}
                     </Button>
                   )}
                 </CardFooter>
               )}
             </Card>
+            {dashboardConfig.features.credits.showInBilling && orgId && orgSlug && (
+              <CreditsPanel organizationId={orgId} orgSlug={orgSlug} canManage={canManage} />
+            )}
           </>
         )}
       </PageBody>

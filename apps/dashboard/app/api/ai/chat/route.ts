@@ -1,13 +1,12 @@
 import type { UIMessage, ModelMessage } from "ai";
 import { requireUser } from "@workspace/auth/guards";
 import { getCurrentOrg } from "@workspace/auth/session";
+import { createId } from "@workspace/common";
+import { beginCreditUsage, creditsConfig, InsufficientCreditsError } from "@workspace/credits";
 import { askAssistantChat } from "@workspace/ai/ai-calls/assistant-chat";
 import { keys } from "@workspace/ai/keys";
 import { getDefaultAvailableProviderModel } from "@workspace/ai/list-available-ai-models";
-import {
-  DEFAULT_PROVIDER_MODEL,
-  type ProviderModelValue,
-} from "@workspace/ai/ai-models-available";
+import { DEFAULT_PROVIDER_MODEL, type ProviderModelValue } from "@workspace/ai/ai-models-available";
 import {
   createAiAssistantMessage,
   createAiUserMessage,
@@ -18,13 +17,17 @@ import { listMcpToolsAction } from "@/features/ai-chat/data/ai-chat-actions";
 import { buildToolsFromMcpList } from "@/features/ai-chat/data/mcp-agent-tools";
 import { executeMcpTool } from "@/features/ai-chat/data/mcp-tool-executor";
 import { formatToolSummary } from "@/features/ai-chat/data/format-tool-summary";
+import { dashboardConfig } from "../../../../dashboard.config";
 
 // Node runtime required — Prisma needs Node.js (not edge)
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
   // 1. Parse body
-  const { messages, providerModel }: {
+  const {
+    messages,
+    providerModel,
+  }: {
     messages: UIMessage[];
     providerModel?: string | null;
   } = await req.json();
@@ -37,9 +40,8 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const activeOrganizationId = (
-    session.session as { activeOrganizationId?: string | null }
-  ).activeOrganizationId;
+  const activeOrganizationId = (session.session as { activeOrganizationId?: string | null })
+    .activeOrganizationId;
 
   if (!activeOrganizationId) {
     return Response.json({ error: "No active organization" }, { status: 400 });
@@ -59,24 +61,22 @@ export async function POST(req: Request): Promise<Response> {
 
   // 5. Persist the latest user message
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+  let latestUserMessageId: string | null = null;
   if (lastUserMessage) {
     const text = lastUserMessage.parts
       .filter((p) => p.type === "text")
       .map((p) => (p as { type: "text"; text: string }).text)
       .join("");
     if (text.trim()) {
-      await createAiUserMessage(thread.id, activeOrganizationId, userId, text);
+      const message = await createAiUserMessage(thread.id, activeOrganizationId, userId, text);
+      latestUserMessageId = message.id;
     }
   }
 
   // 6. Build the model context from persisted DB history (not the client's
   // message array) so context stays server-authoritative and consistent with
   // what loadChatThreadAction renders on reload.
-  const history = await listAiMessagesForThread(
-    thread.id,
-    activeOrganizationId,
-    userId,
-  );
+  const history = await listAiMessagesForThread(thread.id, activeOrganizationId, userId);
   const modelMessages: ModelMessage[] = history.flatMap((m): ModelMessage[] =>
     m.role === "user"
       ? [{ role: "user", content: m.content }]
@@ -88,13 +88,40 @@ export async function POST(req: Request): Promise<Response> {
   // 7. Build tools from MCP and assemble prompt variables.
   const cookie = req.headers.get("cookie") ?? "";
   const mcpTools = await listMcpToolsAction();
-  const tools = buildToolsFromMcpList(mcpTools, (name, args) =>
-    executeMcpTool(cookie, name, args),
-  );
+  const tools = buildToolsFromMcpList(mcpTools, (name, args) => executeMcpTool(cookie, name, args));
   const toolSummary = formatToolSummary(mcpTools);
 
   const org = await getCurrentOrg();
   const orgName = org?.name ?? "your organization";
+  const chargeToOrg = creditsConfig.policy.chargeToOrgDefault;
+  const creditUsage = await beginCreditUsage({
+    organizationId: activeOrganizationId,
+    chargeToOrg,
+    source: "dashboard",
+    usageArea: "assistant_chat",
+    actor: { kind: "user", userId },
+    idempotencyKey: `assistant_chat:${thread.id}:${latestUserMessageId ?? createId("creduse")}`,
+    metadata: {
+      threadId: thread.id,
+      ...(dashboardConfig.features.credits.showInAiChat ? { dashboardCreditsUiEnabled: true } : {}),
+    },
+  }).catch((err) => {
+    if (err instanceof InsufficientCreditsError) {
+      return err;
+    }
+    throw err;
+  });
+
+  if (creditUsage instanceof InsufficientCreditsError) {
+    return Response.json(
+      {
+        error: "Insufficient credits",
+        code: creditUsage.code,
+        balanceCredits: creditUsage.balanceCredits,
+      },
+      { status: 402 },
+    );
+  }
 
   // 8. Delegate to the assistant-chat call. It renders the prompt, resolves +
   // validates the model, logs, and streams. Invalid model selections reject and
@@ -111,7 +138,7 @@ export async function POST(req: Request): Promise<Response> {
         orgId: activeOrganizationId,
         sessionId: thread.id,
       },
-      onFinish: async ({ text, steps }) => {
+      onFinish: async ({ text, steps, usage }) => {
         try {
           // Steps carry typed tool calls/results at runtime; the call command's
           // onFinish type erases them, so narrow to the shape we persist.
@@ -140,17 +167,25 @@ export async function POST(req: Request): Promise<Response> {
                 )
               : undefined;
 
-          await createAiAssistantMessage(
-            thread.id,
-            activeOrganizationId,
-            userId,
-            text,
-            {
-              toolPayload:
-                toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
-              metadata: { providerModel: requested },
-            },
-          );
+          await createAiAssistantMessage(thread.id, activeOrganizationId, userId, text, {
+            toolPayload: toolPayload && toolPayload.length > 0 ? toolPayload : undefined,
+            metadata: { providerModel: requested },
+          });
+          await creditUsage.settleModelUsage({
+            providerModel: requested,
+            usage: usage as
+              | {
+                  inputTokens?: number;
+                  outputTokens?: number;
+                  cachedInputTokens?: number;
+                  reasoningTokens?: number;
+                  promptTokens?: number;
+                  completionTokens?: number;
+                  totalTokens?: number;
+                }
+              | undefined,
+            metadata: { threadId: thread.id },
+          });
         } catch (err) {
           // Persistence failure must not crash the stream
           console.error("[ai/chat] Failed to persist assistant message:", err);
@@ -158,6 +193,7 @@ export async function POST(req: Request): Promise<Response> {
       },
     });
   } catch (err) {
+    await creditUsage.markFailedWithoutCharge(err instanceof Error ? err.name : "AI_CALL_FAILED");
     return Response.json(
       { error: err instanceof Error ? err.message : "Invalid model" },
       { status: 400 },
