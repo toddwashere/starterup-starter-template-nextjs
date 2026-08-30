@@ -1,6 +1,9 @@
 export const creditsConfig = {
   policy: {
-    chargeToOrgDefault: false,
+    // TEMPORARY: flipped to true to exercise the real charging path end to end.
+    // Revert to false before shipping — with this on, any org whose total balance
+    // is <= 0 is blocked from AI chat, metered MCP tools, and metered API routes.
+    chargeToOrgDefault: true,
     allowOverdraftOnSuccessfulUsage: true,
     blockWhenBalanceCreditsLessThanOrEqualTo: 0,
     missingUsageBehavior: "record_unmetered_no_charge",

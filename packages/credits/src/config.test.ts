@@ -3,8 +3,11 @@ import { createId } from "@workspace/common";
 import { creditsConfig } from "../credits.config";
 
 describe("creditsConfig", () => {
-  it("defaults to observe-only charging for starter template consumers", () => {
-    expect(creditsConfig.policy.chargeToOrgDefault).toBe(false);
+  // TEMPORARY: charging is flipped on to exercise the real debit path. Flip this
+  // expectation back to false alongside credits.config.ts when returning to
+  // observe-only metering.
+  it("charges organizations by default while the charging path is under test", () => {
+    expect(creditsConfig.policy.chargeToOrgDefault).toBe(true);
     expect(creditsConfig.policy.spendOrder).toEqual(["monthly_allowance", "wallet"]);
     expect(creditsConfig.policy.defaultMarkupBasisPoints).toBe(12_500);
   });
