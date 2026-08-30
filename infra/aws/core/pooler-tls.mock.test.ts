@@ -283,7 +283,7 @@ describe("buildPoolerTls", () => {
     const functions = recorded.filter((r) => r.type === TYPES.lambdaFunction);
     expect(functions).toHaveLength(1);
     expect(functions[0].inputs.handler).toBe("index.handler");
-    expect(functions[0].inputs.runtime).toBe("nodejs22.x");
+    expect(functions[0].inputs.runtime).toBe("nodejs24.x");
     expect(functions[0].inputs.code).toBeDefined();
     expect((functions[0].inputs.code as { __pulumiArchive?: boolean }).__pulumiArchive).toBe(true);
   });

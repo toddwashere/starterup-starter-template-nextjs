@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: prune the monorepo down to @apps/workers + its dependencies.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS pruner
+FROM node:24.20.0-slim AS pruner
 WORKDIR /app
 RUN corepack enable
 COPY . .
@@ -24,7 +24,7 @@ RUN npx --yes turbo@^2 prune @apps/workers --docker
 # output. So there is no tsc build step here — only dependency install and
 # Prisma client generation.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS builder
+FROM node:24.20.0-slim AS builder
 WORKDIR /app
 RUN corepack enable
 
@@ -46,7 +46,7 @@ RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 # ---------------------------------------------------------------------------
 # Stage 3: runtime image (carries node_modules + source + generated client).
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS runner
+FROM node:24.20.0-slim AS runner
 WORKDIR /app
 RUN corepack enable
 ENV NODE_ENV=production

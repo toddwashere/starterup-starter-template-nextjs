@@ -13,7 +13,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: prune the monorepo down to @apps/www + its dependencies.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS pruner
+FROM node:24.20.0-slim AS pruner
 WORKDIR /app
 RUN corepack enable
 COPY . .
@@ -22,7 +22,7 @@ RUN npx --yes turbo@^2 prune @apps/www --docker
 # ---------------------------------------------------------------------------
 # Stage 2: install deps and build Next.js standalone.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS builder
+FROM node:24.20.0-slim AS builder
 WORKDIR /app
 RUN corepack enable
 
@@ -62,7 +62,7 @@ RUN pnpm --filter @apps/www build \
 # ---------------------------------------------------------------------------
 # Stage 3: minimal runtime image using the Next.js standalone output.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS runner
+FROM node:24.20.0-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4001

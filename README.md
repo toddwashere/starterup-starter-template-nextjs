@@ -4,7 +4,7 @@ A production-ready SaaS starter template built with [Superpowers](https://github
 
 ## Prerequisites
 
-- **Node.js** 24.16+ LTS ([`.nvmrc`](.nvmrc) pins `24.16.0`)
+- **Node.js** 24.20+ LTS ([`.nvmrc`](.nvmrc) pins `24.20.0`)
 - **pnpm** 11.1.3+ (via [Corepack](https://nodejs.org/api/corepack.html): `corepack enable`)
 
 ## Tech Stack

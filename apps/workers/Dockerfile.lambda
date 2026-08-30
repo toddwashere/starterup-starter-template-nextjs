@@ -38,7 +38,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: prune the monorepo down to @apps/workers + its dependencies.
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS pruner
+FROM node:24.20.0-slim AS pruner
 WORKDIR /app
 RUN corepack enable
 COPY . .
@@ -48,7 +48,7 @@ RUN npx --yes turbo@^2 prune @apps/workers --docker
 # Stage 2: install deps and generate the Prisma client (no tsc build step —
 # the workspace runs TypeScript source directly via tsx).
 # ---------------------------------------------------------------------------
-FROM node:24.16.0-slim AS builder
+FROM node:24.20.0-slim AS builder
 WORKDIR /app
 RUN corepack enable
 
@@ -70,7 +70,7 @@ RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 # ---------------------------------------------------------------------------
 # Stage 3: Lambda runtime image (AWS base image bundles the RIC).
 # ---------------------------------------------------------------------------
-FROM public.ecr.aws/lambda/nodejs:20 AS runner
+FROM public.ecr.aws/lambda/nodejs:24 AS runner
 
 ENV NODE_ENV=production
 

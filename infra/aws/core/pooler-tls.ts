@@ -235,7 +235,7 @@ export function buildPoolerTls(args: PoolerTlsArgs): PoolerTlsResult {
       handler: "index.handler",
       name: `${namePrefix}-pooler-tls-exporter`,
       role: exporterRole.arn,
-      runtime: aws.lambda.Runtime.NodeJS22dX,
+      runtime: aws.lambda.Runtime.NodeJS24dX,
       memorySize: 256,
       timeout: 60,
       // Omit reserved concurrency: new accounts often have only 10 concurrent

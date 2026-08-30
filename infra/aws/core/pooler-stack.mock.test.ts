@@ -225,7 +225,7 @@ describe("buildPoolerStack integration", () => {
     expect(services.length, "ECS service must be created").toBeGreaterThan(0);
     expect(functions).toHaveLength(1);
     expect(functions[0].inputs.handler).toBe("index.handler");
-    expect(functions[0].inputs.runtime).toBe("nodejs22.x");
+    expect(functions[0].inputs.runtime).toBe("nodejs24.x");
     expect((functions[0].inputs.code as { __pulumiArchive?: boolean }).__pulumiArchive).toBe(true);
     expect(alarms.some((alarm) => alarm.inputs.namespace === "AWS/Lambda")).toBe(true);
 
