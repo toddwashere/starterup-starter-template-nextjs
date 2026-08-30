@@ -92,6 +92,11 @@ export const contactsListTool: ToolDefinition = {
     "List contacts in the organization. Supports filtering by kind, stageId, tagIds, search, and pagination via page/pageSize.",
   requiredScopes: ["contact:read"],
   requiredPermissions: { contact: ["read"] },
+  creditPolicy: {
+    chargeToOrg: false,
+    usageArea: "mcp_tool",
+    cost: { mode: "fixed", credits: 5 },
+  },
   inputShape: {
     search: z.string().optional(),
     kind: z.enum(["person", "company"]).optional(),
@@ -123,6 +128,11 @@ export const contactsGetTool: ToolDefinition = {
   description: "Retrieve a single contact by ID.",
   requiredScopes: ["contact:read"],
   requiredPermissions: { contact: ["read"] },
+  creditPolicy: {
+    chargeToOrg: false,
+    usageArea: "mcp_tool",
+    cost: { mode: "fixed", credits: 2 },
+  },
   inputShape: {
     contactId: z.string(),
   },
@@ -261,8 +271,7 @@ export const contactsRemoveTagTool: ToolDefinition = {
 
 export const contactsCreateNoteTool: ToolDefinition = {
   name: "contacts-create-note",
-  description:
-    "Create an interaction (note, call, email, meeting, sms, or other) on a contact.",
+  description: "Create an interaction (note, call, email, meeting, sms, or other) on a contact.",
   requiredScopes: ["contactInteraction:create"],
   requiredPermissions: { contactInteraction: ["create"] },
   inputShape: {
@@ -275,7 +284,10 @@ export const contactsCreateNoteTool: ToolDefinition = {
     if (!ctx.orgId) return { error: "Organization context required" };
     const userId = ctx.userId;
     if (!userId) {
-      return { error: "User context required to create notes/tasks. This tool cannot be called with an org-only API key." };
+      return {
+        error:
+          "User context required to create notes/tasks. This tool cannot be called with an org-only API key.",
+      };
     }
     const result = CreateNoteSchema.safeParse(args);
     if (!result.success) return { error: "Invalid input", issues: result.error.issues };
@@ -297,7 +309,8 @@ export const contactsCreateNoteTool: ToolDefinition = {
 
 export const contactsTasksListTool: ToolDefinition = {
   name: "contacts-tasks-list",
-  description: "List contact tasks for the organization, optionally filtered by statusId or assigneeId.",
+  description:
+    "List contact tasks for the organization, optionally filtered by statusId or assigneeId.",
   requiredScopes: ["contactTask:read"],
   requiredPermissions: { contactTask: ["read"] },
   inputShape: {
@@ -337,7 +350,10 @@ export const contactsCreateTaskTool: ToolDefinition = {
     if (!ctx.orgId) return { error: "Organization context required" };
     const userId = ctx.userId;
     if (!userId) {
-      return { error: "User context required to create notes/tasks. This tool cannot be called with an org-only API key." };
+      return {
+        error:
+          "User context required to create notes/tasks. This tool cannot be called with an org-only API key.",
+      };
     }
     const result = CreateTaskSchema.safeParse(args);
     if (!result.success) return { error: "Invalid input", issues: result.error.issues };
@@ -405,7 +421,8 @@ export const contactsUpdateTaskTool: ToolDefinition = {
 
 export const contactsDocumentationTool: ToolDefinition = {
   name: "contacts-documentation",
-  description: "Returns documentation about the contacts module — available tools, data model fields, and usage guidance.",
+  description:
+    "Returns documentation about the contacts module — available tools, data model fields, and usage guidance.",
   requiredScopes: ["contact:read"],
   requiredPermissions: { contact: ["read"] },
   inputShape: {},

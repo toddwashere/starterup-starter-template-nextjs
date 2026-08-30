@@ -15,6 +15,7 @@
   "dependencies": {
     "@workspace/ai": "workspace:*",
     "@workspace/campaigns": "workspace:*",
+    "@workspace/credits": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",

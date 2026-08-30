@@ -19,6 +19,8 @@
     "@hono/zod-openapi": "0.18.4",
     "@scalar/hono-api-reference": "~0.5.184",
     "@workspace/auth": "workspace:*",
+    "@workspace/common": "workspace:*",
+    "@workspace/credits": "workspace:*",
     "@workspace/email": "workspace:*",
     "@workspace/worker-queue": "workspace:*",
     "hono": "~4.12.25",

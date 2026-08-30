@@ -14,6 +14,11 @@ export type ToolDefinition<TOutput = unknown> = {
   description: string;
   requiredScopes: string[];
   requiredPermissions: Record<string, string[]>;
+  creditPolicy?: {
+    chargeToOrg?: boolean;
+    usageArea: string;
+    cost: { mode: "fixed"; credits: number };
+  };
   inputShape?: Record<string, ZodLike>;
   run: (ctx: ToolCallContext, input: Record<string, unknown>) => Promise<TOutput>;
 };

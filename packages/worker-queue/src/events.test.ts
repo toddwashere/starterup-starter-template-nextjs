@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  events,
-  isEventName,
-  parseEventPayload,
-  parseJobEnvelope,
-} from "./events";
+import { events, isEventName, parseEventPayload, parseJobEnvelope } from "./events";
 
 describe("events registry", () => {
   it("contains exactly the expected event names", () => {
@@ -36,9 +31,7 @@ describe("parseEventPayload", () => {
   });
 
   it("throws when user.welcome-email userId is the wrong type", () => {
-    expect(() =>
-      parseEventPayload("user.welcome-email", { userId: 123 }),
-    ).toThrow();
+    expect(() => parseEventPayload("user.welcome-email", { userId: 123 })).toThrow();
   });
 
   it("accepts an empty object for cleanup.expired-sessions", () => {
@@ -46,19 +39,33 @@ describe("parseEventPayload", () => {
   });
 
   it("strips unknown keys for cleanup.expired-sessions", () => {
-    expect(
-      parseEventPayload("cleanup.expired-sessions", { junk: true }),
-    ).toEqual({});
+    expect(parseEventPayload("cleanup.expired-sessions", { junk: true })).toEqual({});
   });
 
   it("returns the payload for a valid webhook.deliver", () => {
-    expect(
-      parseEventPayload("webhook.deliver", { deliveryId: "d1" }),
-    ).toEqual({ deliveryId: "d1" });
+    expect(parseEventPayload("webhook.deliver", { deliveryId: "d1" })).toEqual({
+      deliveryId: "d1",
+    });
   });
 
   it("throws when webhook.deliver is missing deliveryId", () => {
     expect(() => parseEventPayload("webhook.deliver", {})).toThrow();
+  });
+
+  it("accepts optional org charging metadata for ai.example", () => {
+    expect(
+      parseEventPayload("ai.example", {
+        text: "summarize this",
+        organizationId: "org_1",
+        userId: "user_1",
+        chargeToOrg: true,
+      }),
+    ).toEqual({
+      text: "summarize this",
+      organizationId: "org_1",
+      userId: "user_1",
+      chargeToOrg: true,
+    });
   });
 });
 
@@ -129,21 +136,15 @@ describe("parseJobEnvelope", () => {
   });
 
   it("rejects an unknown event name", () => {
-    expect(() =>
-      parseJobEnvelope({ event: "does.not.exist", payload: {} }),
-    ).toThrow();
+    expect(() => parseJobEnvelope({ event: "does.not.exist", payload: {} })).toThrow();
   });
 
   it("rejects a known event with an invalid payload", () => {
-    expect(() =>
-      parseJobEnvelope({ event: "user.welcome-email", payload: {} }),
-    ).toThrow();
+    expect(() => parseJobEnvelope({ event: "user.welcome-email", payload: {} })).toThrow();
   });
 
   it("rejects a non-string event", () => {
-    expect(() =>
-      parseJobEnvelope({ event: 123, payload: {} }),
-    ).toThrow();
+    expect(() => parseJobEnvelope({ event: 123, payload: {} })).toThrow();
   });
 
   it("rejects a non-object input", () => {

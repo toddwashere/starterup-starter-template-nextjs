@@ -17,6 +17,7 @@
     "@modelcontextprotocol/sdk": "^1",
     "@workspace/auth": "workspace:*",
     "@workspace/common": "workspace:*",
+    "@workspace/credits": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/tool-calls": "workspace:*",
     "zod": "^3"

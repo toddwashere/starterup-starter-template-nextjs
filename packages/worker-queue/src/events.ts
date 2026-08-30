@@ -10,7 +10,12 @@ export const events = {
   "user.welcome-email": z.object({ userId: z.string() }),
   "cleanup.expired-sessions": z.object({}),
   "webhook.deliver": z.object({ deliveryId: z.string() }),
-  "ai.example": z.object({ text: z.string() }),
+  "ai.example": z.object({
+    text: z.string(),
+    organizationId: z.string().optional(),
+    userId: z.string().optional(),
+    chargeToOrg: z.boolean().optional(),
+  }),
   "campaign.enroll-segment": z.object({ campaignRunId: z.string() }),
   "campaign.send-step": z.object({ stepSendId: z.string() }),
   "campaign.schedule-next-step": z.object({ enrollmentId: z.string() }),
