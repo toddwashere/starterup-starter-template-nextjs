@@ -1,0 +1,111 @@
+enum CreditUsageStatus {
+  pending
+  settled
+  failed
+  unmetered
+  metered_only
+  settlement_failed
+}
+
+enum CreditLedgerEffect {
+  increase
+  decrease
+}
+
+enum CreditBucket {
+  monthly_allowance
+  wallet
+  overdraft
+}
+
+/// Organization-scoped credit balances cached from the immutable ledger.
+model CreditAccount {
+  id                             String    @id
+  organizationId                 String    @unique
+  monthlyAllowanceBalanceCredits Int       @default(0) /// Remaining plan-granted credits for the current period.
+  walletBalanceCredits           Int       @default(0) /// Purchased/admin-granted credits that persist across periods.
+  overdraftCredits               Int       @default(0) /// Positive amount owed after successful usage exceeds available credits.
+  totalBalanceCredits            Int       @default(0) /// Cached total: allowance + wallet - overdraft.
+  currentPeriodStart             DateTime?
+  currentPeriodEnd               DateTime?
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([totalBalanceCredits])
+}
+
+/// Billable or metered operation attempted by dashboard, workers, public API, MCP, Stripe, or system jobs.
+model CreditUsageEvent {
+  id                   String            @id
+  organizationId       String
+  status               CreditUsageStatus
+  source               String
+  usageArea            String
+  chargeToOrg          Boolean
+  idempotencyKey       String /// Stable key used to settle the same logical operation exactly once across retries.
+  actorKind            String?
+  userId               String?
+  apiKeyId             String?
+  oauthClientId        String?
+  providerModel        String?
+  inputTokens          Int?
+  outputTokens         Int?
+  cachedInputTokens    Int?
+  reasoningTokens      Int?
+  normalizedTokens     Int?
+  creditsCharged       Int?
+  providerCostInCents  Int?
+  customerPriceInCents Int?
+  pricingVersion       String?
+  metadata             Json?
+  errorCode            String?
+  createdAt            DateTime          @default(now())
+  settledAt            DateTime?
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ledgerEntries CreditLedgerEntry[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([source, usageArea])
+  @@index([status])
+  @@index([userId])
+  @@index([apiKeyId])
+}
+
+/// Append-only balance movement linked to a usage event.
+model CreditLedgerEntry {
+  id                  String             @id
+  organizationId      String
+  usageEventId        String
+  effect              CreditLedgerEffect
+  bucket              CreditBucket
+  amountCredits       Int /// Positive movement amount; debits are represented by `effect`, not a negative number.
+  balanceAfterCredits Int /// Balance for this bucket after applying the movement.
+  createdAt           DateTime           @default(now())
+
+  usageEvent CreditUsageEvent @relation(fields: [usageEventId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([usageEventId])
+}
+
+/// Stripe one-time credit pack purchase before and after fulfillment into the wallet.
+model CreditTopUpPurchase {
+  id                      String    @id
+  organizationId          String
+  topUpProductName        String
+  credits                 Int
+  stripeCheckoutSessionId String    @unique
+  stripePaymentIntentId   String?
+  stripeAmountPaidInCents Int?
+  status                  String
+  createdAt               DateTime  @default(now())
+  fulfilledAt             DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
