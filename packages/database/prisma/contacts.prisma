@@ -1,9 +1,8 @@
-// packages/database/prisma/contacts.prisma
-
+/// Organization-scoped person or company contact.
 model Contact {
   id              String    @id
   organizationId  String
-  kind            String // "person" | "company"
+  kind            String /// "person" | "company"
   displayName     String
   firstName       String?
   lastName        String?
@@ -35,6 +34,7 @@ model Contact {
   @@index([parentContactId])
 }
 
+/// Organization-scoped contact pipeline stage.
 model ContactStage {
   id             String   @id
   organizationId String
@@ -50,6 +50,7 @@ model ContactStage {
   @@unique([organizationId, name])
 }
 
+/// Organization-scoped contact tag.
 model ContactTag {
   id             String   @id
   organizationId String
@@ -63,6 +64,7 @@ model ContactTag {
   @@unique([organizationId, name])
 }
 
+/// Many-to-many contact tag assignment.
 model ContactTagAssignment {
   contactId String
   tagId     String
@@ -74,6 +76,7 @@ model ContactTagAssignment {
   @@id([contactId, tagId])
 }
 
+/// Saved organization-scoped contact segment definition.
 model ContactSegment {
   id             String   @id
   organizationId String
@@ -87,6 +90,7 @@ model ContactSegment {
   updatedAt      DateTime @updatedAt
 }
 
+/// Timeline note or interaction recorded against a contact.
 model ContactInteraction {
   id             String    @id
   organizationId String
@@ -105,6 +109,7 @@ model ContactInteraction {
   @@index([organizationId, archivedAt])
 }
 
+/// Task associated with a contact.
 model ContactTask {
   id             String    @id
   organizationId String
@@ -130,6 +135,7 @@ model ContactTask {
   @@index([organizationId, dueAt])
 }
 
+/// Organization-scoped task status option for contact tasks.
 model ContactTaskStatus {
   id             String   @id
   organizationId String

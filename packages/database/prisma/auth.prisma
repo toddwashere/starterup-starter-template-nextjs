@@ -100,11 +100,11 @@ model Organization {
   stripeCustomerId String?
   createdAt        DateTime @default(now())
 
-  members     Member[]
-  invitations Invitation[]
-  aiThreads   AiThread[]
-  creditAccount CreditAccount?
-  creditUsageEvents CreditUsageEvent[]
+  members              Member[]
+  invitations          Invitation[]
+  aiThreads            AiThread[]
+  creditAccount        CreditAccount?
+  creditUsageEvents    CreditUsageEvent[]
   creditTopUpPurchases CreditTopUpPurchase[]
 }
 

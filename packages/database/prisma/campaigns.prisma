@@ -1,12 +1,11 @@
-// packages/database/prisma/campaigns.prisma
-
+/// Email campaign or follow-up sequence owned by an organization.
 model EmailSequence {
   id             String   @id
   organizationId String
-  kind           String // "campaign" | "follow_up"
+  kind           String /// "campaign" | "follow_up"
   name           String
   slug           String
-  status         String   @default("draft") // draft | active | paused | archived
+  status         String   @default("draft") /// draft | active | paused | archived
   createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -21,12 +20,13 @@ model EmailSequence {
   @@index([organizationId, status])
 }
 
+/// Ordered email step within a sequence.
 model EmailSequenceStep {
   id               String   @id
   sequenceId       String
   sortOrder        Int
   delayMinutes     Int      @default(0)
-  contentSource    String   @default("registry") // registry | editor
+  contentSource    String   @default("registry") /// registry | editor
   templateKey      String   @default("nurture-intro")
   subjectTemplate  String
   templateProps    Json?
@@ -42,12 +42,13 @@ model EmailSequenceStep {
   @@index([sequenceId, sortOrder])
 }
 
+/// Execution run that enrolls a segment into a campaign sequence.
 model EmailCampaignRun {
   id             String    @id
   organizationId String
   sequenceId     String
   segmentId      String
-  status         String    @default("running") // running | paused | completed | cancelled
+  status         String    @default("running") /// running | paused | completed | cancelled
   enrolledCount  Int       @default(0)
   startedAt      DateTime  @default(now())
   completedAt    DateTime?
@@ -61,13 +62,14 @@ model EmailCampaignRun {
   @@index([organizationId, status])
 }
 
+/// Contact enrollment state within an email sequence.
 model EmailEnrollment {
   id               String    @id
   organizationId   String
   sequenceId       String
   contactId        String
   campaignRunId    String?
-  status           String    @default("active") // active | completed | exited | paused
+  status           String    @default("active") /// active | completed | exited | paused
   currentStepIndex Int       @default(0)
   nextSendAt       DateTime?
   exitReason       String?
@@ -88,11 +90,12 @@ model EmailEnrollment {
   @@index([status, nextSendAt])
 }
 
+/// Provider send attempt for a sequence step.
 model EmailStepSend {
   id                String    @id
   enrollmentId      String
   stepId            String
-  status            String    @default("pending") // pending | sent | delivered | failed | skipped
+  status            String    @default("pending") /// pending | sent | delivered | failed | skipped
   provider          String    @default("resend")
   providerMessageId String?
   idempotencyKey    String    @unique
@@ -113,6 +116,7 @@ model EmailStepSend {
   @@index([providerMessageId])
 }
 
+/// Tracked click on a link from a sent email step.
 model EmailLinkClick {
   id             String   @id
   stepSendId     String
@@ -128,13 +132,14 @@ model EmailLinkClick {
   @@index([stepSendId])
 }
 
+/// Provider delivery event for a sent email.
 model EmailDeliveryEvent {
   id                String   @id
   stepSendId        String?
   provider          String
   providerMessageId String
-  type              String // delivered | bounced | complained
-  bounceClass       String? // hard | soft
+  type              String /// delivered | bounced | complained
+  bounceClass       String? /// hard | soft
   occurredAt        DateTime
   rawType           String?
   createdAt         DateTime @default(now())
@@ -145,11 +150,12 @@ model EmailDeliveryEvent {
   @@index([stepSendId])
 }
 
+/// Contact-level email subscription preference.
 model ContactEmailPreference {
   id             String    @id
   contactId      String
   organizationId String
-  status         String    @default("subscribed") // subscribed | unsubscribed
+  status         String    @default("subscribed") /// subscribed | unsubscribed
   unsubscribedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -158,6 +164,7 @@ model ContactEmailPreference {
   @@index([organizationId, status])
 }
 
+/// Contact opt-out from a specific email sequence.
 model ContactEmailSequenceOptOut {
   contactId  String
   sequenceId String

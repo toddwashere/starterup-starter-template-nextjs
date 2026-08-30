@@ -9,8 +9,9 @@ enum AiMessageFeedback {
   not_helpful
 }
 
+/// Organization-scoped AI conversation thread.
 model AiThread {
-  id             String   @id // createId("aith")
+  id             String   @id /// createId("aith")
   organizationId String
   userId         String
   title          String?
@@ -26,8 +27,9 @@ model AiThread {
   @@map("aiThread")
 }
 
+/// Message persisted within an AI conversation thread.
 model AiMessage {
-  id              String             @id // createId("aimsg")
+  id              String             @id /// createId("aimsg")
   threadId        String
   role            AiMessageRole
   content         String             @db.Text
@@ -45,6 +47,7 @@ model AiMessage {
   @@map("aiMessage")
 }
 
+/// Audit log for MCP tool calls across session, OAuth, and API-key auth.
 model McpToolCallLog {
   id        String   @id @default(cuid())
   toolName  String
