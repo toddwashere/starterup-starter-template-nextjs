@@ -59,6 +59,9 @@
     "type-check": {
       "dependsOn": ["^build"]
     },
+    "@workspace/database#type-check": {
+      "dependsOn": ["@workspace/database#build", "^build"]
+    },
     "test": {
       "dependsOn": ["^build"],
       "cache": false
