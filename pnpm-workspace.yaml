@@ -23,6 +23,10 @@ overrides:
   "vite@>=7": ">=7.3.5"
   ws: ">=8.21.0"
   brace-expansion: "5.0.8"
+  # minimatch@3 does `require("brace-expansion")` and calls the result, but
+  # v5 exports a named `expand` instead. Keep the patched 1.x there so ESLint
+  # (via @eslint/config-array) does not crash with "expand is not a function".
+  "minimatch@3>brace-expansion": "1.1.12"
   js-yaml: ">=4.3.0"
   fast-uri: ">=3.1.4"
   # Next still peers sharp ^0.34.5; force patched libvips where install allows.
@@ -34,8 +38,8 @@ blockExoticSubdeps: true # Disallow transitive deps from git/tarball URLs; regis
 # trustPolicy: no-downgrade # Reject installs when a package’s trust level drops vs prior releases (e.g. publisher/provenance change).
 
 allowBuilds:
-  '@prisma/engines': true
-  '@sentry/cli': true
+  "@prisma/engines": true
+  "@sentry/cli": true
   core-js: true
   esbuild: true
   msgpackr-extract: true
