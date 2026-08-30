@@ -6,6 +6,7 @@ const schema = z.object({
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
   STRIPE_PRICE_PRO_ANNUAL: z.string().optional(),
   STRIPE_PRICE_TEAM_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_CREDITS_STARTER: z.string().optional(),
 });
 
 export function keys() {
@@ -15,5 +16,6 @@ export function keys() {
     STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY,
     STRIPE_PRICE_PRO_ANNUAL: process.env.STRIPE_PRICE_PRO_ANNUAL,
     STRIPE_PRICE_TEAM_MONTHLY: process.env.STRIPE_PRICE_TEAM_MONTHLY,
+    STRIPE_PRICE_CREDITS_STARTER: process.env.STRIPE_PRICE_CREDITS_STARTER,
   });
 }

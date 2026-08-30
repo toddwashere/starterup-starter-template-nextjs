@@ -1,6 +1,7 @@
 import type { StripeOptions } from "@better-auth/stripe";
 import { prisma } from "@workspace/database";
 import { formatDate, parseOrgRoles } from "@workspace/common";
+import { grantMonthlyAllowance } from "@workspace/credits";
 import {
   sendSubscriptionWelcomeEmail,
   sendSubscriptionCanceledEmail,
@@ -18,8 +19,7 @@ type StripeInvoicePaymentFailedEvent = Extract<
   StripeWebhookEvent,
   { type: "invoice.payment_failed" }
 >;
-export type StripeInvoiceForBilling =
-  StripeInvoicePaymentFailedEvent["data"]["object"];
+export type StripeInvoiceForBilling = StripeInvoicePaymentFailedEvent["data"]["object"];
 
 /**
  * Resolve the email recipient (org owner) and org name for billing
@@ -79,20 +79,36 @@ export async function planDisplayName(planName: string): Promise<string> {
  * Used for both onSubscriptionComplete and onSubscriptionCreated.
  */
 export async function handleSubscriptionComplete(data: {
-  subscription: { referenceId: string; plan: string };
+  subscription: {
+    referenceId: string;
+    plan: string;
+    periodStart?: Date | null;
+    periodEnd?: Date | null;
+  };
 }): Promise<void> {
   try {
     const { subscription } = data;
-    const contact = await resolveOrgBillingContactByOrgId(
-      subscription.referenceId,
-    );
+    const plan = await getBillingPlanByName(subscription.plan);
+    if (subscription.periodStart && subscription.periodEnd) {
+      await grantMonthlyAllowance({
+        organizationId: subscription.referenceId,
+        planName: subscription.plan,
+        periodStart: subscription.periodStart,
+        periodEnd: subscription.periodEnd,
+        policy: plan?.creditPolicy as
+          | Parameters<typeof grantMonthlyAllowance>[0]["policy"]
+          | undefined,
+      });
+    }
+
+    const contact = await resolveOrgBillingContactByOrgId(subscription.referenceId);
     if (!contact) {
       return;
     }
     await sendSubscriptionWelcomeEmail({
       recipient: contact.recipient,
       organizationName: contact.organizationName,
-      planName: await planDisplayName(subscription.plan),
+      planName: plan?.displayName ?? subscription.plan,
     });
   } catch (error) {
     console.error("[billing] handleSubscriptionComplete failed", error);
@@ -111,9 +127,7 @@ export async function handleSubscriptionCancel(data: {
 }): Promise<void> {
   try {
     const { subscription } = data;
-    const contact = await resolveOrgBillingContactByOrgId(
-      subscription.referenceId,
-    );
+    const contact = await resolveOrgBillingContactByOrgId(subscription.referenceId);
     if (!contact) {
       return;
     }
@@ -121,9 +135,7 @@ export async function handleSubscriptionCancel(data: {
       recipient: contact.recipient,
       organizationName: contact.organizationName,
       planName: await planDisplayName(subscription.plan),
-      accessEndsAt: subscription.periodEnd
-        ? formatDate(subscription.periodEnd)
-        : undefined,
+      accessEndsAt: subscription.periodEnd ? formatDate(subscription.periodEnd) : undefined,
     });
   } catch (error) {
     console.error("[billing] handleSubscriptionCancel failed", error);
@@ -166,14 +178,10 @@ export async function handleSubscriptionDeleted(data: {
 /**
  * Invoice payment failed — notify the org owner with a link to update payment.
  */
-export async function handleInvoicePaymentFailed(
-  invoice: StripeInvoiceForBilling,
-): Promise<void> {
+export async function handleInvoicePaymentFailed(invoice: StripeInvoiceForBilling): Promise<void> {
   try {
     const customerId =
-      typeof invoice.customer === "string"
-        ? invoice.customer
-        : invoice.customer?.id;
+      typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
     if (!customerId) {
       return;
     }

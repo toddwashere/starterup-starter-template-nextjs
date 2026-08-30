@@ -1,8 +1,9 @@
 import type { StripeOptions } from "@better-auth/stripe";
+import { handleInvoicePaymentFailed, type StripeInvoiceForBilling } from "./subscription-lifecycle";
 import {
-  handleInvoicePaymentFailed,
-  type StripeInvoiceForBilling,
-} from "./subscription-lifecycle";
+  handleCreditTopUpCheckoutCompleted,
+  type StripeCheckoutSessionForCreditTopUp,
+} from "./credit-top-up-lifecycle";
 
 type StripeWebhookEvent = Parameters<NonNullable<StripeOptions["onEvent"]>>[0];
 
@@ -15,6 +16,11 @@ export async function onStripeEvent(event: StripeWebhookEvent): Promise<void> {
   switch (event.type) {
     case "invoice.payment_failed":
       await handleInvoicePaymentFailed(event.data.object as StripeInvoiceForBilling);
+      break;
+    case "checkout.session.completed":
+      await handleCreditTopUpCheckoutCompleted(
+        event.data.object as StripeCheckoutSessionForCreditTopUp,
+      );
       break;
     default:
       // Other events are handled by the plugin's built-in sync; no extra

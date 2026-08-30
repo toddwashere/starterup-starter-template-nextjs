@@ -16,6 +16,7 @@
   "dependencies": {
     "@better-auth/stripe": "^1.6.25",
     "@workspace/common": "workspace:*",
+    "@workspace/credits": "workspace:*",
     "@workspace/database": "workspace:*",
     "@workspace/email": "workspace:*",
     "stripe": "^22.2.0",

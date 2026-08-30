@@ -14,6 +14,10 @@ export async function seedBillingPlans(prisma: PrismaClient) {
       stripePriceIdMonthly: "",
       stripePriceIdAnnual: null,
       limits: { contacts: 50 },
+      creditPolicy: {
+        monthlyAllowanceCredits: 10_000,
+        monthlyCreditCap: 10_000,
+      },
       freeTrialDays: null,
       isActive: true,
       sortOrder: 0,
@@ -25,6 +29,10 @@ export async function seedBillingPlans(prisma: PrismaClient) {
       stripePriceIdMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "price_pro_monthly_placeholder",
       stripePriceIdAnnual: process.env.STRIPE_PRICE_PRO_ANNUAL ?? null,
       limits: { contacts: 1000 },
+      creditPolicy: {
+        monthlyAllowanceCredits: 100_000,
+        monthlyCreditCap: 150_000,
+      },
       freeTrialDays: 14,
       isActive: true,
       sortOrder: 1,
@@ -33,9 +41,14 @@ export async function seedBillingPlans(prisma: PrismaClient) {
       id: "bplan_team",
       name: "team",
       displayName: "Team",
-      stripePriceIdMonthly: process.env.STRIPE_PRICE_TEAM_MONTHLY ?? "price_team_monthly_placeholder",
+      stripePriceIdMonthly:
+        process.env.STRIPE_PRICE_TEAM_MONTHLY ?? "price_team_monthly_placeholder",
       stripePriceIdAnnual: null,
       limits: { contacts: 5000, seats: 10 },
+      creditPolicy: {
+        monthlyAllowanceCredits: 500_000,
+        monthlyCreditCap: 750_000,
+      },
       freeTrialDays: null,
       isActive: true,
       sortOrder: 2,
