@@ -23,10 +23,7 @@ export interface AskAiInput {
   overrides?: { providerModel?: ProviderModelValue };
   context?: { userId?: string; orgId?: string; sessionId?: string };
   /** Stream-mode finish callback (e.g. persist the assistant message). */
-  onFinish?: (event: {
-    text: string;
-    steps: unknown[];
-  }) => void | Promise<void>;
+  onFinish?: (event: { text: string; steps: unknown[]; usage?: unknown }) => void | Promise<void>;
 }
 
 /**

@@ -19,10 +19,7 @@ import { defineAiCall } from "./define-ai-call";
 import { getModel } from "./get-model";
 import { logAiCall } from "./log-ai-call";
 
-const fixtureUrl = new URL(
-  "./__fixtures__/sample-call/sample-call.ts",
-  import.meta.url,
-).href;
+const fixtureUrl = new URL("./__fixtures__/sample-call/sample-call.ts", import.meta.url).href;
 
 const streamCall = defineAiCall({
   id: "test-stream",
@@ -119,6 +116,29 @@ describe("askAi() — stream mode", () => {
         overrides: { providerModel: "anthropic:claude-sonnet-4-20250514" },
       }),
     ).rejects.toThrow(/configured|anthropic/i);
+  });
+
+  it("forwards stream finish usage facts to the caller callback", async () => {
+    const onFinish = vi.fn();
+    await askAi(streamCall, {
+      variables: { name: "Acme" },
+      onFinish,
+    });
+
+    const arg = mockedStreamText.mock.lastCall![0] as {
+      onFinish: (event: unknown) => Promise<void>;
+    };
+    await arg.onFinish({
+      text: "hello",
+      steps: [{ step: 1 }],
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
+
+    expect(onFinish).toHaveBeenCalledWith({
+      text: "hello",
+      steps: [{ step: 1 }],
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
   });
 });
 
