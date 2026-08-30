@@ -32,6 +32,8 @@ export type McpIdPrefix = "mcptcl";
 
 export type AiIdPrefix = "aith" | "aimsg";
 
+export type CreditsIdPrefix = "credacct" | "creduse" | "credled" | "credtopup";
+
 export type CampaignsIdPrefix =
   | "eseq" // EmailSequence
   | "estep" // EmailSequenceStep
@@ -48,6 +50,7 @@ export type IdPrefix =
   | BillingIdPrefix
   | McpIdPrefix
   | AiIdPrefix
+  | CreditsIdPrefix
   | CampaignsIdPrefix
   | "tmp";
 
